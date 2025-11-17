@@ -1,0 +1,37 @@
+# User-specific settings (DO NOT commit)
+.claude/settings.local.json
+
+# Session logs (runtime-generated)
+logs/
+*.log
+
+# State files (contain session data)
+.claude/state/
+
+# User-generated research artifacts
+files/research_notes/*.md
+files/reports/*.md
+
+# Keep README placeholders
+!files/research_notes/README.md
+!files/reports/README.md
+
+# Python
+*.pyc
+__pycache__/
+.pytest_cache/
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Node modules (if any)
+node_modules/
+
+# Environment files
+.env
+.env.local
