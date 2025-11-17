@@ -17,18 +17,17 @@ Transform complex research questions into comprehensive reports by:
 
 ## When to Use
 
-Auto-invoke when user asks:
-- "Research [topic]"
-- "What are the latest developments in [field]?"
-- "Investigate [subject]"
-- "Comprehensive analysis of [topic]"
-- "Study [phenomenon]"
-- "Gather information about [subject]"
+Auto-invoke when user asks (examples with trigger keywords):
+- **Search/Discovery**: "Search what is [topic]", "Find information about [subject]", "Look up [technology]", "Discover [patterns]"
+- **Investigation**: "Research [topic]", "Investigate [subject]", "Analyze [phenomenon]", "Study [field]", "Explore [domain]"
+- **Collection**: "Gather information about [subject]", "Collect data on [topic]", "Compile resources for [area]"
+- **Learning**: "Learn about [subject]", "Tell me about [topic]", "Dig into [technology]", "Delve into [concept]"
+- **Contextual**: "What are the latest developments in [field]?", "Comprehensive analysis of [topic]", "Deep dive into [subject]", "State of the art in [domain]", "Best practices for [area]"
 
 Do NOT invoke for:
-- Simple factual questions
-- Decision evaluation
-- Code-related tasks
+- Simple factual questions ("What is the capital of France?")
+- Decision evaluation ("Should I use X or Y?")
+- Code-related tasks ("Debug this function", "Write a script")
 
 ## Orchestration Workflow
 
