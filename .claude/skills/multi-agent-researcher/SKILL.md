@@ -17,7 +17,7 @@ Transform complex research questions into comprehensive reports by:
 
 ## When to Use
 
-Auto-invoke when user asks (examples with trigger keywords):
+Auto-invoke when user asks:
 - **Search/Discovery**: "Search what is [topic]", "Find information about [subject]", "Look up [technology]", "Discover [patterns]"
 - **Investigation**: "Research [topic]", "Investigate [subject]", "Analyze [phenomenon]", "Study [field]", "Explore [domain]"
 - **Collection**: "Gather information about [subject]", "Collect data on [topic]", "Compile resources for [area]"
