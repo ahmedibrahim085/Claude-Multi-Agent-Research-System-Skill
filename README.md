@@ -125,7 +125,7 @@ The SessionStart hook will automatically:
 - Initialize session logging
 - Show setup status and any warnings
 
-**Note**: Hooks are pre-configured in `.claude/settings.json`. If you want to customize settings, copy `.claude/settings.template.json` to `.claude/settings.local.json` and modify it.
+**Note**: Hooks are pre-configured in `.claude/settings.json` and work out-of-the-box. Do not duplicate hooks in `settings.local.json` to avoid duplicate hook executions.
 
 ### Advanced Setup (Optional Customization)
 
@@ -152,6 +152,8 @@ If you want to customize hooks or permissions:
 cp .claude/settings.template.json .claude/settings.local.json
 # Edit .claude/settings.local.json to customize
 \`\`\`
+
+   **⚠️ Important**: If you create `settings.local.json`, **remove the `hooks` section** from it. Hooks are already configured in `settings.json` and duplicating them will cause duplicate hook executions. Only add custom permissions or other user-specific settings to `settings.local.json`.
 
 2. **Customize paths in \`.claude/config.json\`**:
 \`\`\`json
