@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/post-tool-use-track-research.py"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-tool-use-track-research.py\""
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/session-start.py"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.py\""
           }
         ]
       }
