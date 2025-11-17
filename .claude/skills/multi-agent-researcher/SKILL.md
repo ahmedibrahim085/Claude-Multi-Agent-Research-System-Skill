@@ -27,7 +27,7 @@ Auto-invoke when user asks:
 
 Do NOT invoke for:
 - Simple factual questions
-- Decision evaluation (use balanced-decision-analyzer)
+- Decision evaluation
 - Code-related tasks
 
 ## Orchestration Workflow

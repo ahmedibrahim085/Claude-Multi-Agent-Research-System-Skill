@@ -34,23 +34,14 @@
          │   │
          │   ▼
          │  ┌─────────────────┐
-         │  │ Is it decision  │
-         │  │ evaluation?     │◄─── "Should I...",
-         │  │ (pros/cons)     │     "Evaluate X vs Y"
+         │  │ Check: >3       │
+         │  │ searches        │
+         │  │ needed?         │
          │  └────┬────────┬───┘
          │       │        │
          │    YES│        │NO
          │       │        │
-         │       ▼        ▼
-         │  ┌──────────┐ ┌────────────┐
-         │  │ Use      │ │ Check: >3  │
-         │  │ balanced-│ │ searches   │
-         │  │ decision │ │ needed?    │
-         │  │ analyzer │ └────┬───┬───┘
-         │  └──────────┘      │   │
-         │                 YES│   │NO
-         │                    │   │
-         ▼────────────────────┘   │
+         ▼───────┘        │
     ┌─────────────────────────┐  │
     │ USE                     │  │
     │ multi-agent-researcher  │  │
@@ -102,12 +93,6 @@
 - "Fetch https://example.com/readme" (specific URL)
 - "How do I use Array.map?" (single documentation lookup)
 - "What version of Node.js is current?" (single fact)
-
-### 🤔 Use balanced-decision-analyzer Instead
-
-- "Should I use React or Vue?"
-- "Evaluate pros and cons of microservices"
-- "What are the trade-offs of serverless?"
 
 ## Red Flags (Skill Was Needed But Not Used)
 

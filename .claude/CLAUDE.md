@@ -109,14 +109,11 @@ When multi-agent-researcher skill is active, you **DO NOT HAVE WRITE TOOL ACCESS
 ## Available Skills
 
 - **multi-agent-researcher**: Orchestrates 2-4 parallel researchers for comprehensive topic investigation
-- **balanced-decision-analyzer**: Spawns opportunity-finder and risk-assessor for dual-perspective analysis
 
 ## Available Agents
 
 - **researcher**: Web research agent (WebSearch, Write, Read) - DO NOT invoke directly, use via skill
 - **report-writer**: Synthesis agent (Read, Glob, Write)
-- **opportunity-finder**: Optimistic decision analysis
-- **risk-assessor**: Critical decision analysis
 
 ## File Organization
 
