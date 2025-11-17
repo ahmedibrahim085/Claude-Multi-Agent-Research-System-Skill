@@ -5,10 +5,11 @@
 ### ALWAYS Use multi-agent-researcher Skill When:
 
 **Trigger Keywords in User Prompt**:
-- "research", "investigate", "analyze", "study", "explore"
-- "comprehensive analysis", "deep dive", "thorough investigation"
-- "gather information", "find out about", "look into"
-- "what are the latest", "survey", "examine"
+- **Search/Discovery**: "search", "find", "find out", "look up", "look into", "discover", "uncover"
+- **Investigation**: "research", "investigate", "analyze", "study", "explore", "examine", "survey", "assess", "evaluate", "review", "inspect", "probe", "scrutinize"
+- **Collection**: "gather", "collect", "compile"
+- **Learning**: "learn about", "tell me about", "dig into", "delve into"
+- **Contextual**: "what are the latest", "comprehensive", "deep dive", "thorough investigation", "in-depth", "detailed overview", "landscape of", "state of the art", "best practices"
 
 **MANDATORY Workflow**:
 1. **STOP** - Do NOT use WebSearch/WebFetch directly for research tasks
