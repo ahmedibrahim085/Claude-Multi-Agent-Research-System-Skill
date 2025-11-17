@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "description": "Skill activation rules for automatic skill triggering based on user prompts and file context",
+  "source": "Pattern adapted from diet103/claude-code-infrastructure-showcase (opensource, 6+ months production)",
+  "skills": {
+    "multi-agent-researcher": {
+      "type": "guardrail",
+      "enforcement": "block",
+      "priority": "critical",
+      "description": "Research tasks must use orchestrated multi-agent approach with mandatory report-writer delegation",
+      "promptTriggers": {
+        "keywords": [
+          "research",
+          "investigate",
+          "analyze",
+          "study",
+          "explore",
+          "comprehensive",
+          "survey",
+          "examine",
+          "deep dive",
+          "thorough investigation",
+          "gather information",
+          "what are the latest"
+        ],
+        "intentPatterns": [
+          "(research|investigate|analyze|study|explore)\\s+.*",
+          "comprehensive\\s+(analysis|investigation|study|research)",
+          "what are the latest.*",
+          "gather information about.*",
+          "deep dive into.*",
+          "thorough investigation of.*",
+          "survey of.*"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "files/research_notes/**/*.md",
+          "files/reports/**/*.md"
+        ]
+      },
+      "validation": {
+        "requiredPhases": [
+          "decomposition",
+          "research",
+          "synthesis",
+          "delivery"
+        ],
+        "phaseSequence": "strict",
+        "qualityGates": {
+          "synthesis": {
+            "requiredAgent": "report-writer",
+            "enforcementLevel": "critical"
+          }
+        }
+      }
+    }
+  }
+}
