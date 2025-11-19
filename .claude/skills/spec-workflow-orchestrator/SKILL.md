@@ -762,7 +762,392 @@ Return to Step 5 of Orchestration Workflow (Quality Gate Validation):
 
 ## Examples
 
-**TODO: Examples to be added in Phase 3**
+### Example: Planning a Task Management Web Application
+
+**User Request**: "Plan a task management web application with user authentication, real-time updates, and mobile responsiveness"
+
+This example demonstrates the complete planning workflow from query analysis to deliverable handoff.
+
+---
+
+#### Step 1: Query Analysis
+
+**Scope Identified**:
+- Web application (not mobile native)
+- User authentication (registration, login, JWT)
+- Real-time updates (WebSocket or similar)
+- Mobile responsive (not separate mobile app)
+
+**Constraints**: Not specified (assume standard web stack)
+
+**Stakeholders**: End users (task managers), development team
+
+**Suitability Check**: ✅ Clear scope, well-defined domain, suitable for planning workflow
+
+---
+
+#### Step 2: spec-analyst Output
+
+**Generated File**: `docs/planning/requirements.md` (abbreviated example)
+
+```markdown
+# Task Management Application - Requirements
+
+## Executive Summary
+A web-based task management system enabling users to create, organize, and track
+tasks with real-time collaboration features and mobile accessibility.
+
+## Functional Requirements
+
+### FR1: User Management (Priority: High)
+- FR1.1: User registration with email/password
+- FR1.2: Secure authentication (JWT-based)
+- FR1.3: User profile management
+- FR1.4: Password reset functionality
+
+### FR2: Task Management (Priority: High)
+- FR2.1: Create tasks with title, description, due date, priority
+- FR2.2: Update task status (Todo, In Progress, Done)
+- FR2.3: Delete tasks
+- FR2.4: Organize tasks in projects/categories
+
+### FR3: Real-Time Updates (Priority: Medium)
+- FR3.1: WebSocket connection for live updates
+- FR3.2: Instant task status synchronization across devices
+- FR3.3: Online/offline user presence indicators
+
+### FR4: Mobile Responsiveness (Priority: High)
+- FR4.1: Responsive design for mobile, tablet, desktop
+- FR4.2: Touch-optimized interactions
+- FR4.3: Progressive Web App (PWA) support
+
+## Non-Functional Requirements
+
+### NFR1: Performance
+- API response time < 200ms (p95)
+- Real-time update latency < 100ms
+- Support 1,000 concurrent users
+
+### NFR2: Security
+- HTTPS for all communications
+- JWT tokens with 1-hour expiration
+- Input validation and sanitization
+- SQL injection prevention
+
+### NFR3: Scalability
+- Horizontal scaling capability
+- Database connection pooling
+- Stateless API design
+
+## User Stories
+
+**US1**: As a user, I want to create tasks so that I can track my work.
+- AC1: User can create task with title (required) and description (optional)
+- AC2: Task is saved and appears in task list immediately
+- AC3: Task creation fails gracefully with error message if title is empty
+
+**US2**: As a user, I want to see real-time updates when my team changes tasks.
+- AC1: When another user updates a task, my view updates within 2 seconds
+- AC2: Update animation shows which task changed
+- AC3: Connection loss shows offline indicator and queues updates
+```
+
+**Initial Quality Check**: Requirements document is comprehensive (estimated 90/100)
+
+---
+
+#### Step 3: spec-architect Output
+
+**Generated Files**:
+- `docs/planning/architecture.md`
+- `docs/adrs/001-technology-stack.md`
+- `docs/adrs/002-real-time-architecture.md`
+
+**architecture.md** (abbreviated):
+```markdown
+# System Architecture
+
+## Technology Stack
+- **Frontend**: React 18 + TypeScript + Vite
+- **Backend**: Node.js + Express + TypeScript
+- **Database**: PostgreSQL 15
+- **Real-Time**: Socket.io
+- **Authentication**: JWT + bcrypt
+- **Hosting**: Vercel (frontend) + Railway (backend + database)
+
+## System Components
+
+### Frontend Application
+- React SPA with routing (React Router v6)
+- State management: React Query + Context API
+- UI components: Tailwind CSS + Shadcn/ui
+- Real-time: Socket.io client
+
+### Backend API
+- RESTful API for CRUD operations
+- WebSocket server for real-time updates
+- JWT middleware for authentication
+- PostgreSQL connection pool
+
+### Database Schema
+- users (id, email, password_hash, created_at)
+- tasks (id, user_id, title, description, status, due_date, priority, created_at, updated_at)
+- projects (id, name, user_id)
+- Indexes on user_id, status, due_date
+
+## API Specification
+
+### REST Endpoints
+- POST /api/auth/register - Create new user
+- POST /api/auth/login - Authenticate user (returns JWT)
+- GET /api/tasks - List user's tasks (with filtering)
+- POST /api/tasks - Create new task
+- PATCH /api/tasks/:id - Update task
+- DELETE /api/tasks/:id - Delete task
+
+### WebSocket Events
+- connection, task:created, task:updated, task:deleted, disconnect
+
+## Security
+- HTTPS enforced in production
+- JWT tokens in httpOnly cookies
+- CORS configured for frontend origin
+- Rate limiting: 100 requests/15min per IP
+- Password hashing with bcrypt (cost factor 10)
+
+## Performance & Scalability
+- Database connection pooling (max 20 connections)
+- Stateless API design allows horizontal scaling
+- WebSocket sticky sessions or Redis adapter for multi-instance
+```
+
+**ADR 002-real-time-architecture.md**:
+```markdown
+# ADR 002: Real-Time Architecture with Socket.io
+
+## Status: Accepted
+
+## Context
+Application requires real-time task updates across devices. Options:
+1. Polling (HTTP requests every N seconds)
+2. Server-Sent Events (SSE)
+3. WebSockets (Socket.io)
+
+## Decision
+Use WebSockets with Socket.io library.
+
+## Rationale
+- Bi-directional communication (client ↔ server)
+- Low latency < 100ms (meets NFR1)
+- Socket.io benefits: automatic reconnection, fallback to polling
+- Horizontal scaling possible with Redis adapter
+
+## Consequences
+- **Positive**: Real-time UX, efficient bandwidth usage
+- **Negative**: Persistent connections (scalability consideration)
+- **Mitigation**: Implement Redis adapter for multi-instance
+
+## Alternatives Considered
+- **Polling**: Simple but wasteful (60 req/min per user)
+- **SSE**: Uni-directional only (server → client)
+```
+
+**Initial Quality Check**: Architecture document is solid (estimated 88/100)
+
+---
+
+#### Step 4: spec-planner Output
+
+**Generated File**: `docs/planning/tasks.md` (abbreviated)
+
+```markdown
+# Implementation Tasks
+
+## Overview
+- **Total Tasks**: 24
+- **Estimated Effort**: 12-15 person-days
+- **Critical Path**: Authentication → Task CRUD → Real-time sync
+- **Parallel Streams**: Frontend + Backend after API contract defined
+
+## Phase 1: Project Setup (1 day)
+
+### T1.1: Initialize Frontend Project
+- Complexity: Low | Effort: 2h | Dependencies: None
+- Create React + Vite + TypeScript project with Tailwind
+- AC: npm create vite working, Tailwind configured, React Router setup
+
+### T1.2: Initialize Backend Project
+- Complexity: Low | Effort: 2h | Dependencies: None
+- Create Node.js + Express + TypeScript with PostgreSQL connection
+- AC: Express server starts, PostgreSQL connection successful
+
+### T1.3: Database Schema Setup
+- Complexity: Medium | Effort: 2h | Dependencies: T1.2
+- Create SQL migration for users and tasks tables with indexes
+- AC: Tables created, foreign keys set, indexes on user_id/status/due_date
+
+## Phase 2: Authentication (2-3 days)
+
+### T2.1: User Registration API
+- Complexity: Medium | Effort: 4h | Dependencies: T1.3
+- POST /api/auth/register with email validation and password hashing
+- AC: Email validated, password hashed with bcrypt, user created, returns 201
+
+### T2.2: User Login API
+- Complexity: Medium | Effort: 4h | Dependencies: T2.1
+- POST /api/auth/login with JWT generation
+- AC: Password verified, JWT generated (1h expiration), returns token + user
+
+### T2.3: JWT Authentication Middleware
+- Complexity: Medium | Effort: 3h | Dependencies: T2.2
+- Express middleware to verify JWT tokens on protected routes
+- AC: JWT extracted from header, verified, user ID attached, returns 401 if invalid
+
+[... 18 more tasks for Task CRUD, Real-time sync, Mobile UI ...]
+
+## Risk Assessment
+
+### Risk 1: Real-time scaling complexity
+- Severity: Medium | Probability: High
+- Impact: Multi-instance deployment requires Redis adapter
+- Mitigation: Implement Redis adapter early (Phase 4)
+
+### Risk 2: WebSocket connection stability
+- Severity: Medium | Probability: Medium
+- Impact: Users on unstable networks may lose updates
+- Mitigation: Socket.io auto-reconnect + optimistic UI updates
+
+### Risk 3: Database connection pool exhaustion
+- Severity: High | Probability: Low
+- Impact: API unresponsive under high load
+- Mitigation: Max pool size 20, connection timeout, monitoring
+
+## Testing Strategy
+- Unit Tests: 80% coverage (auth logic, task CRUD, validation)
+- Integration Tests: API endpoints with test database, WebSocket flows
+- E2E Tests (Cypress): Registration, login, task creation, real-time sync
+```
+
+**Initial Quality Check**: Task breakdown is actionable (estimated 86/100)
+
+---
+
+#### Step 5: Quality Gate Validation
+
+**Checklist Scoring**:
+
+1. **Requirements Completeness**: 22/25 points
+   - ✅ Functional requirements documented (10/10)
+   - ✅ Non-functional requirements specified (5/5)
+   - ✅ User stories with acceptance criteria (5/5)
+   - ⚠️ Stakeholder needs addressed (2/5) - Missing admin user stories
+
+2. **Architecture Soundness**: 23/25 points
+   - ✅ System design addresses requirements (10/10)
+   - ✅ Technology stack justified (5/5)
+   - ✅ Scalability and performance considered (5/5)
+   - ⚠️ Security and compliance (3/5) - Missing GDPR, detailed rate limiting
+
+3. **Task Breakdown Quality**: 20/20 points
+   - ✅ Tasks atomic and implementable (10/10)
+   - ✅ Dependencies clearly identified (5/5)
+   - ✅ Effort estimates provided (5/5)
+
+4. **Architecture Decision Records**: 8/10 points
+   - ✅ Key decisions documented in ADRs (4/5) - Missing database choice ADR
+   - ✅ Trade-offs and alternatives considered (4/5)
+
+5. **Risk Management**: 10/10 points
+   - ✅ Technical risks identified (5/5)
+   - ✅ Mitigation strategies documented (5/5)
+
+6. **Handoff Readiness**: 9/10 points
+   - ✅ Documentation clear and comprehensive (5/5)
+   - ⚠️ Next steps explicitly defined (4/5) - Needs deployment guide
+
+**Total Score**: 92/100 = **92%** ✅ **PASS** (threshold: 85%)
+
+**Decision**: Proceed to Step 7 (Deliverable Handoff) - quality gate passed on first attempt
+
+---
+
+#### Step 6: Iteration Loop
+
+**Not needed** - Score of 92% exceeds 85% threshold on initial attempt.
+
+**Reason for high score**: Task management is a well-understood domain with clear requirements. User provided sufficient detail in initial request.
+
+---
+
+#### Step 7: Deliverable Handoff
+
+**Planning Summary**:
+
+✅ **Scope**: Task management web app with authentication, real-time updates, mobile responsiveness
+
+✅ **Architecture**: React frontend + Node.js backend + PostgreSQL database + Socket.io for real-time
+
+✅ **Key Architectural Decisions**:
+- ADR 001: React + Node.js stack (familiar, mature ecosystem, TypeScript throughout)
+- ADR 002: Socket.io for real-time (low latency, automatic reconnection, bi-directional)
+- (Missing: Database choice ADR - noted in quality gate but acceptable at 92%)
+
+✅ **Implementation Roadmap** (24 tasks, 12-15 person-days):
+- Phase 1: Project setup (1 day)
+- Phase 2: Authentication (2-3 days)
+- Phase 3: Task CRUD operations (3-4 days)
+- Phase 4: Real-time synchronization (3-4 days)
+- Phase 5: Mobile responsive UI (2-3 days)
+
+✅ **Risks Identified**:
+- Real-time scaling → Mitigated with Redis adapter
+- WebSocket stability → Mitigated with auto-reconnect
+- Database pool exhaustion → Mitigated with connection limits
+
+✅ **Next Steps for Development Team**:
+1. Review planning artifacts (requirements, architecture, tasks) - 30-60 min
+2. Set up development environment following T1.1, T1.2 instructions
+3. Implement in priority order: authentication → CRUD → real-time
+4. Reference ADRs when questions arise about design decisions
+5. Use tasks.md as sprint backlog (24 tasks mapped to 5 phases)
+
+**Deliverables Provided**:
+- 📄 `docs/planning/requirements.md` (~1,200 lines)
+- 📄 `docs/planning/architecture.md` (~800 lines)
+- 📄 `docs/planning/tasks.md` (~600 lines with 24 tasks)
+- 📄 `docs/adrs/001-technology-stack.md` (~150 lines)
+- 📄 `docs/adrs/002-real-time-architecture.md` (~200 lines)
+
+**Status**: ✅ **Planning phase complete. Development-ready specifications available.**
+
+**Estimated Development Timeline**: 12-15 person-days (approximately 3 weeks for solo developer, 2 weeks for pair)
+
+---
+
+### Key Takeaways from This Example
+
+1. **First-Attempt Success**: Quality gate passed with 92% score on initial attempt (no iterations needed)
+
+2. **Sequential Dependencies**: Each agent built on previous agent's output:
+   - spec-analyst produced requirements → spec-architect used them for architecture
+   - spec-architect produced architecture → spec-planner used it for task breakdown
+
+3. **Quality Gate Value**: Even with 92% passing score, quality gate identified minor gaps:
+   - Missing admin user stories (stakeholder analysis)
+   - Missing database choice ADR (architecture decisions)
+   - Missing deployment guide (handoff readiness)
+   - These could be addressed in future iteration if needed
+
+4. **Realistic Outputs**: Agent outputs shown are representative of actual planning artifacts:
+   - Requirements: Functional/non-functional requirements, user stories, acceptance criteria
+   - Architecture: Technology stack justification, system components, API specs, security
+   - Tasks: Atomic tasks (1-8h each), dependencies, effort estimates, risk assessment
+
+5. **Development-Ready**: With these artifacts, a development team can immediately begin implementation:
+   - Clear scope (what to build)
+   - Technical design (how to build)
+   - Implementation roadmap (order and effort)
+   - Risk awareness (what might go wrong)
 
 ---
 
