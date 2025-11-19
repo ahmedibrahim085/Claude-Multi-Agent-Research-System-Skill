@@ -7,6 +7,32 @@ version: 1.0.0
 
 # Spec Workflow Orchestrator
 
+## Table of Contents
+
+1. [Purpose](#purpose)
+2. [When to Use](#when-to-use)
+3. [Orchestration Workflow](#orchestration-workflow)
+   - [Planning Phase](#planning-phase-spec-analyst--spec-architect--spec-planner)
+   - [Progress Tracking During Workflow](#progress-tracking-during-workflow)
+4. [Agent Roles](#agent-roles)
+5. [Quality Gates](#quality-gates)
+   - [Planning Gate (85% Threshold)](#planning-gate-85-threshold)
+   - [Feedback Loop Process](#feedback-loop-process)
+   - [Iteration Limit Enforcement](#iteration-limit-enforcement)
+6. [File Organization](#file-organization)
+7. [Best Practices](#best-practices)
+   - [Project Coordination Principles](#project-coordination-principles-battle-tested)
+   - [Process Improvement Guidelines](#process-improvement-guidelines-battle-tested)
+   - [Success Factors](#success-factors-battle-tested)
+   - [Planning Workflow Optimization](#planning-workflow-optimization)
+   - [Common Planning Pitfalls](#common-planning-pitfalls-and-how-to-avoid)
+   - [Success Factors](#success-factors)
+8. [Examples](#examples)
+   - [Template: Web Application Planning](#template-web-application-planning-one-example-domain)
+   - [Example Walkthrough: Task Management Application](#example-walkthrough-task-management-application)
+
+---
+
 ## Purpose
 
 Transform ideas into development-ready specifications through:

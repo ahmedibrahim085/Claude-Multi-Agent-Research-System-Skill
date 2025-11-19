@@ -88,13 +88,13 @@ Claude-Multi-Agent-Research-System-Skill/
 
 ## ⭐ Agents Summary (5 Total)
 
+**Location**: `.claude/agents/` (All agents in standard registry)
+
 ### Research Skill (2 agents)
-Location: `.claude/skills/multi-agent-researcher/agents/`
 - **researcher.md** - Web research agent (WebSearch, Write, Read)
 - **report-writer.md** - Synthesis agent (Read, Glob, Write)
 
 ### Planning Skill (3 agents)
-Location: `.claude/skills/spec-workflow-orchestrator/agents/`
 - **spec-analyst.md** - Requirements gathering & analysis
 - **spec-architect.md** - Architecture design & ADR creation
 - **spec-planner.md** - Task breakdown & risk assessment
@@ -109,17 +109,18 @@ Location: `.claude/skills/spec-workflow-orchestrator/agents/`
 
 **Required Files**:
 - `SKILL.md` - Orchestration logic (frontmatter with name, description, allowed-tools)
-- `agents/*.md` - Spawnable agent files (frontmatter with name, tools, model)
 - Optional: `docs/reference/` for archived documentation
+- Optional: `reference.md`, `examples.md` for skill documentation
+
+**Note**: Agents are stored in `.claude/agents/`, NOT in skill subdirectories
 
 **Pattern**:
 ```
 .claude/skills/my-skill/
-├── SKILL.md
-├── agents/
-│   ├── agent-one.md
-│   └── agent-two.md
-└── docs/reference/  # Optional
+├── SKILL.md                  # Orchestration logic (required)
+├── reference.md              # Optional documentation
+├── examples.md               # Optional examples
+└── docs/reference/           # Optional archived docs
     └── archived-source.md
 ```
 

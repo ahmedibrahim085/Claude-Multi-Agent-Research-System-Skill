@@ -199,6 +199,94 @@ The spec-workflow-orchestrator enforces quality standards:
 - `files/research_notes/`: Individual researcher outputs (one file per subtopic)
 - `files/reports/`: Comprehensive synthesis reports (timestamped)
 - Name format: `topic-slug_YYYYMMDD-HHMMSS.md`
+- `docs/planning/`: Active planning documents (requirements, architecture, tasks)
+- `docs/adrs/`: Architecture Decision Records (numbered format)
+
+## Custom Configuration Files
+
+This project uses several **custom** files that are NOT part of official Claude Code:
+
+### .claude/config.json
+**Purpose**: Custom project paths configuration
+**Content**: Defines paths for logs, reports, research notes
+**Example**:
+```json
+{
+  "paths": {
+    "logs": "logs",
+    "reports": "files/reports",
+    "research_notes": "files/research_notes"
+  }
+}
+```
+
+### .claude/state/
+**Purpose**: Runtime state management directory (gitignored)
+**Content**: Session state, workflow progress tracking
+**Files**:
+- `research-workflow-state.json`: Tracks active research sessions
+
+### .claude/utils/
+**Purpose**: Python utility modules for hooks and validation
+**Files**:
+- `config_loader.py`: Load and parse config.json
+- `session_logger.py`: Session logging utilities
+- `state_manager.py`: State persistence helpers
+
+### .claude/validation/
+**Purpose**: Quality gate validation logic for planning skill
+**Usage**: spec-workflow-orchestrator uses these modules to score deliverables
+**Note**: Custom implementation, not standard Claude Code feature
+
+### .claude/workflows/
+**Purpose**: Workflow definition files
+**Usage**: Define multi-step workflows for complex operations
+**Note**: Custom organizational structure
+
+### .claude/skills/skill-rules.json
+**Purpose**: Custom skill activation rules (NOT official Claude Code)
+**Content**: Trigger keywords and patterns for both skills
+**Usage**: Loaded by hooks to detect when to suggest/activate skills
+**Format**:
+```json
+{
+  "skills": {
+    "multi-agent-researcher": {
+      "promptTriggers": {
+        "keywords": ["research", "investigate", "analyze", ...],
+        "intentPatterns": ["(research|investigate) .* for .*", ...]
+      }
+    },
+    "spec-workflow-orchestrator": {
+      "promptTriggers": {
+        "keywords": ["plan", "design", "architect", "build", ...],
+        "intentPatterns": ["(plan|design) .* (application|app|system)", ...]
+      }
+    }
+  }
+}
+```
+
+### Official vs Custom Files
+
+**Official Claude Code files** (from documentation):
+- ✅ `.claude/CLAUDE.md` - Project instructions
+- ✅ `.claude/settings.json` - Claude Code settings
+- ✅ `.claude/settings.local.json` - Local user overrides
+- ✅ `.claude/agents/*.md` - Agent definitions
+- ✅ `.claude/skills/*/SKILL.md` - Skill orchestrators
+- ✅ `.claude/commands/*.md` - Slash commands
+- ✅ `.claude/hooks/*.py` - Hook scripts
+
+**Custom project files** (project-specific):
+- 🔧 `.claude/config.json` - Custom paths configuration
+- 🔧 `.claude/state/` - Runtime state directory
+- 🔧 `.claude/utils/` - Python utility modules
+- 🔧 `.claude/validation/` - Quality gate logic
+- 🔧 `.claude/workflows/` - Workflow definitions
+- 🔧 `.claude/skills/skill-rules.json` - Custom trigger rules
+
+**Note**: Custom files enable advanced features but are not required for basic Claude Code usage.
 
 ## Commit Standards
 
