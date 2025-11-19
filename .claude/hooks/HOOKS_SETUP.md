@@ -18,8 +18,8 @@ This guide explains how to configure the workflow enforcement hooks in Claude Co
 
 **UserPromptSubmit Hook**:
 - **Matcher**: (leave empty to match all prompts)
-- **Command**: `tsx .claude/hooks/user-prompt-submit-skill-activation.ts`
-- **Description**: Auto-activate multi-agent-researcher skill for research tasks
+- **Command**: `python3 .claude/hooks/user-prompt-submit.py`
+- **Description**: Universal skill activation for both multi-agent-researcher and spec-workflow-orchestrator
 
 **PostToolUse Hook**:
 - **Matcher**: `Write`
@@ -43,18 +43,17 @@ If you prefer manual configuration, add to your Claude Code settings.json:
         "hooks": [
           {
             "type": "command",
-            "command": "tsx .claude/hooks/user-prompt-submit-skill-activation.ts"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/user-prompt-submit.py\""
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Write",
         "hooks": [
           {
             "type": "command",
-            "command": "tsx .claude/hooks/post-tool-use-track-research.ts"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-tool-use-track-research.py\""
           }
         ]
       }
@@ -64,7 +63,7 @@ If you prefer manual configuration, add to your Claude Code settings.json:
         "hooks": [
           {
             "type": "command",
-            "command": "tsx .claude/hooks/session-start-restore-research.ts"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.py\""
           }
         ]
       }
@@ -73,36 +72,39 @@ If you prefer manual configuration, add to your Claude Code settings.json:
 }
 ```
 
-## Installing tsx
+## Prerequisites
 
-If `tsx` is not installed:
-
-```bash
-npm install -g tsx
-```
-
-Or use `ts-node`:
-
-```bash
-npm install -g ts-node
-```
-
-Then update hook commands to use `ts-node` instead of `tsx`.
+Hooks are implemented in Python 3 and require no additional installation beyond Python 3.x which comes pre-installed on macOS and most Linux distributions.
 
 ## Testing Hooks
 
 ### Test UserPromptSubmit Hook
 
+Test research task detection:
 ```bash
-echo '{"user_prompt":"research quantum computing","session_id":"test"}' | tsx .claude/hooks/user-prompt-submit-skill-activation.ts
+echo '{"user_prompt":"research quantum computing","session_id":"test"}' | python3 .claude/hooks/user-prompt-submit.py
 ```
 
 Expected output: Enforcement message about research workflow
 
+Test planning task detection:
+```bash
+echo '{"user_prompt":"build a local web interface for session logs","session_id":"test"}' | python3 .claude/hooks/user-prompt-submit.py
+```
+
+Expected output: Enforcement message about planning workflow
+
+Test dual trigger detection:
+```bash
+echo '{"user_prompt":"research and design a new authentication system","session_id":"test"}' | python3 .claude/hooks/user-prompt-submit.py
+```
+
+Expected output: Both research and planning enforcement messages
+
 ### Test PostToolUse Hook
 
 ```bash
-echo '{"tool_name":"Write","tool_input":{"file_path":"files/reports/test.md"}}' | tsx .claude/hooks/post-tool-use-track-research.ts
+echo '{"tool_name":"Write","tool_input":{"file_path":"files/reports/test.md"}}' | python3 .claude/hooks/post-tool-use-track-research.py
 ```
 
 Expected: Updates state.json (when state exists)
@@ -111,15 +113,17 @@ Expected: Updates state.json (when state exists)
 
 ### Hook Not Executing
 
-1. Check hook is executable: `ls -la .claude/hooks/*.ts`
-2. Run manually to see errors: `tsx .claude/hooks/[hook-name].ts`
+1. Check hook is executable: `ls -la .claude/hooks/*.py`
+2. Run manually to see errors: `python3 .claude/hooks/[hook-name].py`
 3. Check Claude Code logs for hook execution
+4. Verify Python 3 is available: `python3 --version`
 
-### TypeScript Errors
+### Python Errors
 
-If hooks fail with TypeScript errors:
-- Ensure `tsx` is installed globally
-- Or configure to use `node --loader ts-node/esm` instead
+If hooks fail with Python errors:
+- Ensure Python 3.x is installed: `python3 --version`
+- Check utils modules are present: `ls .claude/utils/`
+- Run hook manually with test input to see error details
 
 ### State File Not Created
 
@@ -131,10 +135,13 @@ If hooks fail with TypeScript errors:
 
 ### UserPromptSubmit
 
-- Matches user prompts against skill-rules.json
-- Keywords: "research", "investigate", "analyze", etc.
-- Injects enforcement reminder into Claude's context
-- Helps ensure skill activation
+- Matches user prompts against skill-rules.json for BOTH skills
+- **Research Keywords**: "research", "investigate", "analyze", "explore", "study", etc. (37+ keywords)
+- **Planning Keywords**: "plan", "design", "build", "architect", "specs", "requirements", etc. (90+ keywords)
+- **Pattern Matching**: Regex patterns like "(build|create)\\s+(a|an|the)?\\s*(app|system|feature)"
+- Injects enforcement reminder into Claude's context BEFORE prompt is processed
+- Helps ensure automatic skill activation
+- Can detect multiple skills in single prompt (e.g., "research and design")
 
 ### PostToolUse
 
@@ -153,13 +160,32 @@ If hooks fail with TypeScript errors:
 
 ## Verification
 
-After configuration, when you type a prompt like "research machine learning", you should see:
+After configuration, when you type different prompt types, you should see:
 
+**Research prompt** ("research machine learning"):
 ```
-🔒 WORKFLOW ENFORCEMENT ACTIVATED
+🔒 RESEARCH WORKFLOW ENFORCEMENT ACTIVATED
 
 Detected: Research task keywords in your prompt
 Required Skill: multi-agent-researcher
+...
+```
+
+**Planning prompt** ("build a web interface"):
+```
+🔒 PLANNING WORKFLOW ENFORCEMENT ACTIVATED
+
+Detected: Planning task keywords in your prompt
+Required Skill: spec-workflow-orchestrator
+...
+```
+
+**Dual prompt** ("research and design authentication"):
+```
+🔒 RESEARCH WORKFLOW ENFORCEMENT ACTIVATED
+...
+
+🔒 PLANNING WORKFLOW ENFORCEMENT ACTIVATED
 ...
 ```
 

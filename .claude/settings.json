@@ -11,6 +11,16 @@
     "ask": []
   },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/user-prompt-submit.py\""
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "hooks": [
