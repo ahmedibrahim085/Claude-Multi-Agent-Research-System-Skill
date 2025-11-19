@@ -454,7 +454,309 @@ Return to Step 5 of Orchestration Workflow (Quality Gate Validation):
 
 ## Best Practices
 
-**TODO: Best practices to be added in Phase 3**
+### Planning Phase Principles
+
+1. **Clear Phase Definition**
+   - Planning phase has specific goal: Development-ready specifications
+   - Success criteria: 85% quality gate score
+   - Deliverables: requirements.md, architecture.md, tasks.md, adrs/*.md
+   - Handoff point: Complete specifications ready for implementation team
+   - Timeline: Typically 2-4 hours for small projects, 1-2 days for complex systems
+
+2. **Quality-First Approach**
+   - Never compromise on 85% threshold for handoff
+   - Better to iterate 2-3 times than hand off incomplete planning
+   - Each iteration should show measurable improvement (+10-15% score)
+   - Quality gate ensures development team has what they need to succeed
+   - Incomplete planning = expensive rework during development
+
+3. **Sequential Execution**
+   - Planning workflow is intentionally sequential (not parallel)
+   - spec-analyst completes requirements BEFORE spec-architect begins architecture
+   - spec-architect completes architecture BEFORE spec-planner begins tasks
+   - **Reason**: Each agent builds on previous agent's output (dependencies)
+   - **Exception**: spec-architect may create multiple ADRs in parallel
+
+4. **Incremental Validation**
+   - Validate planning artifacts at end of workflow (Step 5: Quality Gate)
+   - Don't wait until all agents complete to find gaps
+   - Quality gate provides concrete score (0-100) and specific feedback
+   - Iterative refinement with max 3 attempts prevents infinite loops
+   - Early validation catches issues before they compound
+
+5. **Continuous Learning**
+   - Document lessons learned from failed quality gates
+   - Update checklist based on common gaps across projects
+   - Refine agent prompts to improve initial quality (reduce iterations)
+   - Share knowledge: What worked? What patterns emerged?
+   - Process improvement: Evolve workflow based on evidence
+
+---
+
+### Planning Workflow Optimization
+
+#### Preparation Phase (Before spawning agents)
+
+**User Interaction**:
+- Clarify project scope with user (what's in scope, what's out of scope)
+- Identify known constraints (budget, timeline, technical stack requirements)
+- Confirm stakeholders and success criteria (who decides if it's good?)
+- Elicit domain knowledge (any existing systems, data, APIs to integrate?)
+
+**Set Realistic Expectations**:
+- Planning takes 2-4 hours for small projects (e.g., todo app)
+- Complex systems may need 1-2 days (e.g., e-commerce platform)
+- Quality gate may require 2-3 iterations (normal, not a failure)
+- Development-ready ≠ perfect; specs will evolve during implementation
+
+#### Execution Phase (During agent spawning)
+
+**Provide Clear Prompts**:
+- Include context from previous agents' outputs (file paths)
+- Reference specific files: "Based on requirements.md, design architecture..."
+- Specify expected output format and file locations
+- Give concrete examples of what "good" looks like
+
+**Allow Sufficient Time**:
+- spec-analyst: 30-60 minutes for requirements analysis
+- spec-architect: 45-90 minutes for architecture + ADRs
+- spec-planner: 30-60 minutes for task breakdown
+- Don't rush agents; thoughtful analysis takes time
+
+**Monitor Progress**:
+- Use TodoWrite tool to track agent spawning and completion
+- Read agent outputs immediately after completion (verify before proceeding)
+- Check for obvious gaps early (missing sections, incomplete analysis)
+- Be prepared to provide additional context if agent asks questions
+
+#### Validation Phase (Quality gate)
+
+**Use Checklist Systematically**:
+- Don't skip checklist items (even if you think they're minor)
+- Score objectively using defined point values (not "feels complete")
+- Document specific gaps for each failed category
+- Prioritize critical gaps (0-point items) over minor improvements
+
+**Provide Actionable Feedback**:
+- Specific > vague: "Add API response time NFR" not "improve NFRs"
+- Measurable targets: "85% test coverage" not "good test coverage"
+- Concrete examples: Show what "measurable acceptance criteria" looks like
+- Reference checklist categories: "NFR missing performance metrics (0/5 pts)"
+
+**Track Iterations**:
+- Iteration 1 score: Baseline (typically 60-75%)
+- Iteration 2 score: Improvement (expect +10-15% increase)
+- Iteration 3 score: Final (if needed, should reach 85%+)
+- If no improvement between iterations: Feedback may be unclear, rephrase
+
+**Enforce Max 3 Iterations**:
+- Prevent infinite loops that waste time and resources
+- After 3 attempts: Escalate to user with current state
+- User decides: Accept current quality OR provide manual guidance
+- Learn from 3-iteration failures: What went wrong? How to prevent?
+
+#### Handoff Phase (After quality gate passes)
+
+**Generate Executive Summary**:
+- Project scope and key objectives (1-2 paragraphs)
+- Major architectural decisions (from ADRs, summarized)
+- Implementation roadmap (phases, estimated effort from tasks.md)
+- Critical risks and mitigation strategies (top 3-5 risks)
+
+**Highlight Key Artifacts**:
+- requirements.md: Source of truth for what to build
+- architecture.md: Source of truth for how to build
+- tasks.md: Source of truth for implementation order and effort
+- adrs/*.md: Source of truth for why decisions were made
+
+**Set Clear Next Steps**:
+- "Review planning artifacts (estimated 30-60 minutes)"
+- "Set up development environment following architecture.md"
+- "Implement tasks in priority order from tasks.md"
+- "Reference ADRs when questions arise about design decisions"
+- "Treat specs as living documents; update as implementation evolves"
+
+---
+
+### Common Planning Pitfalls (and How to Avoid)
+
+❌ **Pitfall 1: Vague Requirements**
+
+**Symptom**: Requirements say "should be fast", "must be secure", "needs to scale"
+
+**Impact**: Architecture can't make concrete decisions, tasks can't be estimated
+
+**Solution**: spec-analyst must quantify all non-functional requirements
+- Performance: "API response time < 200ms p95, throughput > 1000 req/s"
+- Security: "JWT authentication, HTTPS only, input sanitization for XSS/SQLi"
+- Scalability: "Support 10,000 concurrent users, horizontal scaling with load balancer"
+
+**Quality Gate Catches This**: "Non-functional requirements missing metrics (0/5 points)"
+
+---
+
+❌ **Pitfall 2: Over-Engineering Architecture**
+
+**Symptom**: Architecture designed for 1M users when current need is 100 users
+
+**Impact**: Increased complexity, longer development time, higher costs
+
+**Solution**: spec-architect must align with actual requirements and constraints
+- Design for current requirements + 10x growth (not 1000x)
+- Use ADRs to justify complexity: "Why microservices vs. monolith?"
+- Start simple, document how to scale later (evolutionary architecture)
+
+**Quality Gate Catches This**: "Architecture doesn't justify complexity or align with requirements"
+
+---
+
+❌ **Pitfall 3: Tasks Too Large**
+
+**Symptom**: Tasks like "Build authentication system" (days of work, unclear scope)
+
+**Impact**: Hard to estimate, hard to track progress, hard to parallelize
+
+**Solution**: spec-planner must break into atomic tasks (1-8 hours each)
+- "T2.1: Create user registration API endpoint (4h)"
+- "T2.2: Implement JWT token generation (3h)"
+- "T2.3: Add authentication middleware for protected routes (2h)"
+- Each task has concrete acceptance criteria and effort estimate
+
+**Quality Gate Catches This**: "Tasks not atomic and implementable (< 10 points)"
+
+---
+
+❌ **Pitfall 4: Missing ADRs**
+
+**Symptom**: Technology choices without documented rationale ("We'll use React")
+
+**Impact**: Future developers don't understand why choices were made, can't evaluate alternatives
+
+**Solution**: spec-architect must create ADR for key decisions
+- What: Decision made ("Use PostgreSQL for data storage")
+- Why: Rationale ("Relational data model, ACID guarantees, mature ecosystem")
+- Trade-offs: Alternatives considered ("MongoDB: Flexible schema but weaker consistency")
+- Format: Status, Context, Decision, Rationale, Consequences, Alternatives
+
+**Quality Gate Catches This**: "Key decisions not documented in ADRs (< 5 points)"
+
+---
+
+❌ **Pitfall 5: No Risk Assessment**
+
+**Symptom**: Plan assumes everything will work perfectly (no risk identification)
+
+**Impact**: Surprises during implementation, missed dependencies, timeline delays
+
+**Solution**: spec-planner must identify risks and mitigation strategies
+- Risk: "WebSocket scaling for real-time features" (Medium severity, High probability)
+- Mitigation: "Implement Redis adapter early (Phase 2), load test with 1000 concurrent connections"
+- Risk: "Third-party API dependency" (High severity, Low probability)
+- Mitigation: "Implement circuit breaker pattern, design fallback behavior"
+
+**Quality Gate Catches This**: "Technical risks not identified (< 5 points)"
+
+---
+
+### Success Factors
+
+✅ **1. Thorough Requirements Analysis**
+
+**Invest Time Upfront**:
+- spec-analyst phase is foundation for everything else
+- Better requirements → better architecture → better tasks → faster development
+- Don't rush to architecture before requirements are solid (resist temptation)
+
+**Quantify Everything**:
+- Functional requirements: Clear inputs, outputs, behaviors
+- Non-functional requirements: Specific metrics (not "fast" but "< 200ms")
+- User stories: Measurable acceptance criteria (not "works" but "completes in < 2s")
+
+**Validate with Stakeholders**:
+- Confirm understanding: "Did I capture this correctly?"
+- Identify hidden requirements: "What about error handling? Notifications?"
+- Prioritize ruthlessly: "What's must-have vs. nice-to-have?"
+
+---
+
+✅ **2. Justified Architecture Decisions**
+
+**Document WHY (ADRs), not just WHAT**:
+- Architecture documents describe the design (components, interactions, data flow)
+- ADRs explain the reasoning (why this choice over alternatives)
+- ADRs preserve institutional knowledge (future developers understand context)
+
+**Consider Alternatives Explicitly**:
+- Don't assume first solution is best (explore 2-3 options)
+- Document trade-offs: Pros/cons of each alternative
+- Make decision criteria clear: "We chose PostgreSQL because relational model matches domain and team has expertise"
+
+**Architecture Should Be Traceable**:
+- Every component should address specific requirements (traceability matrix)
+- If architecture includes feature not in requirements: Add requirement OR remove feature
+- Architecture is servant of requirements, not the other way around
+
+---
+
+✅ **3. Actionable Task Breakdown**
+
+**Tasks Must Be Implementation-Ready**:
+- Developer should be able to start immediately (no further decomposition needed)
+- Clear inputs: What data/files/APIs are available?
+- Clear outputs: What should be created? What does "done" look like?
+- Clear acceptance criteria: How to verify task is complete?
+
+**Include Effort Estimates**:
+- Helps developers plan sprints and iterations
+- Realistic estimates: 2-8 hours per task (don't over-optimize)
+- Complexity ratings: Simple/Medium/Complex (informs who should do it)
+
+**Identify Dependencies Explicitly**:
+- Use task IDs: "Dependencies: T1.3, T2.1" (not vague "depends on auth")
+- Topological order: Ensure no circular dependencies
+- Critical path: Highlight tasks that block other tasks
+
+---
+
+✅ **4. Iterative Refinement**
+
+**Embrace Quality Gate Feedback**:
+- Failing quality gate is not a failure; it's the process working correctly
+- Feedback identifies specific gaps (saves time vs. manual discovery)
+- Each iteration should show measurable improvement (+10-15% score)
+
+**Address Gaps Systematically**:
+- Priority 1: Critical gaps (0-point items, fundamental issues)
+- Priority 2: Major gaps (missing sections, incomplete analysis)
+- Priority 3: Minor gaps (refinements to reach 85% threshold)
+
+**Max 3 Iterations Keeps Process Bounded**:
+- Iteration 1: Initial attempt (learn the domain)
+- Iteration 2: Refinement (address major gaps)
+- Iteration 3: Final optimization (polish to 85%+)
+- After 3: Escalate to user (process should work in 3 iterations)
+
+---
+
+✅ **5. Clear Handoff Documentation**
+
+**Development Team Should Understand**:
+- **Scope**: What are we building? What's in/out of scope?
+- **Architecture**: How should it be built? What technologies? What patterns?
+- **Roadmap**: What order to implement? What's the critical path?
+- **Risks**: What might go wrong? What's the mitigation plan?
+- **Success Criteria**: How do we know when it's done? What metrics?
+
+**Planning Artifacts Are Living Documents**:
+- Specs will evolve during implementation (new insights, changed requirements)
+- Architecture may be adjusted (technical discoveries, constraints)
+- Tasks will be added/modified (as implementation progresses)
+- Planning phase creates starting point, not immutable contract
+
+**Handoff Includes Next Steps**:
+- Concrete actions: "Review docs (30 min) → Set up environment → Start Task 1.1"
+- Timeline expectations: "Estimated 12-15 person-days for implementation"
+- Communication plan: "Daily standups, reference ADRs for design questions"
 
 ---
 
