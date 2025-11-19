@@ -12,7 +12,7 @@
     "log_tool_calls": true
   },
   "research": {
-    "max_parallel_researchers": 4,
+    "max_parallel_researchers": 7,
     "default_model": "sonnet",
     "require_synthesis_delegation": true,
     "quality_gates_enabled": true

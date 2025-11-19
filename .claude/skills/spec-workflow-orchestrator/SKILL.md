@@ -99,15 +99,16 @@ Generate:
 1. architecture.md with:
    - Executive Summary
    - Technology Stack (with justification for each choice)
-   - System Components (with interaction diagrams)
-   - API Specifications (endpoints, contracts, data models)
-   - Security Considerations (authentication, authorization, data protection)
-   - Performance & Scalability (caching, load balancing, horizontal scaling)
-   - Deployment Architecture
+   - System Components (with interaction diagrams and relationships)
+   - Interface Specifications (APIs, CLIs, SDKs, data contracts as appropriate)
+   - Security Considerations (relevant security requirements and design patterns)
+   - Performance & Scalability (optimization strategies and scaling approach)
+   - Deployment Architecture (hosting, distribution, installation approach)
 
 2. docs/adrs/*.md with Architecture Decision Records for key decisions:
    - ADR format: Status, Context, Decision, Rationale, Consequences, Alternatives
-   - Create separate ADR for: technology stack, database choice, authentication method, etc.
+   - Create separate ADR for each major architectural decision
+   - Examples: technology choices, data storage strategy, communication patterns, security model
 
 Save to: docs/planning/architecture.md, docs/adrs/*.md"
 ```
@@ -931,9 +932,19 @@ From actual spec-orchestrator.md, adapted for planning phase:
 
 ## Examples
 
-### Template: Web Application Planning (Battle-Tested)
+**IMPORTANT**: This skill is project-agnostic and works for ANY type of software project:
+- Web applications, mobile apps, desktop software
+- CLI tools, libraries, frameworks, APIs
+- Embedded systems, IoT devices, firmware
+- Data pipelines, ML models, microservices
 
-This general template from actual spec-orchestrator.md shows typical planning activities for web applications:
+The examples below show web applications because they're common and illustrative. Your project's specific sections, terminology, and architectural concerns will vary based on your domain. The agents adapt their outputs to match your project requirements.
+
+---
+
+### Template: Web Application Planning (ONE Example Domain)
+
+This template from actual spec-orchestrator.md shows typical planning activities for web applications AS ONE EXAMPLE:
 
 **Phase 1: Planning & Analysis Activities**
 
