@@ -66,9 +66,9 @@ Parse user's planning request and validate suitability:
 Use Task tool to spawn requirements analysis agent to perform **Phase 1 Activity 1**:
 
 ```
-Agent: spec-analyst (from .claude/skills/spec-workflow-orchestrator/agents/spec-analyst.md)
-
-Prompt: "Analyze requirements for [PROJECT_NAME]. Generate comprehensive requirements.md with:
+subagent_type: "spec-analyst"
+description: "Analyze requirements for [PROJECT_NAME]"
+prompt: "Analyze requirements for [PROJECT_NAME]. Generate comprehensive requirements.md with:
 - Executive Summary (project goals and scope)
 - Functional Requirements (prioritized with IDs: FR1, FR2, etc.)
 - Non-Functional Requirements (performance, security, scalability with metrics)
@@ -78,9 +78,9 @@ Prompt: "Analyze requirements for [PROJECT_NAME]. Generate comprehensive require
 - Success Metrics (how to measure project success)
 
 Save to: docs/planning/requirements.md"
+```
 
 Wait for completion → Read output: docs/planning/requirements.md
-```
 
 **Expected Output**: Comprehensive requirements document (typically 800-1,500 lines)
 
@@ -91,9 +91,9 @@ Wait for completion → Read output: docs/planning/requirements.md
 Use Task tool to spawn architecture design agent to perform **Phase 1 Activity 2**:
 
 ```
-Agent: spec-architect (from .claude/skills/spec-workflow-orchestrator/agents/spec-architect.md)
-
-Prompt: "Design system architecture for [PROJECT_NAME] based on requirements at docs/planning/requirements.md.
+subagent_type: "spec-architect"
+description: "Design system architecture for [PROJECT_NAME]"
+prompt: "Design system architecture for [PROJECT_NAME] based on requirements at docs/planning/requirements.md.
 
 Generate:
 1. architecture.md with:
@@ -107,12 +107,12 @@ Generate:
 
 2. docs/adrs/*.md with Architecture Decision Records for key decisions:
    - ADR format: Status, Context, Decision, Rationale, Consequences, Alternatives
-   - Create separate ADR for: technology stack, database choice, real-time architecture, etc.
+   - Create separate ADR for: technology stack, database choice, authentication method, etc.
 
 Save to: docs/planning/architecture.md, docs/adrs/*.md"
+```
 
 Wait for completion → Read outputs: docs/planning/architecture.md, docs/adrs/*.md
-```
 
 **Expected Output**: Architecture document (600-1,000 lines) + 3-5 ADRs (150-250 lines each)
 
@@ -123,9 +123,9 @@ Wait for completion → Read outputs: docs/planning/architecture.md, docs/adrs/*
 Use Task tool to spawn implementation planning agent to perform **Phase 1 Activities 3 & 4**:
 
 ```
-Agent: spec-planner (from .claude/skills/spec-workflow-orchestrator/agents/spec-planner.md)
-
-Prompt: "Create implementation plan for [PROJECT_NAME] based on:
+subagent_type: "spec-planner"
+description: "Create implementation plan for [PROJECT_NAME]"
+prompt: "Create implementation plan for [PROJECT_NAME] based on:
 - Requirements: docs/planning/requirements.md
 - Architecture: docs/planning/architecture.md
 
@@ -144,9 +144,9 @@ Generate tasks.md with:
    - End-to-end test requirements
 
 Save to: docs/planning/tasks.md"
+```
 
 Wait for completion → Read output: docs/planning/tasks.md
-```
 
 **Expected Output**: Task breakdown document (500-800 lines with 15-30 tasks)
 
@@ -308,11 +308,30 @@ Use this **battle-tested status report format** (from actual spec-orchestrator.m
 
 ## Agent Roles
 
-**Planning Phase (4 agents)**:
-- **spec-orchestrator**: Coordinates planning workflow and quality gates
-- **spec-planner**: Initial requirement gathering and scope definition
-- **spec-analyst**: Detailed requirement analysis and user story creation
-- **spec-architect**: Technical design and architecture decisions
+**Planning Phase (3 specialized agents)**:
+
+The skill orchestrates these agents sequentially:
+
+1. **spec-analyst** (Step 2): Requirements gathering and analysis
+   - Generates comprehensive requirements.md with functional/non-functional requirements
+   - Creates user stories with measurable acceptance criteria
+   - Documents stakeholder analysis and success metrics
+   - Output: `docs/planning/requirements.md` (~800-1,500 lines)
+
+2. **spec-architect** (Step 3): System architecture design and ADR creation
+   - Designs technology stack with justifications
+   - Defines system components, API specifications, security considerations
+   - Creates Architecture Decision Records for key choices
+   - Output: `docs/planning/architecture.md` + `docs/adrs/*.md` (3-5 ADRs)
+
+3. **spec-planner** (Step 4): Task breakdown, risk assessment, and testing strategy
+   - Breaks requirements and architecture into atomic implementation tasks (1-8 hours each)
+   - Identifies task dependencies and effort estimates
+   - Assesses technical risks with mitigation strategies
+   - Defines testing strategy (unit, integration, E2E)
+   - Output: `docs/planning/tasks.md` (~500-800 lines with 15-30 tasks)
+
+**Note**: The skill itself (this SKILL.md) acts as the orchestrator, managing sequential execution, quality gates (85% threshold), iteration loops with feedback, and deliverable handoff. There is no separate spec-orchestrator agent.
 
 ## Quality Gates
 
