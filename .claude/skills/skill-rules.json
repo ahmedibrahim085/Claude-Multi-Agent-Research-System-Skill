@@ -86,6 +86,68 @@
           }
         }
       }
+    },
+    "spec-workflow-orchestrator": {
+      "type": "orchestrator",
+      "enforcement": "recommend",
+      "priority": "high",
+      "description": "Development tasks must use complete workflow with planning, development, and validation phases",
+      "promptTriggers": {
+        "keywords": [
+          "develop",
+          "build",
+          "create",
+          "implement",
+          "construct",
+          "code",
+          "program",
+          "complete workflow",
+          "end-to-end development",
+          "production-ready",
+          "enterprise-grade",
+          "quality-gated",
+          "spec workflow",
+          "spec-based development",
+          "high-quality implementation"
+        ],
+        "intentPatterns": [
+          "(develop|build|create|implement|construct)\\s+(a|an|the)?\\s*(application|app|system|project|feature|service|platform)",
+          "(production-ready|enterprise-grade|high-quality)\\s+(code|implementation|development)",
+          "complete workflow (for|to develop)",
+          "end-to-end development (of|for)",
+          "(use )?spec workflow (to|for)",
+          "quality-gated development"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "docs/planning/**/*.md",
+          "docs/validation/**/*.md",
+          "docs/adrs/**/*.md"
+        ]
+      },
+      "validation": {
+        "requiredPhases": [
+          "planning",
+          "development",
+          "validation"
+        ],
+        "phaseSequence": "strict",
+        "qualityGates": {
+          "planning": {
+            "threshold": 85,
+            "maxIterations": 3
+          },
+          "development": {
+            "threshold": 85,
+            "maxIterations": 3
+          },
+          "validation": {
+            "threshold": 95,
+            "maxIterations": 3
+          }
+        }
+      }
     }
   }
 }
