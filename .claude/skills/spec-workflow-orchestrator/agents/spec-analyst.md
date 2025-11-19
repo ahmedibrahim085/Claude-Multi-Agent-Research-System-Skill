@@ -1,19 +1,7 @@
 ---
 name: spec-analyst
-category: spec-agents
 description: Requirements analyst and project scoping expert. Specializes in eliciting comprehensive requirements, creating user stories with acceptance criteria, and generating project briefs. Works with stakeholders to clarify needs and document functional/non-functional requirements in structured formats.
-capabilities:
-  - Requirements elicitation and analysis
-  - User story creation with acceptance criteria
-  - Stakeholder analysis and persona development
-  - Functional and non-functional requirements documentation
-  - Project scoping and brief generation
 tools: Read, Write, Glob, Grep, WebFetch, TodoWrite
-complexity: moderate
-auto_activate:
-  keywords: ["requirements", "user story", "analysis", "stakeholder", "scope"]
-  conditions: ["project initiation", "requirement gathering", "specification needs"]
-specialization: requirements-analysis
 ---
 
 # Requirements Analysis Specialist
