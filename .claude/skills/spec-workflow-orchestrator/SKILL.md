@@ -1,6 +1,6 @@
 ---
 name: spec-workflow-orchestrator
-description: Orchestrate production-ready development projects through complete workflow with planning, implementation, and validation phases using 8 specialized agents
+description: Orchestrate comprehensive planning phase from ideation to development-ready specifications using 4 specialized agents
 allowed-tools: Task, Read, Glob, TodoWrite, Write, Edit
 version: 1.0.0
 ---
@@ -9,61 +9,67 @@ version: 1.0.0
 
 ## Purpose
 
-Transform development requests into production-ready code through:
+Transform ideas into development-ready specifications through:
 1. Comprehensive planning with requirement analysis and architecture design
-2. Structured development with quality gates and iterative refinement
-3. Rigorous validation with automated testing and documentation
-4. Complete workflow orchestration across 3 phases with 8 specialized agents
+2. Quality-gated iterative refinement of specifications
+3. Complete handoff documentation for development teams
+4. Orchestration across planning phase with 4 specialized agents
 
 ## When to Use
 
 Auto-invoke when user requests:
-- **Development**: "Develop [application]", "Build [system]", "Create [feature]", "Implement [service]"
-- **Production Quality**: "Production-ready [project]", "Enterprise-grade [application]", "High-quality implementation"
-- **Complete Workflow**: "Complete workflow for [project]", "End-to-end development", "Spec-based development"
-- **Quality-Gated**: "Quality-gated development", "With validation", "With testing and docs"
+- **Planning**: "Plan [application]", "Design [system]", "Spec out [feature]", "Create requirements for [service]"
+- **Architecture**: "Architecture for [project]", "Technical design for [application]", "Design specifications"
+- **Requirements**: "Requirements for [project]", "Analyze requirements", "User stories for [feature]"
+- **Pre-Development**: "Ready for development", "Spec-based planning", "Development specifications"
 
 Do NOT invoke for:
-- Simple code snippets or utilities
+- Actual code implementation (this skill stops at planning)
 - Quick prototypes or experiments
 - Single-file scripts
-- Exploratory coding without requirements
+- Tasks that need immediate coding
 
 ## Orchestration Workflow
 
-### Phase 1: Planning (spec-planner → spec-analyst → spec-architect)
+### Planning Phase (spec-planner → spec-analyst → spec-architect)
 
-**TODO: Phase 1 workflow steps to be added in Phase 3**
+**Step 1: spec-orchestrator coordinates the planning workflow**
 
----
+The orchestrator manages the sequential execution of planning agents and quality gates.
 
-### Phase 2: Development (spec-orchestrator → spec-developer)
+**Step 2: spec-planner - Initial Requirements**
+- Gather initial requirements from user
+- Define project scope and boundaries
+- Identify stakeholders and constraints
+- Output: Initial requirements document
 
-**TODO: Phase 2 workflow steps to be added in Phase 3**
+**Step 3: spec-analyst - Detailed Analysis**
+- Analyze requirements in depth
+- Create user stories and acceptance criteria
+- Identify edge cases and dependencies
+- Output: Detailed requirements and user stories
 
----
+**Step 4: spec-architect - Technical Design**
+- Design system architecture
+- Make technology stack decisions
+- Document ADRs (Architecture Decision Records)
+- Create technical specifications
+- Output: Architecture documentation and ADRs
 
-### Phase 3: Validation (spec-tester → spec-validator → spec-reviewer)
-
-**TODO: Phase 3 workflow steps to be added in Phase 3**
+**Step 5: Quality Gate Check (85% threshold)**
+- Orchestrator validates planning completeness
+- Maximum 3 iterations if threshold not met
+- Output: Development-ready specifications
 
 ---
 
 ## Agent Roles
 
-**Planning Phase**:
+**Planning Phase (4 agents)**:
+- **spec-orchestrator**: Coordinates planning workflow and quality gates
 - **spec-planner**: Initial requirement gathering and scope definition
 - **spec-analyst**: Detailed requirement analysis and user story creation
 - **spec-architect**: Technical design and architecture decisions
-
-**Development Phase**:
-- **spec-orchestrator**: Coordinates development workflow and quality gates
-- **spec-developer**: Implements code based on specifications
-
-**Validation Phase**:
-- **spec-tester**: Automated testing and quality assurance
-- **spec-validator**: Validates against requirements and acceptance criteria
-- **spec-reviewer**: Final code review and documentation check
 
 ## Quality Gates
 
@@ -71,27 +77,18 @@ Do NOT invoke for:
 - Requirements completeness
 - Architecture soundness
 - Feasibility assessment
+- Documentation quality
+- Handoff readiness
 
-**Development Gate** (85% threshold):
-- Code quality and standards
-- Implementation completeness
-- Technical debt assessment
-
-**Validation Gate** (95% threshold):
-- Test coverage and passing
-- Documentation completeness
-- Production readiness
-
-**Maximum Iterations**: 3 per phase
+**Maximum Iterations**: 3 for planning phase
 
 ---
 
 ## File Organization
 
 - `docs/planning/*.md`: Planning phase outputs (requirements, architecture)
-- `docs/validation/*.md`: Validation reports (tests, reviews)
 - `docs/adrs/*.md`: Architecture Decision Records
-- `src/`: Implementation code
+- Handoff ready for development team to implement
 
 ---
 
@@ -107,4 +104,4 @@ Do NOT invoke for:
 
 ---
 
-**Note**: This is a skeleton created in Phase 1. Full workflow details will be implemented in Phase 3.
+**Note**: This skill focuses on planning phase only. It produces development-ready specifications but does not implement code, tests, or validation.
