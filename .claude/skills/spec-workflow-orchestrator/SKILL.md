@@ -33,6 +33,20 @@ Do NOT invoke for:
 
 ### Planning Phase (spec-analyst → spec-architect → spec-planner)
 
+**Scope**: Complete planning and analysis phase (ideation → development-ready specifications)
+
+**Key Activities** (from battle-tested Phase 1):
+- Requirements gathering and analysis
+- System architecture design
+- Task breakdown and estimation
+- Risk assessment and mitigation planning
+
+**Quality Gates**:
+- Requirements completeness and clarity (>85%)
+- Architecture feasibility validation
+- Task breakdown granularity check
+- Risk mitigation coverage
+
 The orchestrator manages sequential execution of three specialized agents with quality gate validation.
 
 ---
@@ -47,9 +61,9 @@ Parse user's planning request and validate suitability:
 
 ---
 
-**Step 2: Spawn spec-analyst Agent**
+**Step 2: Spawn spec-analyst Agent** (Requirements Gathering and Analysis)
 
-Use Task tool to spawn requirements analysis agent:
+Use Task tool to spawn requirements analysis agent to perform **Phase 1 Activity 1**:
 
 ```
 Agent: spec-analyst (from .claude/skills/spec-workflow-orchestrator/agents/spec-analyst.md)
@@ -72,9 +86,9 @@ Wait for completion → Read output: docs/planning/requirements.md
 
 ---
 
-**Step 3: Spawn spec-architect Agent**
+**Step 3: Spawn spec-architect Agent** (System Architecture Design)
 
-Use Task tool to spawn architecture design agent:
+Use Task tool to spawn architecture design agent to perform **Phase 1 Activity 2**:
 
 ```
 Agent: spec-architect (from .claude/skills/spec-workflow-orchestrator/agents/spec-architect.md)
@@ -104,9 +118,9 @@ Wait for completion → Read outputs: docs/planning/architecture.md, docs/adrs/*
 
 ---
 
-**Step 4: Spawn spec-planner Agent**
+**Step 4: Spawn spec-planner Agent** (Task Breakdown and Risk Assessment)
 
-Use Task tool to spawn implementation planning agent:
+Use Task tool to spawn implementation planning agent to perform **Phase 1 Activities 3 & 4**:
 
 ```
 Agent: spec-planner (from .claude/skills/spec-workflow-orchestrator/agents/spec-planner.md)
@@ -138,15 +152,20 @@ Wait for completion → Read output: docs/planning/tasks.md
 
 ---
 
-**Step 5: Quality Gate Validation**
+**Step 5: Quality Gate Validation** (Planning Phase Gate)
 
-Orchestrator validates planning completeness using checklist (see Quality Gates section):
+Orchestrator validates planning completeness using **battle-tested Gate 1 criteria** (see Quality Gates section):
 
-**Validation Process**:
-1. Read all planning artifacts (requirements.md, architecture.md, tasks.md, adrs/*.md)
-2. Score against 6-category checklist (100 points total)
-3. Calculate total score: Sum of all category points / 100
-4. Compare to threshold: ≥ 85% to pass
+**Validation Process** (from actual spec-orchestrator.md):
+1. Review all planning artifacts (requirements.md, architecture.md, tasks.md, adrs/*.md)
+2. Assess completeness against 4 core criteria checklist (100 points total):
+   - Requirements Completeness and Clarity (30 pts)
+   - Architecture Feasibility Assessment (30 pts)
+   - Task Breakdown Adequacy (25 pts)
+   - Risk Mitigation Coverage (15 pts)
+3. Validate technical feasibility (can this actually be built?)
+4. Calculate total score: Sum of all criteria points / 100
+5. Compare to threshold: ≥ 85% to pass (adapted from original 95%)
 
 **Decision**:
 - If score ≥ 85%: Proceed to Step 7 (Deliverable Handoff)
@@ -156,13 +175,31 @@ Orchestrator validates planning completeness using checklist (see Quality Gates 
 
 **Step 6: Iteration Loop (Max 3 Iterations)**
 
-When quality gate fails, provide targeted feedback and re-spawn relevant agent:
+When quality gate fails, apply **battle-tested feedback framework** from actual spec-orchestrator.md:
 
-**Feedback Generation Process**:
-1. Identify which checklist categories failed (< expected points)
-2. Determine root cause (requirements gap, architecture issue, tasks unclear)
-3. Generate specific, actionable feedback listing gaps
-4. Re-spawn agent with previous output + feedback + gap list
+**1. Failure Analysis Process**
+- **Identify Root Causes**: Analyze why quality gate failed (which of the 4 criteria?)
+- **Impact Assessment**: Determine scope of required corrections (1 agent or multiple?)
+- **Priority Classification**: Categorize issues by severity (critical gaps vs. minor improvements)
+- **Resource Allocation**: Decide which agent needs re-spawning (spec-analyst, spec-architect, or spec-planner)
+
+**2. Corrective Action Planning**
+- Create specific, actionable improvement tasks listing gaps
+- Set realistic expectations (iteration should improve score +10-15%)
+- Establish validation criteria (must address specific point deficiencies)
+- Plan verification (re-run quality gate after re-spawning agent)
+
+**3. Communication Protocol**
+- Notify user of quality gate failure with specific score (e.g., "68/100, needs improvement")
+- Provide clear explanation of corrective measures (which agent re-spawning, why)
+- Update iteration count (attempt 1/3, 2/3, or 3/3)
+- Set expectation: iterative refinement is normal, not a failure
+
+**4. Concrete Feedback Generation** (Execution)
+- Identify which checklist categories failed (< expected points)
+- Determine root cause (requirements gap, architecture issue, tasks unclear)
+- Generate specific, actionable feedback listing gaps with point values
+- Re-spawn agent with previous output + feedback + gap list
 
 **Example Feedback for spec-analyst**:
 ```
@@ -212,6 +249,63 @@ Generate planning summary and return artifacts to user:
 
 ---
 
+### Progress Tracking During Workflow
+
+Use this **battle-tested status report format** (from actual spec-orchestrator.md) to track planning phase progress:
+
+```markdown
+# Planning Workflow Status Report
+
+**Project**: [Project Name]
+**Started**: [Timestamp]
+**Current Step**: [Agent in progress]
+**Overall Progress**: [Percentage]
+
+## Agent Execution Status
+
+### ✅ spec-analyst (Complete)
+- Requirements analysis completed
+- Output: docs/planning/requirements.md (~1,200 lines)
+- Duration: 45 minutes
+- Status: ✅ COMPLETE
+
+### 🔄 spec-architect (In Progress)
+- Architecture design in progress
+- Current task: Creating ADRs for technology stack decisions
+- Output: docs/planning/architecture.md + docs/adrs/*.md
+- Duration: 30 minutes elapsed
+- Status: 🔄 IN PROGRESS
+
+### ⏳ spec-planner (Pending)
+- Waiting for architecture completion
+- Will create: docs/planning/tasks.md
+- Status: ⏳ PENDING
+
+## Quality Gate Status
+- Planning Gate: ⏳ Pending (waiting for all agents to complete)
+- Threshold: ≥ 85%
+- Iterations used: 0/3
+
+## Artifacts Created
+1. ✅ `docs/planning/requirements.md` - Complete requirements specification
+2. 🔄 `docs/planning/architecture.md` - System architecture design (in progress)
+3. 🔄 `docs/adrs/*.md` - Architecture Decision Records (2/5 complete)
+4. ⏳ `docs/planning/tasks.md` - Task breakdown (pending)
+
+## Next Steps
+1. Complete spec-architect agent (architecture + remaining ADRs)
+2. Spawn spec-planner agent for task breakdown
+3. Execute quality gate validation
+4. [If needed] Iterate based on feedback
+
+## Risk Assessment
+- ✅ All agents on track, no blocking issues identified
+```
+
+**TodoWrite Integration**: Use TodoWrite tool to maintain real-time task list tracking agent spawning and completion.
+
+---
+
 ## Agent Roles
 
 **Planning Phase (4 agents)**:
@@ -226,43 +320,73 @@ Generate planning summary and return artifacts to user:
 
 **Purpose**: Validate planning completeness before handoff to development team
 
-**Validation Checklist** (100 points total):
+**Core Validation Criteria** (from battle-tested Gate 1):
 
-#### 1. Requirements Completeness (25 points)
-- ✅ All functional requirements documented with IDs (10 pts)
-- ✅ Non-functional requirements specified with metrics (5 pts)
-- ✅ User stories with measurable acceptance criteria (5 pts)
-- ✅ Stakeholder needs addressed and documented (5 pts)
+#### 1. Requirements Completeness and Clarity
+**Weight**: 30 points
 
-#### 2. Architecture Soundness (25 points)
-- ✅ System design addresses all requirements (10 pts)
-- ✅ Technology stack justified with rationale (5 pts)
-- ✅ Scalability and performance considerations documented (5 pts)
-- ✅ Security and compliance requirements addressed (5 pts)
+Verify requirements artifacts are comprehensive and unambiguous:
+- ✅ All functional requirements documented with clear IDs (FR1, FR2, etc.) - 10 pts
+- ✅ Non-functional requirements specified with quantitative metrics - 8 pts
+- ✅ User stories with measurable acceptance criteria - 7 pts
+- ✅ Stakeholder needs identified and documented - 5 pts
 
-#### 3. Task Breakdown Quality (20 points)
-- ✅ Tasks are atomic and implementable (1-8 hours each) (10 pts)
-- ✅ Dependencies clearly identified with task IDs (5 pts)
-- ✅ Effort estimates provided with complexity ratings (5 pts)
+**Validation**:
+- Review requirements.md for completeness
+- Check that all requirements are testable and unambiguous
+- Confirm NFRs have specific metrics (e.g., "< 200ms" not "fast")
 
-#### 4. Architecture Decision Records (10 points)
-- ✅ Key decisions documented in ADRs (5 pts)
-- ✅ Trade-offs and alternatives considered explicitly (5 pts)
+#### 2. Architecture Feasibility Assessment
+**Weight**: 30 points
 
-#### 5. Risk Management (10 points)
-- ✅ Technical risks identified with severity/probability (5 pts)
-- ✅ Mitigation strategies documented for each risk (5 pts)
+Validate technical design is sound and implementable:
+- ✅ System architecture addresses all functional requirements - 10 pts
+- ✅ Technology stack justified with clear rationale (ADRs) - 8 pts
+- ✅ Scalability and performance design documented - 7 pts
+- ✅ Security and compliance considerations addressed - 5 pts
 
-#### 6. Handoff Readiness (10 points)
-- ✅ Documentation clear and comprehensive (5 pts)
-- ✅ Next steps explicitly defined for dev team (5 pts)
+**Validation**:
+- Review architecture.md and adrs/*.md
+- Assess if architecture can realistically deliver requirements
+- Verify technology choices align with team expertise and constraints
+
+#### 3. Task Breakdown Adequacy
+**Weight**: 25 points
+
+Ensure implementation plan is actionable and well-estimated:
+- ✅ Tasks are atomic and implementable (1-8 hours each) - 12 pts
+- ✅ Dependencies clearly identified with task IDs - 8 pts
+- ✅ Effort estimates provided with complexity ratings - 5 pts
+
+**Validation**:
+- Review tasks.md for granularity (too large = hard to estimate)
+- Check dependency graph has no cycles
+- Verify estimates are realistic based on task complexity
+
+#### 4. Risk Mitigation Coverage
+**Weight**: 15 points
+
+Confirm technical risks are identified with mitigation strategies:
+- ✅ Technical risks identified with severity and probability - 8 pts
+- ✅ Mitigation strategies documented for each risk - 7 pts
+
+**Validation**:
+- Review risk assessment section in tasks.md
+- Verify high-severity risks have concrete mitigation plans
+- Check that risks are technical (not business/organizational)
 
 ---
 
 **Scoring Method**:
-1. Sum all checklist points from 6 categories
-2. Score = Total Points / 100
-3. Threshold: ≥ 85% to pass quality gate
+1. Score each criterion using point values above (total: 100 points)
+2. Calculate: Score = Sum of all points / 100
+3. **Threshold**: ≥ 85% to pass quality gate (adapted from original 95% for planning-only scope)
+
+**Validation Process** (battle-tested 4-step method):
+1. Review all planning artifacts (requirements.md, architecture.md, tasks.md, adrs/*.md)
+2. Assess completeness against checklist above
+3. Validate technical feasibility (can this actually be built?)
+4. Confirm stakeholder alignment (does this meet the project goals?)
 
 **Maximum Iterations**: 3 attempts per planning session
 
@@ -454,42 +578,68 @@ Return to Step 5 of Orchestration Workflow (Quality Gate Validation):
 
 ## Best Practices
 
-### Planning Phase Principles
+### Project Coordination Principles (Battle-Tested)
+
+These 5 principles from actual spec-orchestrator.md, adapted for planning-only workflow:
 
 1. **Clear Phase Definition**
    - Planning phase has specific goal: Development-ready specifications
-   - Success criteria: 85% quality gate score
+   - Success criteria: 85% quality gate score (adapted from 95%)
    - Deliverables: requirements.md, architecture.md, tasks.md, adrs/*.md
    - Handoff point: Complete specifications ready for implementation team
    - Timeline: Typically 2-4 hours for small projects, 1-2 days for complex systems
 
 2. **Quality-First Approach**
-   - Never compromise on 85% threshold for handoff
+   - Never compromise on 85% threshold for handoff (established quality standard)
    - Better to iterate 2-3 times than hand off incomplete planning
    - Each iteration should show measurable improvement (+10-15% score)
    - Quality gate ensures development team has what they need to succeed
    - Incomplete planning = expensive rework during development
 
-3. **Sequential Execution**
-   - Planning workflow is intentionally sequential (not parallel)
-   - spec-analyst completes requirements BEFORE spec-architect begins architecture
-   - spec-architect completes architecture BEFORE spec-planner begins tasks
-   - **Reason**: Each agent builds on previous agent's output (dependencies)
-   - **Exception**: spec-architect may create multiple ADRs in parallel
+3. **Continuous Communication**
+   - Maintain transparent progress reporting using TodoWrite tool
+   - Update user on agent completion status (✅ spec-analyst → 🔄 spec-architect → ⏳ spec-planner)
+   - Report quality gate scores with specific gaps identified
+   - Communicate iteration progress (attempt 1/3, score improvement)
+   - Set clear expectations about planning timeline and quality requirements
 
-4. **Incremental Validation**
-   - Validate planning artifacts at end of workflow (Step 5: Quality Gate)
-   - Don't wait until all agents complete to find gaps
-   - Quality gate provides concrete score (0-100) and specific feedback
-   - Iterative refinement with max 3 attempts prevents infinite loops
-   - Early validation catches issues before they compound
+4. **Adaptive Planning**
+   - Adjust planning based on emerging requirements from user
+   - If user provides new constraints during workflow, incorporate into feedback
+   - Architecture may need revision if requirements change mid-stream
+   - Flexibility to restart specific agents if scope changes significantly
+   - Balance between following process and responding to new information
 
-5. **Continuous Learning**
-   - Document lessons learned from failed quality gates
-   - Update checklist based on common gaps across projects
-   - Refine agent prompts to improve initial quality (reduce iterations)
-   - Share knowledge: What worked? What patterns emerged?
-   - Process improvement: Evolve workflow based on evidence
+5. **Risk Management**
+   - Proactively identify technical risks during planning (spec-planner responsibility)
+   - Document mitigation strategies for each identified risk in tasks.md
+   - Surface risks to user during handoff (top 3-5 critical risks)
+   - Don't hide uncertainty; flag unknowns for investigation during development
+   - Risk assessment is part of quality gate validation (15 points)
+
+---
+
+### Process Improvement Guidelines (Battle-Tested)
+
+From actual spec-orchestrator.md, applicable to planning workflow:
+
+- **Document successful patterns for reuse**: Save high-quality planning artifacts as templates
+- **Analyze failures to prevent recurrence**: Review failed quality gates to identify common gaps
+- **Regularly update templates and checklists**: Evolve validation criteria based on lessons learned
+- **Collect feedback from all stakeholders**: Ask users what worked/didn't work in planning handoff
+- **Implement automation where beneficial**: Standardize agent prompts, quality gate scoring
+
+---
+
+### Success Factors (Battle-Tested)
+
+From actual spec-orchestrator.md, adapted for planning phase:
+
+- **Preparation**: Thorough planning prevents poor performance → Clarify scope upfront, gather context
+- **Communication**: Clear, frequent updates keep everyone aligned → Use TodoWrite, report progress
+- **Flexibility**: Adapt to changing requirements while maintaining quality → Iterate with feedback loops
+- **Documentation**: Comprehensive records enable future improvements → Save all artifacts, ADRs
+- **Validation**: Regular quality checks ensure project success → 85% quality gate threshold enforced
 
 ---
 
@@ -762,11 +912,57 @@ Return to Step 5 of Orchestration Workflow (Quality Gate Validation):
 
 ## Examples
 
-### Example: Planning a Task Management Web Application
+### Template: Web Application Planning (Battle-Tested)
+
+This general template from actual spec-orchestrator.md shows typical planning activities for web applications:
+
+**Phase 1: Planning & Analysis Activities**
+
+1. **Requirements Gathering and Stakeholder Analysis**
+   - Identify stakeholder groups (end users, business owners, administrators)
+   - Document functional and non-functional requirements
+   - Prioritize features using MoSCoW or similar framework
+   - Define success metrics and acceptance criteria
+
+2. **System Architecture and Technology Stack Selection**
+   - Choose frontend framework (React, Vue, Angular, etc.)
+   - Select backend technology (Node.js, Python, Go, etc.)
+   - Decide on hosting/deployment platform (AWS, Azure, GCP, self-hosted)
+   - Justify technology choices with ADRs (cost, team expertise, scalability)
+
+3. **Database Design and Data Modeling**
+   - Define data entities and relationships (ERD)
+   - Choose database type (SQL vs. NoSQL based on requirements)
+   - Design schema with normalization and indexing strategy
+   - Plan data migration strategy if replacing existing system
+
+4. **API Specification and Contract Definition**
+   - Define REST/GraphQL API endpoints
+   - Document request/response schemas (OpenAPI/Swagger)
+   - Specify authentication and authorization requirements
+   - Version API contracts for future compatibility
+
+5. **Security and Compliance Requirements**
+   - Authentication mechanisms (JWT, OAuth, session-based)
+   - Authorization patterns (RBAC, ABAC)
+   - Data protection (encryption at rest and in transit)
+   - Compliance needs (GDPR, HIPAA, SOC 2)
+
+6. **Performance and Scalability Planning**
+   - Define performance targets (response time, throughput)
+   - Plan caching strategy (Redis, CDN, browser caching)
+   - Design for horizontal scaling (load balancing, stateless services)
+   - Identify potential bottlenecks and mitigation strategies
+
+**Deliverables**: requirements.md, architecture.md, tasks.md, adrs/*.md
+
+---
+
+### Example Walkthrough: Task Management Application
+
+This detailed example demonstrates the complete planning workflow from query analysis to deliverable handoff.
 
 **User Request**: "Plan a task management web application with user authentication, real-time updates, and mobile responsiveness"
-
-This example demonstrates the complete planning workflow from query analysis to deliverable handoff.
 
 ---
 
