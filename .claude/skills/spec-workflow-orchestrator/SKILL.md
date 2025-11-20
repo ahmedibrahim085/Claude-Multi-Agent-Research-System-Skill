@@ -87,20 +87,68 @@ Parse user's planning request and validate suitability:
 
 ---
 
-**Step 1.5: Project Naming**
+**Step 1.5: Project Naming & Existing Project Detection**
+
+**Part A: Determine Project Slug**
 
 Determine project directory name for organizing deliverables:
 - Derive project slug from user request (e.g., "Session Log Viewer" → "session-log-viewer")
 - Or ask user: "What should we call this project? (for organizing planning files)"
-- Create project directory structure:
-  - `docs/projects/{project-slug}/planning/`
-  - `docs/projects/{project-slug}/adrs/`
-- Output: Project slug for use in file paths throughout workflow
 
 **Example Project Slugs**:
 - "Build a task manager" → `task-manager`
 - "Session log viewer web app" → `session-log-viewer`
 - "E-commerce product catalog" → `ecommerce-product-catalog`
+
+**Part B: Check for Existing Project**
+
+Check if `docs/projects/{project-slug}/` already exists:
+
+**If NO** (new project):
+- Create project directory structure:
+  - `docs/projects/{project-slug}/planning/`
+  - `docs/projects/{project-slug}/adrs/`
+- Proceed to Step 2 with fresh planning mode
+
+**If YES** (existing project):
+Use AskUserQuestion tool to ask:
+
+```
+Question: "Project '{project-slug}' already has planning specifications. How would you like to proceed?"
+
+Options:
+1. "Refine existing specs" - Agents will read current files and improve them iteratively
+2. "Archive old + fresh start" - Move existing specs to .archive/{timestamp}/ and create new specs from scratch
+3. "Create new version" - Create {project-slug}-v2/ directory for new planning iteration
+4. "Cancel" - Stop the workflow
+```
+
+**Based on User Choice**:
+
+- **Choice 1 (Refine)**: Set workflow mode to `refinement`. Update all agent prompts to:
+  - Read existing files first
+  - Preserve good sections
+  - Enhance weak areas
+  - Add missing sections
+  - Agent prompts become: "Read existing {file} and refine based on new requirements..."
+
+- **Choice 2 (Archive + Fresh)**:
+  - Create `.archive/` directory if it doesn't exist
+  - Move `docs/projects/{project-slug}/` → `docs/projects/{project-slug}/.archive/{timestamp}/`
+  - Create fresh directory structure
+  - Proceed with normal fresh planning mode
+
+- **Choice 3 (New Version)**:
+  - Determine next version number (check for existing v2, v3, etc.)
+  - Update project-slug to `{project-slug}-v2` (or v3, v4, etc.)
+  - Create new versioned directory
+  - Proceed with normal fresh planning mode
+
+- **Choice 4 (Cancel)**:
+  - Exit workflow gracefully
+  - Inform user no changes were made
+
+**Output**: Project slug + workflow mode (fresh | refinement) for use throughout workflow
 
 ---
 
@@ -108,6 +156,7 @@ Determine project directory name for organizing deliverables:
 
 Use Task tool to spawn requirements analysis agent to perform **Phase 1 Activity 1**:
 
+**For Fresh Planning Mode**:
 ```
 subagent_type: "spec-analyst"
 description: "Analyze requirements for [PROJECT_NAME]"
@@ -123,6 +172,28 @@ prompt: "Analyze requirements for [PROJECT_NAME]. Generate comprehensive require
 Save to: docs/projects/{project-slug}/planning/requirements.md"
 ```
 
+**For Refinement Mode**:
+```
+subagent_type: "spec-analyst"
+description: "Refine requirements for [PROJECT_NAME]"
+prompt: "Refine requirements for [PROJECT_NAME].
+
+IMPORTANT: Read existing file at docs/projects/{project-slug}/planning/requirements.md first.
+
+Your task:
+1. Analyze existing requirements document
+2. Identify gaps, weak sections, or outdated content
+3. Preserve well-written sections (don't rewrite what's already good)
+4. Enhance based on new user input: [ADDITIONAL_REQUIREMENTS_FROM_USER]
+5. Add missing sections or details
+6. Update metrics to be more measurable
+7. Ensure acceptance criteria are concrete and testable
+
+Maintain document structure but improve quality and completeness.
+
+Save updated version to: docs/projects/{project-slug}/planning/requirements.md"
+```
+
 Wait for completion → Read output: docs/projects/{project-slug}/planning/requirements.md
 
 **Expected Output**: Comprehensive requirements document (typically 800-1,500 lines)
@@ -133,6 +204,7 @@ Wait for completion → Read output: docs/projects/{project-slug}/planning/requi
 
 Use Task tool to spawn architecture design agent to perform **Phase 1 Activity 2**:
 
+**For Fresh Planning Mode**:
 ```
 subagent_type: "spec-architect"
 description: "Design system architecture for [PROJECT_NAME]"
@@ -156,6 +228,31 @@ Generate:
 Save to: docs/projects/{project-slug}/planning/architecture.md, docs/projects/{project-slug}/adrs/*.md"
 ```
 
+**For Refinement Mode**:
+```
+subagent_type: "spec-architect"
+description: "Refine system architecture for [PROJECT_NAME]"
+prompt: "Refine system architecture for [PROJECT_NAME].
+
+IMPORTANT: Read existing files first:
+- docs/projects/{project-slug}/planning/architecture.md
+- docs/projects/{project-slug}/adrs/*.md
+- Updated requirements at docs/projects/{project-slug}/planning/requirements.md
+
+Your task:
+1. Review existing architecture and ADRs
+2. Identify architectural gaps or areas needing improvement
+3. Check if technology stack decisions still make sense
+4. Enhance based on new/refined requirements: [CHANGES_FROM_REQUIREMENTS]
+5. Add missing architectural components or considerations
+6. Update existing ADRs if decisions have changed (mark old as 'Superseded', create new ADRs)
+7. Preserve well-designed sections
+
+Maintain consistency with existing ADRs but improve where needed.
+
+Save to: docs/projects/{project-slug}/planning/architecture.md, docs/projects/{project-slug}/adrs/*.md"
+```
+
 Wait for completion → Read outputs: docs/projects/{project-slug}/planning/architecture.md, docs/projects/{project-slug}/adrs/*.md
 
 **Expected Output**: Architecture document (600-1,000 lines) + 3-5 ADRs (150-250 lines each)
@@ -166,6 +263,7 @@ Wait for completion → Read outputs: docs/projects/{project-slug}/planning/arch
 
 Use Task tool to spawn implementation planning agent to perform **Phase 1 Activities 3 & 4**:
 
+**For Fresh Planning Mode**:
 ```
 subagent_type: "spec-planner"
 description: "Create implementation plan for [PROJECT_NAME]"
@@ -186,6 +284,32 @@ Generate tasks.md with:
    - Unit test coverage targets
    - Integration test scenarios
    - End-to-end test requirements
+
+Save to: docs/projects/{project-slug}/planning/tasks.md"
+```
+
+**For Refinement Mode**:
+```
+subagent_type: "spec-planner"
+description: "Refine implementation plan for [PROJECT_NAME]"
+prompt: "Refine implementation plan for [PROJECT_NAME].
+
+IMPORTANT: Read existing files first:
+- docs/projects/{project-slug}/planning/tasks.md
+- Updated requirements at docs/projects/{project-slug}/planning/requirements.md
+- Updated architecture at docs/projects/{project-slug}/planning/architecture.md
+
+Your task:
+1. Review existing task breakdown and risk assessment
+2. Update tasks based on refined requirements/architecture changes
+3. Add new tasks for new requirements
+4. Remove or modify tasks that are no longer relevant
+5. Re-assess effort estimates if architecture changed
+6. Update risk assessment with any new technical risks
+7. Preserve completed tasks or well-defined tasks
+8. Ensure task dependencies are still accurate
+
+Maintain task numbering continuity where possible.
 
 Save to: docs/projects/{project-slug}/planning/tasks.md"
 ```
@@ -633,10 +757,41 @@ Return to Step 5 of Orchestration Workflow (Quality Gate Validation):
 
 ## File Organization
 
+### Active Project Structure
 - `docs/projects/{project-slug}/planning/*.md`: Planning phase outputs (requirements, architecture, tasks)
 - `docs/projects/{project-slug}/adrs/*.md`: Architecture Decision Records per project
 - Each project gets its own directory to prevent overwrites across planning sessions
 - Handoff ready for development team to implement
+
+### Archive Structure (When Refining Existing Projects)
+
+When user chooses "Archive old + fresh start" for an existing project:
+
+```
+docs/projects/{project-slug}/
+├── .archive/
+│   ├── 20251120-094500/    # Timestamp: YYYYMMDD-HHMMSS
+│   │   ├── planning/
+│   │   │   ├── requirements.md
+│   │   │   ├── architecture.md
+│   │   │   └── tasks.md
+│   │   └── adrs/
+│   │       └── *.md
+│   └── 20251118-153000/    # Previous archive (if multiple refinements)
+│       └── ...
+├── planning/               # Current/active specs
+│   ├── requirements.md
+│   ├── architecture.md
+│   └── tasks.md
+└── adrs/                   # Current/active ADRs
+    └── *.md
+```
+
+**Archive Benefits**:
+- Complete history of all planning iterations preserved
+- Easy rollback if new specs don't work out
+- Compare evolution of planning over time
+- No data loss when starting fresh
 
 ---
 
