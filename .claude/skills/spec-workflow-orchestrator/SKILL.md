@@ -87,6 +87,23 @@ Parse user's planning request and validate suitability:
 
 ---
 
+**Step 1.5: Project Naming**
+
+Determine project directory name for organizing deliverables:
+- Derive project slug from user request (e.g., "Session Log Viewer" → "session-log-viewer")
+- Or ask user: "What should we call this project? (for organizing planning files)"
+- Create project directory structure:
+  - `docs/projects/{project-slug}/planning/`
+  - `docs/projects/{project-slug}/adrs/`
+- Output: Project slug for use in file paths throughout workflow
+
+**Example Project Slugs**:
+- "Build a task manager" → `task-manager`
+- "Session log viewer web app" → `session-log-viewer`
+- "E-commerce product catalog" → `ecommerce-product-catalog`
+
+---
+
 **Step 2: Spawn spec-analyst Agent** (Requirements Gathering and Analysis)
 
 Use Task tool to spawn requirements analysis agent to perform **Phase 1 Activity 1**:
@@ -103,10 +120,10 @@ prompt: "Analyze requirements for [PROJECT_NAME]. Generate comprehensive require
 - Assumptions and Constraints (technical, business, timeline)
 - Success Metrics (how to measure project success)
 
-Save to: docs/planning/requirements.md"
+Save to: docs/projects/{project-slug}/planning/requirements.md"
 ```
 
-Wait for completion → Read output: docs/planning/requirements.md
+Wait for completion → Read output: docs/projects/{project-slug}/planning/requirements.md
 
 **Expected Output**: Comprehensive requirements document (typically 800-1,500 lines)
 
@@ -119,7 +136,7 @@ Use Task tool to spawn architecture design agent to perform **Phase 1 Activity 2
 ```
 subagent_type: "spec-architect"
 description: "Design system architecture for [PROJECT_NAME]"
-prompt: "Design system architecture for [PROJECT_NAME] based on requirements at docs/planning/requirements.md.
+prompt: "Design system architecture for [PROJECT_NAME] based on requirements at docs/projects/{project-slug}/planning/requirements.md.
 
 Generate:
 1. architecture.md with:
@@ -131,15 +148,15 @@ Generate:
    - Performance & Scalability (optimization strategies and scaling approach)
    - Deployment Architecture (hosting, distribution, installation approach)
 
-2. docs/adrs/*.md with Architecture Decision Records for key decisions:
+2. ADRs with Architecture Decision Records for key decisions:
    - ADR format: Status, Context, Decision, Rationale, Consequences, Alternatives
    - Create separate ADR for each major architectural decision
    - Examples: technology choices, data storage strategy, communication patterns, security model
 
-Save to: docs/planning/architecture.md, docs/adrs/*.md"
+Save to: docs/projects/{project-slug}/planning/architecture.md, docs/projects/{project-slug}/adrs/*.md"
 ```
 
-Wait for completion → Read outputs: docs/planning/architecture.md, docs/adrs/*.md
+Wait for completion → Read outputs: docs/projects/{project-slug}/planning/architecture.md, docs/projects/{project-slug}/adrs/*.md
 
 **Expected Output**: Architecture document (600-1,000 lines) + 3-5 ADRs (150-250 lines each)
 
@@ -153,8 +170,8 @@ Use Task tool to spawn implementation planning agent to perform **Phase 1 Activi
 subagent_type: "spec-planner"
 description: "Create implementation plan for [PROJECT_NAME]"
 prompt: "Create implementation plan for [PROJECT_NAME] based on:
-- Requirements: docs/planning/requirements.md
-- Architecture: docs/planning/architecture.md
+- Requirements: docs/projects/{project-slug}/planning/requirements.md
+- Architecture: docs/projects/{project-slug}/planning/architecture.md
 
 Generate tasks.md with:
 1. Overview (total tasks, estimated effort, critical path, parallel streams)
@@ -170,10 +187,10 @@ Generate tasks.md with:
    - Integration test scenarios
    - End-to-end test requirements
 
-Save to: docs/planning/tasks.md"
+Save to: docs/projects/{project-slug}/planning/tasks.md"
 ```
 
-Wait for completion → Read output: docs/planning/tasks.md
+Wait for completion → Read output: docs/projects/{project-slug}/planning/tasks.md
 
 **Expected Output**: Task breakdown document (500-800 lines with 15-30 tasks)
 
@@ -265,10 +282,10 @@ Generate planning summary and return artifacts to user:
 - Next steps for development team
 
 **Deliverables Returned**:
-- 📄 docs/planning/requirements.md
-- 📄 docs/planning/architecture.md
-- 📄 docs/planning/tasks.md
-- 📄 docs/adrs/*.md (3-5 Architecture Decision Records)
+- 📄 docs/projects/{project-slug}/planning/requirements.md
+- 📄 docs/projects/{project-slug}/planning/architecture.md
+- 📄 docs/projects/{project-slug}/planning/tasks.md
+- 📄 docs/projects/{project-slug}/adrs/*.md (3-5 Architecture Decision Records)
 
 **Status**: "✅ Planning phase complete. Development-ready specifications available."
 
@@ -292,20 +309,20 @@ Use this **battle-tested status report format** (from actual spec-orchestrator.m
 
 ### ✅ spec-analyst (Complete)
 - Requirements analysis completed
-- Output: docs/planning/requirements.md (~1,200 lines)
+- Output: docs/projects/{project-slug}/planning/requirements.md (~1,200 lines)
 - Duration: 45 minutes
 - Status: ✅ COMPLETE
 
 ### 🔄 spec-architect (In Progress)
 - Architecture design in progress
 - Current task: Creating ADRs for technology stack decisions
-- Output: docs/planning/architecture.md + docs/adrs/*.md
+- Output: docs/projects/{project-slug}/planning/architecture.md + docs/projects/{project-slug}/adrs/*.md
 - Duration: 30 minutes elapsed
 - Status: 🔄 IN PROGRESS
 
 ### ⏳ spec-planner (Pending)
 - Waiting for architecture completion
-- Will create: docs/planning/tasks.md
+- Will create: docs/projects/{project-slug}/planning/tasks.md
 - Status: ⏳ PENDING
 
 ## Quality Gate Status
@@ -314,10 +331,10 @@ Use this **battle-tested status report format** (from actual spec-orchestrator.m
 - Iterations used: 0/3
 
 ## Artifacts Created
-1. ✅ `docs/planning/requirements.md` - Complete requirements specification
-2. 🔄 `docs/planning/architecture.md` - System architecture design (in progress)
-3. 🔄 `docs/adrs/*.md` - Architecture Decision Records (2/5 complete)
-4. ⏳ `docs/planning/tasks.md` - Task breakdown (pending)
+1. ✅ `docs/projects/{project-slug}/planning/requirements.md` - Complete requirements specification
+2. 🔄 `docs/projects/{project-slug}/planning/architecture.md` - System architecture design (in progress)
+3. 🔄 `docs/projects/{project-slug}/adrs/*.md` - Architecture Decision Records (2/5 complete)
+4. ⏳ `docs/projects/{project-slug}/planning/tasks.md` - Task breakdown (pending)
 
 ## Next Steps
 1. Complete spec-architect agent (architecture + remaining ADRs)
@@ -343,20 +360,20 @@ The skill orchestrates these agents sequentially:
    - Generates comprehensive requirements.md with functional/non-functional requirements
    - Creates user stories with measurable acceptance criteria
    - Documents stakeholder analysis and success metrics
-   - Output: `docs/planning/requirements.md` (~800-1,500 lines)
+   - Output: `docs/projects/{project-slug}/planning/requirements.md` (~800-1,500 lines)
 
 2. **spec-architect** (Step 3): System architecture design and ADR creation
    - Designs technology stack with justifications
    - Defines system components, API specifications, security considerations
    - Creates Architecture Decision Records for key choices
-   - Output: `docs/planning/architecture.md` + `docs/adrs/*.md` (3-5 ADRs)
+   - Output: `docs/projects/{project-slug}/planning/architecture.md` + `docs/projects/{project-slug}/adrs/*.md` (3-5 ADRs)
 
 3. **spec-planner** (Step 4): Task breakdown, risk assessment, and testing strategy
    - Breaks requirements and architecture into atomic implementation tasks (1-8 hours each)
    - Identifies task dependencies and effort estimates
    - Assesses technical risks with mitigation strategies
    - Defines testing strategy (unit, integration, E2E)
-   - Output: `docs/planning/tasks.md` (~500-800 lines with 15-30 tasks)
+   - Output: `docs/projects/{project-slug}/planning/tasks.md` (~500-800 lines with 15-30 tasks)
 
 **Note**: The skill itself (this SKILL.md) acts as the orchestrator, managing sequential execution, quality gates (85% threshold), iteration loops with feedback, and deliverable handoff. There is no separate spec-orchestrator agent.
 
@@ -541,7 +558,7 @@ Agent: spec-analyst
 
 Prompt: "Improve requirements.md based on feedback.
 
-Previous version: docs/planning/requirements.md
+Previous version: docs/projects/{project-slug}/planning/requirements.md
 
 Feedback:
 [Insert feedback from Step 3]
@@ -616,8 +633,9 @@ Return to Step 5 of Orchestration Workflow (Quality Gate Validation):
 
 ## File Organization
 
-- `docs/planning/*.md`: Planning phase outputs (requirements, architecture)
-- `docs/adrs/*.md`: Architecture Decision Records
+- `docs/projects/{project-slug}/planning/*.md`: Planning phase outputs (requirements, architecture, tasks)
+- `docs/projects/{project-slug}/adrs/*.md`: Architecture Decision Records per project
+- Each project gets its own directory to prevent overwrites across planning sessions
 - Handoff ready for development team to implement
 
 ---
@@ -1040,7 +1058,7 @@ This detailed example demonstrates the complete planning workflow from query ana
 
 #### Step 2: spec-analyst Output
 
-**Generated File**: `docs/planning/requirements.md` (abbreviated example)
+**Generated File**: `docs/projects/task-management-app/planning/requirements.md` (abbreviated example)
 
 ```markdown
 # Task Management Application - Requirements
@@ -1111,9 +1129,9 @@ tasks with real-time collaboration features and mobile accessibility.
 #### Step 3: spec-architect Output
 
 **Generated Files**:
-- `docs/planning/architecture.md`
-- `docs/adrs/001-technology-stack.md`
-- `docs/adrs/002-real-time-architecture.md`
+- `docs/projects/task-management-app/planning/architecture.md`
+- `docs/projects/task-management-app/adrs/001-technology-stack.md`
+- `docs/projects/task-management-app/adrs/002-real-time-architecture.md`
 
 **architecture.md** (abbreviated):
 ```markdown
@@ -1210,7 +1228,7 @@ Use WebSockets with Socket.io library.
 
 #### Step 4: spec-planner Output
 
-**Generated File**: `docs/planning/tasks.md` (abbreviated)
+**Generated File**: `docs/projects/task-management-app/planning/tasks.md` (abbreviated)
 
 ```markdown
 # Implementation Tasks
@@ -1364,11 +1382,11 @@ Use WebSockets with Socket.io library.
 5. Use tasks.md as sprint backlog (24 tasks mapped to 5 phases)
 
 **Deliverables Provided**:
-- 📄 `docs/planning/requirements.md` (~1,200 lines)
-- 📄 `docs/planning/architecture.md` (~800 lines)
-- 📄 `docs/planning/tasks.md` (~600 lines with 24 tasks)
-- 📄 `docs/adrs/001-technology-stack.md` (~150 lines)
-- 📄 `docs/adrs/002-real-time-architecture.md` (~200 lines)
+- 📄 `docs/projects/task-management-app/planning/requirements.md` (~1,200 lines)
+- 📄 `docs/projects/task-management-app/planning/architecture.md` (~800 lines)
+- 📄 `docs/projects/task-management-app/planning/tasks.md` (~600 lines with 24 tasks)
+- 📄 `docs/projects/task-management-app/adrs/001-technology-stack.md` (~150 lines)
+- 📄 `docs/projects/task-management-app/adrs/002-real-time-architecture.md` (~200 lines)
 
 **Status**: ✅ **Planning phase complete. Development-ready specifications available.**
 
