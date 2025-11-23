@@ -1,8 +1,10 @@
 # User-specific settings (DO NOT commit)
 .claude/settings.local.json
 
-# Session logs (runtime-generated)
-logs/
+# Session logs (runtime-generated) - keep structure, ignore contents
+logs/*
+!logs/.gitkeep
+.claude/utils/logs/
 *.log
 
 # State files (contain session data)
@@ -17,9 +19,13 @@ files/reports/*.md
 !files/reports/README.md
 
 # User-generated outputs (spec-workflow-orchestrator, examples, testing)
-docs/projects/
-docs/examples/
-docs/testing/
+# Keep directory structure, ignore all contents (user outputs)
+docs/projects/*
+!docs/projects/.gitkeep
+docs/examples/*
+!docs/examples/.gitkeep
+docs/testing/*
+!docs/testing/.gitkeep
 
 # Privacy: Exclude private analysis and planning docs
 docs/analysis/
