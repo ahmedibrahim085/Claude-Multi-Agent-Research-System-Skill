@@ -28,9 +28,12 @@ docs/testing/*
 !docs/testing/.gitkeep
 
 # Privacy: Exclude private analysis and planning docs
-docs/analysis/
-docs/plans/
-!docs/adrs/
+docs/analysis/*
+!docs/analysis/.gitkeep
+docs/plans/*
+!docs/plans/.gitkeep
+docs/adrs/*
+!docs/adrs/.gitkeep
 
 # Python
 *.pyc
