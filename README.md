@@ -415,18 +415,18 @@ The project includes a comprehensive test suite following a 3-layer architecture
 ### Running Tests
 
 ```bash
-# Layer 1: Infrastructure tests
-python3 tests/e2e_hook_test.py
-./tests/test_production_implementation.sh
+# Layer 1: Infrastructure tests (tests/common/)
+python3 tests/common/e2e_hook_test.py
+./tests/common/test_production_implementation.sh
 
 # Layer 2: Structural validation
-./tests/test_agent_structure.sh
-./tests/test_deliverable_structure.sh integration-test-hello-world
-python3 tests/test_adr_format.py integration-test-hello-world
+./tests/common/test_agent_structure.sh
+./tests/spec-workflow/test_deliverable_structure.sh integration-test-hello-world
+python3 tests/spec-workflow/test_adr_format.py integration-test-hello-world
 
 # Integration: API-based E2E (requires ANTHROPIC_API_KEY)
-python3 tests/test_skill_integration.py --dry-run   # Without API
-python3 tests/test_skill_integration.py --quick     # With API
+python3 tests/spec-workflow/test_skill_integration.py --dry-run   # Without API
+python3 tests/spec-workflow/test_skill_integration.py --quick     # With API
 ```
 
 ### Test Architecture

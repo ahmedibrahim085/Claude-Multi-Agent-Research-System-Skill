@@ -82,8 +82,8 @@ Centralized trigger configuration:
 
 #### Test Suites (2)
 
-- `tests/test_interactive_decision.sh` - 8 tests for interactive decision feature
-- `tests/test_production_implementation.sh` - 10 tests covering all production features
+- `tests/spec-workflow/test_interactive_decision.sh` - 8 tests for interactive decision feature
+- `tests/common/test_production_implementation.sh` - 10 tests covering all production features
 
 ---
 

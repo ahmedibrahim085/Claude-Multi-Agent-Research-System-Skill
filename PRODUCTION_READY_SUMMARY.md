@@ -279,7 +279,7 @@ Changed from square brackets `[PLACEHOLDER]` to curly braces `{PLACEHOLDER}` for
 
 ### Integration Test Suite
 
-**File**: `tests/test_production_implementation.sh`
+**File**: `tests/common/test_production_implementation.sh`
 **Tests**: 10 comprehensive scenarios
 **Result**: 10/10 PASSED ✅
 
@@ -346,7 +346,7 @@ Implemented features:
 | restore_archive.sh | 97 | Executable Bash |
 | list_archives.sh | 68 | Executable Bash |
 | detect_next_version.sh | 35 | Executable Bash |
-| tests/test_production_implementation.sh | 343 | Test Suite |
+| tests/common/test_production_implementation.sh | 343 | Test Suite |
 | refinement-workflow-example.md | 485 | Documentation |
 | HONEST_REVIEW.md | 412 | Critical Analysis |
 | SKILL.md updates | ~250 | Implementation Logic |
@@ -443,7 +443,7 @@ The spec-workflow-orchestrator is now a **production-ready system** with executa
 
 ```bash
 # Run integration tests
-./tests/test_production_implementation.sh
+./tests/common/test_production_implementation.sh
 
 # Test state management
 .claude/utils/workflow_state.sh set "my-project" "fresh" ""
