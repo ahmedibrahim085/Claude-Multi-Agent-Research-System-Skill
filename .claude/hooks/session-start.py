@@ -116,7 +116,8 @@ def initialize_session_logging():
     try:
         session_id = session_logger.get_session_id()
         session_logger.initialize_session_logs(session_id)
-        print(f"📝 Session logs: logs/{session_id}_{{transcript.txt,tool_calls.jsonl}}\n")
+        session_logger.initialize_session_state(session_id)
+        print(f"📝 Session logs: logs/{session_id}_{{transcript.txt,tool_calls.jsonl,state.json}}\n")
     except Exception as e:
         print(f"⚠️  Failed to initialize session logs: {e}", file=sys.stderr)
         # Continue without logging

@@ -81,8 +81,12 @@ def main():
                 else:
                     print(f"🎯 SKILL START: {skill_name} (invocation #1)", flush=True)
 
-                # This handles both new and re-invocation
-                state_manager.set_current_skill(skill_name, timestamp)
+                # Set current skill (returns ended skill if one was active)
+                ended_skill = state_manager.set_current_skill(skill_name, timestamp)
+
+                # Write ended skill to session state file (historical data)
+                if ended_skill:
+                    session_logger.append_skill_invocation(session_id, ended_skill)
             except Exception as e:
                 print(f"Failed to track skill invocation: {e}", file=sys.stderr)
 

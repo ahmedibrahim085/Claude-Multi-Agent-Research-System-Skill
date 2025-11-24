@@ -278,3 +278,82 @@ def get_session_id() -> str:
     # Generate session ID based on timestamp
     now = datetime.now()
     return f"session_{now.strftime('%Y%m%d_%H%M%S')}"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SESSION STATE MANAGEMENT (Per-Session Historical Data)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def get_session_state_path(session_id: str) -> Path:
+    """Get path for session state file"""
+    return get_session_log_dir(session_id) / f"{session_id}_state.json"
+
+
+def initialize_session_state(session_id: str) -> None:
+    """Initialize session state file with empty structure"""
+    state_path = get_session_state_path(session_id)
+    
+    if state_path.exists():
+        return  # Already initialized
+    
+    initial_state = {
+        'version': '1.0',
+        'sessionId': session_id,
+        'sessionStart': datetime.now().isoformat(),
+        'sessionEnd': None,
+        'skillInvocations': [],
+        'researchSessions': []
+    }
+    
+    try:
+        with state_path.open('w', encoding='utf-8') as f:
+            json.dump(initial_state, f, indent=2)
+    except IOError as e:
+        print(f"Error initializing session state: {e}", flush=True)
+
+
+def load_session_state(session_id: str) -> Dict[str, Any]:
+    """Load session state from file"""
+    state_path = get_session_state_path(session_id)
+    
+    if not state_path.exists():
+        initialize_session_state(session_id)
+        return load_session_state(session_id)
+    
+    try:
+        with state_path.open('r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Error loading session state: {e}", flush=True)
+        return {
+            'version': '1.0',
+            'sessionId': session_id,
+            'sessionStart': datetime.now().isoformat(),
+            'sessionEnd': None,
+            'skillInvocations': [],
+            'researchSessions': []
+        }
+
+
+def save_session_state(session_id: str, state: Dict[str, Any]) -> None:
+    """Save session state to file"""
+    state_path = get_session_state_path(session_id)
+    
+    try:
+        with state_path.open('w', encoding='utf-8') as f:
+            json.dump(state, f, indent=2)
+    except IOError as e:
+        print(f"Error saving session state: {e}", flush=True)
+
+
+def append_skill_invocation(session_id: str, skill_invocation: Dict[str, Any]) -> None:
+    """Append a skill invocation to session state"""
+    state = load_session_state(session_id)
+    state['skillInvocations'].append(skill_invocation)
+    save_session_state(session_id, state)
+
+
+def finalize_session_state(session_id: str) -> None:
+    """Mark session as ended in session state file"""
+    state = load_session_state(session_id)
+    state['sessionEnd'] = datetime.now().isoformat()
+    save_session_state(session_id, state)

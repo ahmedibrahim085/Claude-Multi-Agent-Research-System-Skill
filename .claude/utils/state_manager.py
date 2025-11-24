@@ -4,6 +4,10 @@ State Manager Utility
 
 Manages research workflow state for tracking phases, quality gates,
 and agent assignments across sessions.
+
+Architecture:
+- logs/state/current.json: Current state (currentSkill, currentResearch) - tiny, never grows
+- logs/session_*_state.json: Historical data per session (skillHistory, sessions)
 """
 
 import json
@@ -12,39 +16,88 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 
-STATE_FILE = Path('logs/state/research-workflow-state.json')
+# Current state file (small, persistent across sessions)
+CURRENT_STATE_FILE = Path('logs/state/current.json')
+
+# Legacy state file (for backwards compatibility during migration)
+LEGACY_STATE_FILE = Path('logs/state/research-workflow-state.json')
 
 
 def load_state() -> Dict[str, Any]:
-    """Load state from JSON file"""
-    if not STATE_FILE.exists():
-        return create_initial_state()
+    """
+    Load current state from current.json (for backwards compatibility).
 
-    try:
-        with STATE_FILE.open('r', encoding='utf-8') as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"Error loading state: {e}", flush=True)
-        return create_initial_state()
+    Returns state with both current fields and empty arrays for historical data.
+    Historical data should be read from session files when needed.
+    """
+    current = load_current_state()
+
+    # Return format compatible with existing code (includes empty historical arrays)
+    return {
+        'version': current.get('version', '1.0'),
+        'currentSkill': current.get('currentSkill'),
+        'currentResearch': current.get('currentResearch'),
+        'skillHistory': [],  # Historical data lives in session files
+        'sessions': []       # Historical data lives in session files
+    }
 
 
 def save_state(state: Dict[str, Any]) -> None:
-    """Save state to JSON file"""
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    """
+    Save current state to current.json (for backwards compatibility).
+
+    Only saves current fields (currentSkill, currentResearch).
+    Historical data (skillHistory, sessions) should be written to session files.
+    """
+    current_state = {
+        'version': state.get('version', '1.0'),
+        'currentSkill': state.get('currentSkill'),
+        'currentResearch': state.get('currentResearch')
+    }
+    save_current_state(current_state)
+
+
+def load_current_state() -> Dict[str, Any]:
+    """Load current state from current.json (tiny file, never grows)"""
+    if not CURRENT_STATE_FILE.exists():
+        return create_initial_current_state()
 
     try:
-        with STATE_FILE.open('w', encoding='utf-8') as f:
-            json.dump(state, f, indent=2)
+        with CURRENT_STATE_FILE.open('r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Error loading current state: {e}", flush=True)
+        return create_initial_current_state()
+
+
+def save_current_state(current_state: Dict[str, Any]) -> None:
+    """Save current state to current.json"""
+    CURRENT_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with CURRENT_STATE_FILE.open('w', encoding='utf-8') as f:
+            json.dump(current_state, f, indent=2)
     except IOError as e:
-        print(f"Error saving state: {e}", flush=True)
+        print(f"Error saving current state: {e}", flush=True)
+
+
+def create_initial_current_state() -> Dict[str, Any]:
+    """Create initial current state structure (tiny, never grows)"""
+    return {
+        'version': '1.0',
+        'currentSkill': None,
+        'currentResearch': None
+    }
 
 
 def create_initial_state() -> Dict[str, Any]:
-    """Create initial state structure"""
+    """Create initial state structure (for backwards compatibility)"""
     return {
         'version': '1.0.0',
         'sessions': [],
-        'currentResearch': None
+        'currentResearch': None,
+        'skillHistory': [],
+        'currentSkill': None
     }
 
 
@@ -180,7 +233,7 @@ def get_current_skill() -> Optional[Dict[str, Any]]:
     return state.get('currentSkill')
 
 
-def set_current_skill(skill_name: str, start_time: str) -> None:
+def set_current_skill(skill_name: str, start_time: str) -> Optional[Dict[str, Any]]:
     """
     Start tracking a new skill invocation.
     If same skill already active, ends it first and increments invocation number.
@@ -188,9 +241,15 @@ def set_current_skill(skill_name: str, start_time: str) -> None:
     Args:
         skill_name: Name of the skill (e.g., 'multi-agent-researcher')
         start_time: ISO timestamp when skill started
+
+    Returns:
+        The ended skill (if one was active), or None.
+        Caller should write this to session state file.
     """
-    state = load_state()
-    current = state.get('currentSkill')
+    current_state = load_current_state()
+    current = current_state.get('currentSkill')
+
+    ended_skill = None
 
     # Calculate invocation number
     if current and current.get('name') == skill_name:
@@ -205,11 +264,7 @@ def set_current_skill(skill_name: str, start_time: str) -> None:
                 current['startTime'],
                 current['endTime']
             )
-
-        # Move to history
-        if 'skillHistory' not in state:
-            state['skillHistory'] = []
-        state['skillHistory'].append(current)
+            ended_skill = current
 
     else:
         # Different skill or first invocation
@@ -223,34 +278,33 @@ def set_current_skill(skill_name: str, start_time: str) -> None:
                 current['startTime'],
                 current['endTime']
             )
-            if 'skillHistory' not in state:
-                state['skillHistory'] = []
-            state['skillHistory'].append(current)
+            ended_skill = current
 
     # Set new current skill
-    state['currentSkill'] = {
+    current_state['currentSkill'] = {
         'name': skill_name,
         'startTime': start_time,
         'endTime': None,
         'invocationNumber': invocation_number
     }
 
-    save_state(state)
+    save_current_state(current_state)
+    return ended_skill
 
 
 def end_current_skill(end_time: str, trigger: str) -> Optional[Dict[str, Any]]:
     """
-    End the currently active skill and move to history.
+    End the currently active skill.
 
     Args:
         end_time: ISO timestamp when skill ended
         trigger: What caused the end (Stop, SessionEnd, ReInvocation, etc.)
 
     Returns:
-        The ended skill entry, or None if no active skill
+        The ended skill entry (caller should write to session state), or None if no active skill
     """
-    state = load_state()
-    current = state.get('currentSkill')
+    current_state = load_current_state()
+    current = current_state.get('currentSkill')
 
     if not current:
         return None
@@ -267,31 +321,24 @@ def end_current_skill(end_time: str, trigger: str) -> Optional[Dict[str, Any]]:
         current['endTime']
     )
 
-    # Move to history
-    if 'skillHistory' not in state:
-        state['skillHistory'] = []
-    state['skillHistory'].append(current)
+    # Clear current skill (set to None)
+    current_state['currentSkill'] = None
+    save_current_state(current_state)
 
-    # Clear current
-    state['currentSkill'] = None
-
-    save_state(state)
+    # Return ended skill (caller writes to session state)
     return current
 
 
 def get_skill_invocation_count(skill_name: str) -> int:
-    """Get total number of times a skill has been invoked (history + current)"""
-    state = load_state()
-    count = 0
+    """
+    Get invocation count for currently active skill.
 
-    # Count in history
-    for entry in state.get('skillHistory', []):
-        if entry.get('name') == skill_name:
-            count += 1
+    Note: Historical counts require reading session state files.
+    This function only returns 1 if the specified skill is currently active, 0 otherwise.
+    """
+    current_state = load_current_state()
+    current = current_state.get('currentSkill')
 
-    # Count current
-    current = state.get('currentSkill')
     if current and current.get('name') == skill_name:
-        count += 1
-
-    return count
+        return 1
+    return 0
