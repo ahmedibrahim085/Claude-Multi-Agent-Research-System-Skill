@@ -246,6 +246,330 @@ def is_agent_noun_only(prompt: str, keyword: str) -> bool:
     return len(standalone_matches) <= agent_noun_count
 
 
+# =============================================================================
+# CORE COMPOUND DETECTION FUNCTIONS (v2 - new implementation)
+# =============================================================================
+
+def get_signal_strength_v2(prompt: str, skill_config: dict, skill_type: str = None) -> dict:
+    """
+    Analyze signal strength for a skill based on keyword vs pattern matching.
+
+    KEY INSIGHT:
+    - Intent pattern match = keyword is used as ACTION verb = STRONG signal
+    - Keyword only match = keyword might be SUBJECT noun = WEAK signal
+
+    CRITICAL FIX #1: Uses word boundary matching to avoid substring false positives
+    CRITICAL FIX #2: Checks negation patterns to exclude negated skills
+
+    Args:
+        prompt: User's input prompt
+        skill_config: Skill configuration from skill-rules.json
+        skill_type: 'research' or 'planning' (for negation checking)
+
+    Returns:
+        {
+            'strength': 'strong' | 'medium' | 'weak' | 'none',
+            'keywords': list of matched keywords,
+            'patterns': list of matched patterns,
+            'is_action': bool - Is keyword used as action verb?,
+            'negated': bool - Was this skill negated?
+        }
+    """
+    prompt_triggers = skill_config.get('promptTriggers', {})
+    keywords = prompt_triggers.get('keywords', [])
+    patterns = prompt_triggers.get('intentPatterns', [])
+
+    # CRITICAL FIX #2: Check negation first
+    if skill_type and check_negation(prompt, skill_type):
+        return {
+            'strength': 'none',
+            'keywords': [],
+            'patterns': [],
+            'is_action': False,
+            'negated': True
+        }
+
+    # CRITICAL FIX #1: Check keyword matches with WORD BOUNDARY (not substring)
+    prompt_lower = prompt.lower()
+    matched_keywords = []
+    for k in keywords:
+        keyword_lower = k.lower()
+        # Use word boundary regex instead of simple 'in' check
+        word_boundary_pattern = r'\b' + re.escape(keyword_lower) + r'\b'
+        if re.search(word_boundary_pattern, prompt_lower):
+            # Additional check: is this only appearing as agent noun?
+            if not is_agent_noun_only(prompt, k):
+                matched_keywords.append(k)
+
+    # Check pattern matches
+    matched_patterns = []
+    for pattern in patterns:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                matched_patterns.append(pattern)
+        except re.error:
+            continue
+
+    # Determine strength based on match type
+    if matched_patterns:
+        return {
+            'strength': 'strong',
+            'keywords': matched_keywords,
+            'patterns': matched_patterns,
+            'is_action': True,
+            'negated': False
+        }
+    elif len(matched_keywords) >= 3:
+        return {
+            'strength': 'medium',
+            'keywords': matched_keywords,
+            'patterns': [],
+            'is_action': False,
+            'negated': False
+        }
+    elif matched_keywords:
+        return {
+            'strength': 'weak',
+            'keywords': matched_keywords,
+            'patterns': [],
+            'is_action': False,
+            'negated': False
+        }
+    else:
+        return {
+            'strength': 'none',
+            'keywords': [],
+            'patterns': [],
+            'is_action': False,
+            'negated': False
+        }
+
+
+def check_compound_patterns_v2(prompt: str) -> dict:
+    """
+    Check if prompt matches known compound patterns.
+
+    HIGH FIX #4: Checks COMPOUND_NOUN_PATTERNS first to avoid misdetection.
+
+    Returns:
+        {
+            'type': 'true_compound' | 'false_compound' | 'compound_noun' | 'unclear',
+            'primary_skill': 'research' | 'planning' | None
+        }
+    """
+    # HIGH FIX #4: Check compound nouns FIRST
+    if check_compound_noun(prompt):
+        if DEBUG:
+            print(f"DEBUG: Compound noun detected, routing to planning", file=sys.stderr)
+        return {'type': 'compound_noun', 'primary_skill': 'planning'}
+
+    # Check TRUE compound patterns
+    for pattern in TRUE_COMPOUND_PATTERNS:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                if DEBUG:
+                    print(f"DEBUG: TRUE compound match: {pattern}", file=sys.stderr)
+                return {'type': 'true_compound', 'primary_skill': None}
+        except re.error:
+            continue
+
+    # Check FALSE compound patterns - Planning is ACTION
+    for pattern in FALSE_COMPOUND_PLANNING_ACTION:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                if DEBUG:
+                    print(f"DEBUG: FALSE compound (planning action): {pattern}", file=sys.stderr)
+                return {'type': 'false_compound', 'primary_skill': 'planning'}
+        except re.error:
+            continue
+
+    # Check FALSE compound patterns - Research is ACTION
+    for pattern in FALSE_COMPOUND_RESEARCH_ACTION:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                if DEBUG:
+                    print(f"DEBUG: FALSE compound (research action): {pattern}", file=sys.stderr)
+                return {'type': 'false_compound', 'primary_skill': 'research'}
+        except re.error:
+            continue
+
+    return {'type': 'unclear', 'primary_skill': None}
+
+
+def analyze_request(prompt: str, skill_rules: dict) -> dict:
+    """
+    Complete analysis of request for compound detection.
+
+    Decision matrix:
+    | Research Signal | Planning Signal | Action          |
+    |-----------------|-----------------|-----------------|
+    | Strong          | Strong          | ASK USER        |
+    | Strong          | Weak/Medium     | Research only   |
+    | Weak/Medium     | Strong          | Planning only   |
+    | Weak            | Weak            | ASK USER (safe) |
+    | None            | Any             | That skill only |
+    | Any             | None            | That skill only |
+
+    Returns:
+        {
+            'action': 'ask_user' | 'research_only' | 'planning_only' | 'none',
+            'confidence': 'high' | 'medium' | 'low',
+            'research_signal': signal strength dict,
+            'planning_signal': signal strength dict,
+            'compound_type': 'true_compound' | 'false_compound' | 'compound_noun' | 'unclear'
+        }
+    """
+    skills = skill_rules.get('skills', {})
+
+    # Get signal strength for each skill
+    research_signal = get_signal_strength_v2(
+        prompt,
+        skills.get('multi-agent-researcher', {}),
+        skill_type='research'
+    )
+    planning_signal = get_signal_strength_v2(
+        prompt,
+        skills.get('spec-workflow-orchestrator', {}),
+        skill_type='planning'
+    )
+
+    result = {
+        'action': 'none',
+        'confidence': 'low',
+        'research_signal': research_signal,
+        'planning_signal': planning_signal,
+        'compound_type': 'unclear'
+    }
+
+    if DEBUG:
+        print(f"DEBUG: Research signal: {research_signal}", file=sys.stderr)
+        print(f"DEBUG: Planning signal: {planning_signal}", file=sys.stderr)
+
+    # Case 1: Only one skill has signal
+    if research_signal['strength'] == 'none' and planning_signal['strength'] != 'none':
+        result['action'] = 'planning_only'
+        result['confidence'] = 'high' if planning_signal['strength'] == 'strong' else 'medium'
+        return result
+
+    if planning_signal['strength'] == 'none' and research_signal['strength'] != 'none':
+        result['action'] = 'research_only'
+        result['confidence'] = 'high' if research_signal['strength'] == 'strong' else 'medium'
+        return result
+
+    if research_signal['strength'] == 'none' and planning_signal['strength'] == 'none':
+        result['action'] = 'none'
+        return result
+
+    # Case 2: Both skills have signals - check compound patterns
+    compound_result = check_compound_patterns_v2(prompt)
+    result['compound_type'] = compound_result['type']
+
+    if DEBUG:
+        print(f"DEBUG: Compound pattern result: {compound_result}", file=sys.stderr)
+
+    if compound_result['type'] == 'true_compound':
+        result['action'] = 'ask_user'
+        result['confidence'] = 'high'
+        return result
+
+    if compound_result['type'] == 'compound_noun':
+        result['action'] = 'planning_only'
+        result['confidence'] = 'high'
+        return result
+
+    if compound_result['type'] == 'false_compound':
+        if compound_result['primary_skill'] == 'planning':
+            result['action'] = 'planning_only'
+            result['confidence'] = 'high'
+        elif compound_result['primary_skill'] == 'research':
+            result['action'] = 'research_only'
+            result['confidence'] = 'high'
+        return result
+
+    # Case 3: Unclear - use signal strength matrix
+    rs = research_signal['strength']
+    ps = planning_signal['strength']
+
+    if rs == 'strong' and ps == 'strong':
+        result['action'] = 'ask_user'
+        result['confidence'] = 'medium'
+    elif rs == 'strong' and ps in ['medium', 'weak']:
+        result['action'] = 'research_only'
+        result['confidence'] = 'medium'
+    elif ps == 'strong' and rs in ['medium', 'weak']:
+        result['action'] = 'planning_only'
+        result['confidence'] = 'medium'
+    else:
+        result['action'] = 'ask_user'
+        result['confidence'] = 'low'
+
+    return result
+
+
+def build_compound_clarification_message(analysis: dict) -> str:
+    """
+    Build system message for compound requests requiring user clarification.
+    """
+    confidence = analysis['confidence'].upper()
+    research = analysis['research_signal']
+    planning = analysis['planning_signal']
+
+    # Format matched triggers with "(none)" fallback
+    if research['keywords']:
+        research_kw = ', '.join(f'"{k}"' for k in research['keywords'][:3])
+        if len(research['keywords']) > 3:
+            research_kw += f' (+{len(research["keywords"]) - 3} more)'
+    else:
+        research_kw = "(none)"
+
+    if planning['keywords']:
+        planning_kw = ', '.join(f'"{k}"' for k in planning['keywords'][:3])
+        if len(planning['keywords']) > 3:
+            planning_kw += f' (+{len(planning["keywords"]) - 3} more)'
+    else:
+        planning_kw = "(none)"
+
+    research_action = "Yes (verb)" if research['is_action'] else "Maybe (subject?)"
+    planning_action = "Yes (verb)" if planning['is_action'] else "Maybe (subject?)"
+
+    return f"""
+<system-reminder>
+⚠️ COMPOUND REQUEST DETECTED - CLARIFICATION REQUIRED
+
+Detection Confidence: {confidence}
+
+Your request triggers MULTIPLE skill workflows:
+
+RESEARCH SKILL (multi-agent-researcher)
+  Signal Strength: {research['strength'].upper()}
+  Matched Triggers: {research_kw}
+  Used as Action: {research_action}
+
+PLANNING SKILL (spec-workflow-orchestrator)
+  Signal Strength: {planning['strength'].upper()}
+  Matched Triggers: {planning_kw}
+  Used as Action: {planning_action}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🛑 MANDATORY: Use AskUserQuestion BEFORE invoking any skill
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You MUST present these options to the user:
+
+1. "Research → Plan" - Research first, then I'll ask you to proceed with planning
+2. "Research only" - Just investigate and report findings
+3. "Plan only" - Create specifications using existing knowledge
+4. "Both sequentially" - Research first, then plan (separate workflows, no data sharing)
+
+DO NOT invoke ANY skill until user responds.
+</system-reminder>
+""".strip()
+
+
+# =============================================================================
+# ORIGINAL FUNCTIONS (kept for backward compatibility during transition)
+# =============================================================================
+
 def detect_skill_triggers(prompt: str, skill_rules: dict) -> dict:
     """
     Detect which skills should be triggered based on the prompt
