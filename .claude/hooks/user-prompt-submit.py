@@ -702,32 +702,40 @@ def main():
     if not skill_rules:
         sys.exit(0)
 
-    # Detect which skills should be triggered
-    triggers = detect_skill_triggers(user_prompt, skill_rules)
+    # NEW: Use analyze_request for smart compound detection
+    analysis = analyze_request(user_prompt, skill_rules)
 
-    if not triggers:
+    if DEBUG:
+        print(f"DEBUG: Analysis result: {analysis}", file=sys.stderr)
+
+    # Handle based on action
+    action = analysis['action']
+
+    if action == 'none':
         # No skill triggers detected
         sys.exit(0)
 
-    # Build enforcement messages
-    messages = []
-
-    # Priority order: research (critical) > planning (high)
-    if 'multi-agent-researcher' in triggers:
-        messages.append(build_research_enforcement_message(triggers['multi-agent-researcher']))
-
-    if 'spec-workflow-orchestrator' in triggers:
-        messages.append(build_planning_enforcement_message(triggers['spec-workflow-orchestrator']))
-
-    # Output enforcement messages
-    if messages:
-        combined_message = '\n\n'.join(messages)
-        output = {
-            'systemMessage': combined_message
-        }
+    if action == 'ask_user':
+        # Compound request - need user clarification
+        message = build_compound_clarification_message(analysis)
+        output = {'systemMessage': message}
         print(json.dumps(output))
+        sys.exit(0)
 
-    # Exit successfully
+    # Single skill action
+    if action == 'research_only':
+        message = build_research_enforcement_message(analysis['research_signal'])
+        output = {'systemMessage': message}
+        print(json.dumps(output))
+        sys.exit(0)
+
+    if action == 'planning_only':
+        message = build_planning_enforcement_message(analysis['planning_signal'])
+        output = {'systemMessage': message}
+        print(json.dumps(output))
+        sys.exit(0)
+
+    # Fallback - should not reach here
     sys.exit(0)
 
 
