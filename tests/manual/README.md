@@ -79,7 +79,23 @@ Evidence that testing was performed:
 
 ## How To Run Manual Tests
 
-### Skill Execution Test
+### Automated Alternative
+
+For structural validation without human input, use the API-based integration test:
+
+```bash
+# Generate test fixtures via Anthropic API
+export ANTHROPIC_API_KEY='your-key'
+python3 tests/test_skill_integration.py --quick
+
+# Then validate with structural tests
+./tests/test_deliverable_structure.sh integration-test-hello-world
+python3 tests/test_adr_format.py integration-test-hello-world
+```
+
+This generates outputs to `tests/fixtures/generated/` for automated validation.
+
+### Skill Execution Test (Manual)
 
 ```bash
 # 1. Invoke the skill
@@ -145,11 +161,14 @@ After re-running tests:
 ```
 tests/
 ├── e2e_hook_test.py              # Layer 1: Automated (148 tests)
-├── test_production_implementation.sh  # Layer 1: Automated (10 tests)
-├── test_interactive_decision.sh  # Layer 1: Automated (8 tests)
-├── test_agent_structure.sh       # Layer 2: Automated (structure)
-├── test_deliverable_structure.sh # Layer 2: Automated (output format)
-├── test_adr_format.py            # Layer 2: Automated (ADR compliance)
+├── test_production_implementation.sh  # Layer 1: Automated (~10 tests)
+├── test_interactive_decision.sh  # Layer 1: Automated (~8 tests)
+├── test_agent_structure.sh       # Layer 2: Automated (22 tests)
+├── test_deliverable_structure.sh # Layer 2: Automated (20 tests)
+├── test_adr_format.py            # Layer 2: Automated (15 tests)
+├── test_skill_integration.py     # Integration: API-based E2E workflow
+├── fixtures/generated/           # API-generated test outputs
+│   └── integration-test-hello-world/
 └── manual/                       # Layer 3: Human evaluation
     ├── README.md                 # This file
     ├── skill-execution-tests.md  # Agent spawning, quality gate
@@ -157,7 +176,10 @@ tests/
     └── integration-test-report.md # Real-world validation
 ```
 
+**Total: ~223 automated tests**
+
 **Automated tests** verify deterministic behavior (file exists, section present).
+**Integration test** generates real outputs via API for structural validation.
 **Manual tests** verify quality that requires judgment (content is good, complete).
 
 ---

@@ -109,8 +109,9 @@ Manual test documentation captures the evidence of these evaluations.
 | Compound request logic | "search AND build" asks user | `e2e_hook_test.py` |
 | Utility functions | State save/load, archive/restore | `test_production_implementation.sh` |
 | File existence | Agent files exist at `.claude/agents/` | `test_agent_structure.sh` |
-| Format validation | ADR has required sections | `test_adr_format.sh` |
+| Format validation | ADR has required sections | `test_adr_format.py` |
 | Structure checks | Requirements has FR/NFR sections | `test_deliverable_structure.sh` |
+| Full workflow | API-driven agent chain | `test_skill_integration.py` |
 
 ### CANNOT Automate ❌
 
@@ -119,9 +120,9 @@ Manual test documentation captures the evidence of these evaluations.
 | Content quality | Subjective, varies by context | Quality gate + manual evaluation |
 | Technical accuracy | Requires domain expertise | Human review |
 | Actionability | Judgment call | Quality gate scoring |
-| Agent spawning | Requires Claude Code runtime | Manual integration test |
-| Iteration loop | Requires runtime re-spawning | Manual integration test |
 | Progress tracking | TodoWrite is UI feature | Manual observation |
+
+**Note**: Agent spawning and iteration loops CAN now be tested via `test_skill_integration.py` which calls the Anthropic API directly.
 
 ---
 
@@ -130,16 +131,27 @@ Manual test documentation captures the evidence of these evaluations.
 ```
 tests/
 ├── e2e_hook_test.py              # Layer 1: Hook behavior (148 tests)
-├── test_production_implementation.sh  # Layer 1: Utilities (10 tests)
-├── test_interactive_decision.sh  # Layer 1: Interactive flow (8 tests)
-├── test_agent_structure.sh       # Layer 2: Agent discovery (NEW)
-├── test_deliverable_structure.sh # Layer 2: Output format (NEW)
+├── test_production_implementation.sh  # Layer 1: Utilities (~10 tests)
+├── test_interactive_decision.sh  # Layer 1: Interactive flow (~8 tests)
+├── test_agent_structure.sh       # Layer 2: Agent discovery (22 tests)
+├── test_deliverable_structure.sh # Layer 2: Output format (20 tests)
+├── test_adr_format.py            # Layer 2: ADR compliance (15 tests)
+├── test_skill_integration.py     # Integration: API-based E2E workflow
+├── fixtures/
+│   └── generated/                # API-generated test outputs
+│       └── integration-test-hello-world/
+│           ├── planning/         # requirements.md, architecture.md, tasks.md
+│           └── adrs/             # ADR-001 through ADR-004
+├── TEST_ARCHITECTURE.md          # This file
+├── ARCHIVED_TESTS_MIGRATION_PLAN.md  # Migration tracking
 └── manual/                       # Layer 3: Human evaluation evidence
     ├── README.md                 # How to run manual tests
     ├── skill-execution-tests.md  # Evidence: Agent spawning, quality gate
     ├── edge-case-tests.md        # Evidence: Iteration loop, missing files
     └── integration-test-report.md # Evidence: Full workflow execution
 ```
+
+**Total Automated Tests**: ~223 tests across 6 test files
 
 ---
 
@@ -259,11 +271,16 @@ test_adr_count() {
 
 ## Summary
 
-| Layer | Automation | Current Tests | Approach |
-|-------|------------|---------------|----------|
-| Infrastructure | Full | `e2e_hook_test.py`, `test_production_*.sh` | Traditional unit/integration tests |
-| Behavior | Partial | `test_agent_structure.sh` (NEW) | Structural validation |
-| Quality | None | `tests/manual/*.md` | Documentation + embedded quality gate |
+| Layer | Automation | Tests | Approach |
+|-------|------------|-------|----------|
+| Infrastructure | Full | `e2e_hook_test.py` (148), `test_production_*.sh` (~10), `test_interactive_*.sh` (~8) | Traditional unit/integration |
+| Behavior | Full | `test_agent_structure.sh` (22), `test_deliverable_structure.sh` (20), `test_adr_format.py` (15) | Structural validation |
+| Integration | API-based | `test_skill_integration.py` | Direct API calls, E2E workflow |
+| Quality | Manual | `tests/manual/*.md` | Human evaluation evidence |
 
-**Key Insight**: The quality gate in SKILL.md IS the test framework for Layer 3.
-It runs automatically every execution. Manual documentation captures the evidence.
+**Total Automated Tests**: ~223 across 6 test files
+
+**Key Insights**:
+- The quality gate in SKILL.md IS the test framework for Layer 3
+- `test_skill_integration.py` enables automated E2E testing via Anthropic API
+- Structural tests validate format without asserting content quality

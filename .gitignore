@@ -18,14 +18,12 @@ files/reports/*.md
 !files/research_notes/README.md
 !files/reports/README.md
 
-# User-generated outputs (spec-workflow-orchestrator, examples, testing)
+# User-generated outputs (spec-workflow-orchestrator, examples)
 # Keep directory structure, ignore all contents (user outputs)
 docs/projects/*
 !docs/projects/.gitkeep
 docs/examples/*
 !docs/examples/.gitkeep
-docs/testing/*
-!docs/testing/.gitkeep
 
 # Privacy: Exclude private analysis and planning docs
 docs/analysis/*

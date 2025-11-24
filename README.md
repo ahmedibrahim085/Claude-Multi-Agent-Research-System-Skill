@@ -44,6 +44,7 @@ See [Planning Workflow](#planning-workflow-new-in-v220) section and [CHANGELOG.m
   - [Phase 3: Synthesis](#phase-3-synthesis)
   - [Phase 4: Delivery](#phase-4-delivery)
 - [Planning Workflow (New in v2.2.0)](#planning-workflow-new-in-v220)
+- [Testing](#testing)
 - [Configuration](#configuration)
   - [File Structure](#file-structure)
   - [File & Directory Reference](#file--directory-reference)
@@ -398,6 +399,44 @@ User: "build a task tracker app"
 ```
 
 See [PRODUCTION_READY_SUMMARY.md](PRODUCTION_READY_SUMMARY.md) for detailed implementation status.
+
+---
+
+## Testing
+
+The project includes a comprehensive test suite following a 3-layer architecture for AI agent systems:
+
+| Layer | Tests | Purpose |
+|-------|-------|---------|
+| Infrastructure | ~166 | Hook behavior, utilities, state management |
+| Behavior | ~57 | Agent structure, deliverable format, ADR compliance |
+| Quality | Manual | Human evaluation of content quality |
+
+### Running Tests
+
+```bash
+# Layer 1: Infrastructure tests
+python3 tests/e2e_hook_test.py
+./tests/test_production_implementation.sh
+
+# Layer 2: Structural validation
+./tests/test_agent_structure.sh
+./tests/test_deliverable_structure.sh integration-test-hello-world
+python3 tests/test_adr_format.py integration-test-hello-world
+
+# Integration: API-based E2E (requires ANTHROPIC_API_KEY)
+python3 tests/test_skill_integration.py --dry-run   # Without API
+python3 tests/test_skill_integration.py --quick     # With API
+```
+
+### Test Architecture
+
+See [tests/TEST_ARCHITECTURE.md](tests/TEST_ARCHITECTURE.md) for detailed documentation on:
+- Why AI agents require different testing approaches
+- What can vs cannot be automated
+- Manual test evidence documentation
+
+**Total: ~223 automated tests**
 
 ---
 
