@@ -47,9 +47,10 @@ section() {
     echo -e "\n${BLUE}=== $1 ===${NC}"
 }
 
-# Change to project root
+# Change to project root (script is in tests/common/, so go up 2 levels)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+TESTS_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$TESTS_DIR")"
 cd "$PROJECT_ROOT"
 
 echo -e "${BLUE}============================================${NC}"

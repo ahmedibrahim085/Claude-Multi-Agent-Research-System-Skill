@@ -19,7 +19,7 @@ BLUE = '\033[94m'
 RESET = '\033[0m'
 BOLD = '\033[1m'
 
-HOOK_PATH = Path(__file__).parent.parent / '.claude' / 'hooks' / 'user-prompt-submit.py'
+HOOK_PATH = Path(__file__).parent.parent.parent / '.claude' / 'hooks' / 'user-prompt-submit.py'
 
 def run_hook(prompt: str) -> dict:
     """Run the hook with a given prompt and return parsed result."""
