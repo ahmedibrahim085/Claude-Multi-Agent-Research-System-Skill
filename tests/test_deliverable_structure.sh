@@ -32,18 +32,18 @@ declare -a FAILURES
 # Helper functions
 pass() {
     echo -e "  [${GREEN}PASS${NC}] $1"
-    ((PASSED++))
+    PASSED=$((PASSED + 1))
 }
 
 fail() {
     echo -e "  [${RED}FAIL${NC}] $1"
     FAILURES+=("$1: $2")
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
 }
 
 skip() {
     echo -e "  [${YELLOW}SKIP${NC}] $1 - $2"
-    ((SKIPPED++))
+    SKIPPED=$((SKIPPED + 1))
 }
 
 section() {
@@ -64,15 +64,28 @@ echo -e "${BLUE}============================================${NC}"
 echo ""
 
 # Find project directory
+# Check multiple locations: docs/projects/, tests/fixtures/generated/
 if [ -n "$PROJECT_SLUG" ]; then
-    PROJECT_DIR="docs/projects/$PROJECT_SLUG"
+    # Check docs/projects first, then fixtures
+    if [ -d "docs/projects/$PROJECT_SLUG" ]; then
+        PROJECT_DIR="docs/projects/$PROJECT_SLUG"
+    elif [ -d "tests/fixtures/generated/$PROJECT_SLUG" ]; then
+        PROJECT_DIR="tests/fixtures/generated/$PROJECT_SLUG"
+    else
+        PROJECT_DIR=""
+    fi
 else
-    # Find most recent project
-    if [ -d "docs/projects" ]; then
-        PROJECT_DIR=$(ls -td docs/projects/*/ 2>/dev/null | head -1 | sed 's:/$::')
-        if [ -n "$PROJECT_DIR" ]; then
-            PROJECT_SLUG=$(basename "$PROJECT_DIR")
-        fi
+    # Find most recent project in either location
+    DOCS_PROJECT=$(ls -td docs/projects/*/ 2>/dev/null | head -1 | sed 's:/$::')
+    FIXTURE_PROJECT=$(ls -td tests/fixtures/generated/*/ 2>/dev/null | head -1 | sed 's:/$::')
+
+    # Use whichever exists, preferring docs/projects
+    if [ -n "$DOCS_PROJECT" ] && [ -d "$DOCS_PROJECT" ]; then
+        PROJECT_DIR="$DOCS_PROJECT"
+        PROJECT_SLUG=$(basename "$PROJECT_DIR")
+    elif [ -n "$FIXTURE_PROJECT" ] && [ -d "$FIXTURE_PROJECT" ]; then
+        PROJECT_DIR="$FIXTURE_PROJECT"
+        PROJECT_SLUG=$(basename "$PROJECT_DIR")
     fi
 fi
 

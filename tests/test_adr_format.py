@@ -79,22 +79,31 @@ def find_project_dir(project_slug: Optional[str] = None) -> Optional[Path]:
     project_root = Path(__file__).parent.parent
 
     if project_slug:
+        # Check docs/projects first, then fixtures
         project_dir = project_root / "docs" / "projects" / project_slug
         if project_dir.exists():
             return project_dir
+        fixture_dir = project_root / "tests" / "fixtures" / "generated" / project_slug
+        if fixture_dir.exists():
+            return fixture_dir
         return None
 
-    # Find most recent project
+    # Find most recent project in either location
+    all_project_dirs = []
+
     projects_dir = project_root / "docs" / "projects"
-    if not projects_dir.exists():
-        return None
+    if projects_dir.exists():
+        all_project_dirs.extend([d for d in projects_dir.iterdir() if d.is_dir() and not d.name.startswith('.')])
 
-    project_dirs = [d for d in projects_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
-    if not project_dirs:
+    fixtures_dir = project_root / "tests" / "fixtures" / "generated"
+    if fixtures_dir.exists():
+        all_project_dirs.extend([d for d in fixtures_dir.iterdir() if d.is_dir() and not d.name.startswith('.')])
+
+    if not all_project_dirs:
         return None
 
     # Return most recently modified
-    return max(project_dirs, key=lambda d: d.stat().st_mtime)
+    return max(all_project_dirs, key=lambda d: d.stat().st_mtime)
 
 
 def validate_adr(adr_path: Path) -> Tuple[bool, List[str], List[str]]:
