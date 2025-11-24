@@ -12,9 +12,110 @@ Enhancement: Multi-skill detection, regex pattern matching, comprehensive enforc
 """
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
+
+# =============================================================================
+# DEBUG MODE (set COMPOUND_DETECTION_DEBUG=true to enable verbose logging)
+# =============================================================================
+DEBUG = os.environ.get('COMPOUND_DETECTION_DEBUG', 'false').lower() == 'true'
+
+# =============================================================================
+# NEGATION PATTERNS (Critical Fix #2)
+# =============================================================================
+# These patterns indicate user explicitly does NOT want a skill
+# Check these BEFORE other pattern matching
+
+NEGATION_PATTERNS = {
+    'research': [
+        r"(don't|do not|dont|skip|without|no need to|not going to|won't|will not|shouldn't|should not|avoid)\s+(the\s+)?(research|search|investigat|analyz|study|explor)",
+        r"(research|search|investigation|analysis)\s+(is\s+)?(not\s+)?(needed|required|necessary)",
+        r"(skip|bypass|ignore)\s+(the\s+)?(research|search|investigation|analysis)",
+        r"(already\s+)?(researched|searched|investigated|analyzed|studied)",
+    ],
+    'planning': [
+        r"(don't|do not|dont|skip|without|no need to|not going to|won't|will not|shouldn't|should not|avoid)\s+(the\s+)?(plan|build|design|creat|develop|implement|architect)",
+        r"(planning|building|design|development|implementation)\s+(is\s+)?(not\s+)?(needed|required|necessary)",
+        r"(skip|bypass|ignore)\s+(the\s+)?(planning|design|architecture|specs|specification)",
+        r"(already\s+)?(planned|built|designed|created|developed|implemented)",
+    ],
+}
+
+# =============================================================================
+# COMPOUND NOUN PATTERNS (High Fix #4)
+# =============================================================================
+# These look like TRUE compounds but are actually single planning actions
+# "Build a search and analysis tool" - compound noun, not two actions
+
+COMPOUND_NOUN_PATTERNS = [
+    r'(build|create|design|develop|implement)\s+(a|an|the)\s+\w{0,20}\s*(search|research|analysis|investigation)\s+and\s+(search|research|analysis|analytics|investigation|exploration|study)\s+(tool|system|feature|platform|dashboard|interface|engine|module|component|service|application|app)',
+    r'(build|create|design|develop|implement)\s+(a|an|the)\s+\w{0,20}\s*(build|design|plan|development)\s+and\s+(build|design|plan|development|deploy|test)\s+(tool|system|pipeline|workflow|process|platform)',
+    r'(build|create|design|develop|implement)\s+(a|an|the)\s+\w{0,20}\s*\w+-and-\w+\s+(tool|system|feature|component|module)',
+    r'(build|create|design|develop|implement)\s+(a|an|the)?\s*(research\s+and\s+development|R&D|r&d)\s+(team|department|lab|facility|center|process|pipeline|workflow|system)',
+]
+
+# =============================================================================
+# AGENT NOUN EXCLUSIONS (Critical Fix #1 - supplementary)
+# =============================================================================
+# Words that contain skill keywords but are agent nouns, not action verbs
+
+AGENT_NOUN_EXCLUSIONS = [
+    'researcher', 'researchers',
+    'builder', 'builders',
+    'designer', 'designers',
+    'planner', 'planners',
+    'developer', 'developers',
+    'architect', 'architects',
+    'analyst', 'analysts',
+    'investigator', 'investigators',
+    'explorer', 'explorers',
+    'examiner', 'examiners',
+]
+
+# =============================================================================
+# TRUE COMPOUND PATTERNS
+# =============================================================================
+# Both keywords are ACTION verbs (user wants BOTH workflows)
+
+TRUE_COMPOUND_PATTERNS = [
+    r'(search|research|investigate|analyze|find|explore|study|examine)\s+.{0,60}\s+(and|then|,\s*then|;\s*then|after that|followed by)\s+(build|plan|design|create|implement|develop|architect|make)',
+    r'(build|plan|design|create|develop|implement)\s+.{0,60}\s+(and|then|after|;\s*then)\s+(research|search|investigate|analyze|study)',
+    r'first\s+(research|search|investigate|explore|analyze).{0,60}(then|after|before).{0,30}(build|plan|design|create|implement)',
+    r'(research|investigate|search|analyze|explore)\s+.{0,60}\s+and\s+(build|design|create|plan|implement)\s+(it|that|this|the\s+\w+)',
+    r'(want to|need to|going to|let\'s|we should|I\'ll|i\'ll)\s+(research|search|investigate).{0,60}(and|then)\s+(build|plan|design|create)',
+    r'(building|planning|designing|creating|developing|implementing)\s+.{0,60}\s+(after|before|while)\s+(researching|searching|investigating|analyzing|studying)',
+    r'(researching|searching|investigating|analyzing|studying|exploring)\s+.{0,60}\s+(before|then|and)\s+(building|planning|designing|creating|implementing)',
+    r'(research|investigate|search|analyze|explore|study)\s+\w+.{0,40},\s*(build|plan|design|create|implement|develop)\s+',
+]
+
+# =============================================================================
+# FALSE COMPOUND: Planning is ACTION, research keyword is SUBJECT
+# =============================================================================
+# Route to: PLANNING skill
+
+FALSE_COMPOUND_PLANNING_ACTION = [
+    r'(build|create|design|plan|develop|architect|implement|make|construct)\s+(a|an|the)\s+\w{0,30}\s*(search|research|analytics?|investigation|analysis|exploration|study|survey|review|assessment|evaluation|finder|explorer)\s*(feature|tool|system|platform|module|component|interface|dashboard|service|API|endpoint|functionality|capability|engine|mechanism|solution|application|app|page|widget|bar)?',
+    r'(design|plan|create|build|develop|architect)\s+(a\s+|an\s+|the\s+)?(research|search|analysis|investigation|exploration|study)\s+(method|methodology|approach|strategy|plan|workflow|process|pipeline|system|framework|architecture|tool|platform|solution|technique|procedure)',
+    r'(create|build|design|develop|implement|establish)\s+(research|search|analysis|investigation)\s+(infrastructure|tooling|capabilities|capacity|resources|team|department|lab|center|facility)',
+    r'(building|creating|designing|planning|developing|implementing|constructing)\s+(a|an|the)\s+\w{0,25}\s*(search|research|analytics?|analysis|investigation)\s*(feature|tool|system|interface|component|module|page|widget)?',
+]
+
+# =============================================================================
+# FALSE COMPOUND: Research is ACTION, planning keyword is SUBJECT
+# =============================================================================
+# Route to: RESEARCH skill
+
+FALSE_COMPOUND_RESEARCH_ACTION = [
+    r'(research|search|find|look|investigate|analyze|study|explore|examine|review|assess|evaluate)\s+(for\s+)?(the\s+)?(best\s+|good\s+|top\s+|recommended\s+|popular\s+|common\s+|modern\s+)?\w{0,20}\s*(build|design|architecture|architectural|planning|implementation|development|deployment|infrastructure|construction)\s*(tool|tools|pattern|patterns|practice|practices|method|methods|approach|approaches|framework|frameworks|system|systems|process|processes|solution|solutions|technique|techniques|strategy|strategies|software|platform|platforms|failure|failures|error|errors|issue|issues|problem|problems|performance|speed|time|output|results|configuration|settings|options|dependencies|requirement|requirements|pipeline|pipelines|workflow|workflows|automation|script|scripts|guide|guides|tutorial|tutorials|documentation|docs|example|examples|template|templates)',
+    r'(search|find|look|grep|scan|check)\s+(for\s+|in\s+|through\s+)?(the\s+)?\w{0,15}\s*(build|design|plan|implementation|deployment|architecture|development|test|testing)\s*(log|logs|file|files|doc|docs|document|documents|output|outputs|error|errors|issue|issues|record|records|history|artifact|artifacts|report|reports|result|results|failure|failures|warning|warnings|message|messages|trace|traces|dump|dumps|metric|metrics|stat|stats|status)',
+    r'(research|analyze|study|examine|investigate|review|assess|evaluate|audit|inspect|explore|understand|learn about)\s+(the\s+)?(existing\s+|current\s+|legacy\s+|old\s+|previous\s+|original\s+|proposed\s+|new\s+|updated\s+)?(design|architecture|architectural|plan|planning|implementation|build|system|infrastructure|codebase|code|structure|schema|model|spec|specification|blueprint|diagram|flow|workflow)',
+    r'(research|search|find|investigate|study|explore|analyze|examine|review)\s+(design|architectural|build|implementation|development|deployment|coding|programming|software|system)\s+(pattern|patterns|principle|principles|practice|practices|standard|standards|convention|conventions|guideline|guidelines|approach|approaches|anti-pattern|anti-patterns|smell|smells|idiom|idioms)',
+    r'(researching|searching|finding|investigating|studying|exploring|analyzing|examining|reviewing|learning about|looking into|checking)\s+(design|architectural|build|implementation|development|planning|deployment|infrastructure|system)\s+(pattern|patterns|tool|tools|practice|practices|method|methods|approach|approaches|failure|failures|error|errors|issue|issues|option|options|alternative|alternatives|solution|solutions)',
+    r'(research|search|find|investigate|study|explore|learn|understand)\s+(how\s+to\s+|ways\s+to\s+|methods\s+to\s+|approaches\s+to\s+)(build|design|plan|implement|develop|architect|create|deploy)',
+    r'(research|search|find|investigate|study|explore|analyze)\s+.{3,40}\s+(for|to help with|to support|to enable|to improve)\s+(building|designing|planning|implementing|developing|creating|deploying)',
+]
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
