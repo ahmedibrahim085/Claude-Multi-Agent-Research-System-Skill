@@ -135,14 +135,19 @@ tests/
 │   ├── test_agent_structure.sh         # Agent discovery (22 tests)
 │   └── test_production_implementation.sh  # Utilities (~10 tests)
 │
-├── research-skill/                      # Research skill tests (31 files)
+├── research-skill/                      # Research skill tests (35 files)
 │   ├── README.md                       # Index and overview
+│   ├── manual/                         # Human evaluation evidence
+│   │   ├── README.md
+│   │   ├── skill-execution-tests.md
+│   │   ├── edge-case-tests.md
+│   │   └── integration-test-report.md
 │   ├── test-scripts/                   # Hook router test queries (32 tests)
 │   │   ├── phase1-test-queries.sh
 │   │   ├── production_validation.sh
 │   │   ├── production_deploy_standard.sh
 │   │   └── production_cleanup_inplace.sh
-│   ├── phase-results/                  # Test execution results
+│   ├── phase-results/                  # Historical test execution results
 │   │   ├── PHASE1_TEST_RESULTS.md
 │   │   ├── PHASE2_TEST_RESULTS.md
 │   │   ├── PHASE3_TEST_RESULTS.md
@@ -155,6 +160,7 @@ tests/
 │   └── analysis/                       # Failure analysis, bug fixes
 │
 ├── spec-workflow/                       # Spec workflow tests
+│   ├── README.md                       # Index and overview
 │   ├── test_skill_integration.py       # API-based E2E (main test)
 │   ├── test_adr_format.py              # ADR compliance (15 tests)
 │   ├── test_deliverable_structure.sh   # Output format (20 tests)
