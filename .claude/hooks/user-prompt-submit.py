@@ -100,6 +100,8 @@ FALSE_COMPOUND_PLANNING_ACTION = [
     r'(design|plan|create|build|develop|architect)\s+(a\s+|an\s+|the\s+)?(research|search|analysis|investigation|exploration|study)\s+(method|methodology|approach|strategy|plan|workflow|process|pipeline|system|framework|architecture|tool|platform|solution|technique|procedure)',
     r'(create|build|design|develop|implement|establish)\s+(research|search|analysis|investigation)\s+(infrastructure|tooling|capabilities|capacity|resources|team|department|lab|center|facility)',
     r'(building|creating|designing|planning|developing|implementing|constructing)\s+(a|an|the)\s+\w{0,25}\s*(search|research|analytics?|analysis|investigation)\s*(feature|tool|system|interface|component|module|page|widget)?',
+    # Document types that contain research keywords but are planning artifacts
+    r'(prepare|create|write|draft|develop|produce)\s+(a\s+|an\s+|the\s+)?(feasibility\s+study|research\s+proposal|study\s+plan|analysis\s+document|review\s+document)',
 ]
 
 # =============================================================================
