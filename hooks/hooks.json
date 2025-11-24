@@ -1,0 +1,46 @@
+{
+    "PostToolUse": [
+        {
+            "condition": "toolName === 'Task' && args.subagent_type === 'researcher'",
+            "hooks": [
+                {
+                    "type": "log",
+                    "message": "🔬 Researcher spawned: {{args.description}}"
+                }
+            ]
+        },
+        {
+            "condition": "toolName === 'Write' && args.file?.includes('reports/')",
+            "hooks": [
+                {
+                    "type": "log",
+                    "message": "📊 Report generated: {{args.file}}"
+                }
+            ]
+        },
+        {
+            "condition": "toolName === 'Task' && args.subagent_type === 'report-writer'",
+            "hooks": [
+                {
+                    "type": "log",
+                    "message": "📝 Synthesis started: Report-writer agent activated"
+                }
+            ]
+        }
+    ],
+    "PreSkillActivation": [
+        {
+            "condition": "skillName === 'multi-agent-researcher'",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "New-Item -ItemType Directory -Path 'files/research_notes','files/reports' -Force -ErrorAction SilentlyContinue"
+                },
+                {
+                    "type": "log",
+                    "message": "🚀 Multi-agent research skill activated"
+                }
+            ]
+        }
+    ]
+}

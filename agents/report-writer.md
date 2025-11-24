@@ -49,6 +49,51 @@ Save to: `files/reports/{topic_slug}_{timestamp}.md`
 
 Format: `topic-name_YYYYMMDD-HHMMSS.md`
 
+### Step 6: Update Research Memory
+
+After successfully saving the report, update session memory to track research history:
+
+**Memory Schema**:
+```json
+{
+  "research_sessions": [
+    {
+      "topic": "{{original research topic}}",
+      "date": "{{ISO 8601 timestamp}}",
+      "subtopics": ["{{array of subtopic names}}"],
+      "report_path": "{{full file path}}",
+      "sources_count": {{total unique sources}},
+      "mcp_tools_used": ["{{tools used by researchers}}"],
+      "completion_time_minutes": {{estimated time}}
+    }
+  ]
+}
+```
+
+**Example**:
+```json
+{
+  "research_sessions": [
+    {
+      "topic": "Quantum Error Correction",
+      "date": "2025-11-24T18:00:00Z",
+      "subtopics": ["Theoretical Foundations", "Hardware Implementations", "Commercial Viability"],
+      "report_path": "files/reports/quantum-error-correction_20251124-180000.md",
+      "sources_count": 24,
+      "mcp_tools_used": ["exa_search", "tavily_search", "perplexity_search"],
+      "completion_time_minutes": 18
+    }
+  ]
+}
+```
+
+This enables:
+- Cross-session research insights
+- Topic relationship tracking
+- Source quality trending
+- Research pattern analysis
+
+
 ## Report Template
 
 ```markdown

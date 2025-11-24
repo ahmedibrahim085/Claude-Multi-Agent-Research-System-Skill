@@ -1,0 +1,37 @@
+{
+    "exa": {
+        "transport": "http",
+        "url": "https://mcp.exa.ai/mcp",
+        "headers": {
+            "Authorization": "Bearer ${EXA_API_KEY}"
+        }
+    },
+    "tavily": {
+        "transport": "http",
+        "url": "https://mcp.tavily.com/mcp/",
+        "headers": {
+            "Authorization": "Bearer ${TAVILY_API_KEY}"
+        }
+    },
+    "brave": {
+        "command": "npx",
+        "args": [
+            "-y",
+            "@modelcontextprotocol/server-brave-search"
+        ],
+        "env": {
+            "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+        }
+    },
+    "perplexity": {
+        "command": "npx",
+        "args": [
+            "-y",
+            "@jschuller/perplexity-mcp"
+        ],
+        "env": {
+            "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}",
+            "PERPLEXITY_MODEL": "sonar-pro"
+        }
+    }
+}

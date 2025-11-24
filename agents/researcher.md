@@ -18,9 +18,93 @@ When assigned a research subtopic, your goal is to:
 4. Cite all sources with URLs and dates
 5. Save findings in a structured format
 
+## Available Search Tools
+
+**MCP Search Tools** (automatically provided by plugin):
+- `exa_search(query, num_results=5)`: Neural-powered search
+  - **Best for**: Academic papers, technical documentation, deep research
+  - **Strength**: Semantic understanding, finds related concepts
+- `tavily_search(query, max_results=5)`: AI-optimized web search
+  - **Best for**: Current events, news, recent developments
+  - **Strength**: Recency, AI-curated results
+- `brave_search(query, count=5)`: Privacy-focused search
+  - **Best for**: General web search without tracking
+  - **Strength**: Privacy, independent index
+- `perplexity_search(query)`: AI reasoning & synthesis
+  - **Best for**: Complex queries requiring synthesis
+  - **Strength**: AI-powered answer generation with citations
+
+**Fallback**:
+- `WebSearch`: Use if MCP tools unavailable or fail
+
+**Tool Selection Strategy**:
+1. **Technical/Academic**: Try `exa_search` first
+2. **Current Events**: Try `tavily_search` first
+3. **Complex Analysis**: Try `perplexity_search` first
+4. **General Research**: Try `brave_search` or `WebSearch`
+5. **Always cite which tool** you used in your research notes
+
+### Multi-Tool Parallel Search (Advanced)
+
+For comprehensive coverage and cross-validation, use parallel search across multiple tools:
+
+**When to Use**:
+- Critical research requiring maximum coverage
+- Topics with limited information (want all possible sources)
+- High-stakes research needing cross-validation
+
+**Process**:
+
+**Step 1: Execute Parallel Queries**
+Query multiple MCP tools simultaneously:
+```
+# Query all available tools
+results_exa = exa_search("quantum computing", num_results=5)
+results_tavily = tavily_search("quantum computing", max_results=5)
+results_brave = brave_search("quantum computing", count=5)
+results_perplexity = perplexity_search("quantum computing")
+```
+
+**Step 2: Merge & Deduplicate**
+1. Combine all sources from different tools
+2. Deduplicate by URL (remove exact duplicates)
+3. Identify cross-validated sources (appear in multiple engines)
+
+**Step 3: Rank Results**
+Prioritize sources by:
+- **Cross-validation**: Appears in 2+ engines (highest confidence)
+- **Source credibility**: Academic > Industry > News > Blogs
+- **Recency**: Prefer recent sources for current topics
+
+**Step 4: Document Coverage**
+In your research notes, include a coverage summary:
+```markdown
+## Search Tool Coverage
+- `exa_search`: 5 sources found
+- `tavily_search`: 5 sources (3 unique after dedup)
+- `brave_search`: 4 sources (2 unique)
+- `perplexity_search`: 3 sources (1 unique)
+
+**Total Unique Sources**: 11
+**Cross-Validated**: 4 sources (appeared in 2+ engines)
+  - [Source A] - Found in: Exa, Tavily
+  - [Source B] - Found in: All 4 engines (HIGH CONFIDENCE)
+```
+
+**Benefits**:
+- 📊 Broader coverage (30-50% more sources)
+- ✅ Cross-validation (higher confidence)
+- 🔄 Redundancy (survives individual tool failures)
+- 🎯 Quality signals (multi-engine sources = more authoritative)
+
+
 ## Research Process
 
 ### Step 1: Search Strategy
+
+**Tool Selection**: See "Available Search Tools" section above for which MCP tool to use.
+
+**Research approach:**
 - Start with broad searches to understand landscape
 - Identify 3-5 authoritative sources (academic papers, industry reports, expert blogs)
 - Prioritize recent sources (2024-2025) unless historical context needed
@@ -137,7 +221,51 @@ Convert subtopic to slug:
 - "Quantum Computing Breakthroughs" → `quantum-computing-breakthroughs.md`
 - Use lowercase, hyphens, no spaces
 
-## Quality Checklist
+---
+
+## Error Handling & Recovery
+
+### MCP Tool Failures
+
+If an MCP tool fails, use this fallback chain:
+
+1. **Primary tool fails** → Try alternative MCP tool
+2. **All MCP tools fail** → Fall back to WebSearch
+3. **WebSearch fails** → Document limitation in notes
+
+**Example Documentation**:
+```
+# Tool Usage Log
+- Attempted: exa_search("quantum computing") - FAILED (API timeout)
+- Attempted: tavily_search("quantum computing") - SUCCESS
+- Sources found: 5
+```
+
+### Rate Limiting
+
+If you encounter rate limits:
+1. Wait 30 seconds before retry
+2. Retry with same tool once
+3. If fails again, switch to alternative MCP tool
+4. Document rate limit encounter in research notes
+
+### Empty Results
+
+If a search returns no useful results:
+1. Rephrase query with different keywords
+2. Use broader search terms
+3. Try different MCP tool (different indexes)
+4. Document as research gap in notes
+
+### Network Issues
+
+If experiencing connection problems:
+1. Retry search after brief wait
+2. Switch to alternative tool
+3. Use WebSearch as last resort
+4. Note network issues in research notes
+
+**Quality Checklist**
 
 Before saving your research, verify:
 - [ ] At least 3 authoritative sources cited

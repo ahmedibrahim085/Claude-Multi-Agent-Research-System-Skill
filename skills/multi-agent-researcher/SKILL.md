@@ -15,6 +15,22 @@ Transform complex research questions into comprehensive reports by:
 3. Synthesizing findings into cohesive final report
 4. Saving structured outputs for reference
 
+## Search Tool Availability
+
+This plugin provides **4 MCP search servers** to enhance research quality:
+
+| Server | Type | Best For |
+|--------|------|----------|
+| **Exa** | Remote HTTP | Academic/technical research |
+| **Tavily** | Remote HTTP | Current events, news |
+| **Brave** | Local (npx) | Privacy-focused search |
+| **Perplexity** | Local (npx) | AI-powered synthesis |
+
+**First-Time Setup**: Brave and Perplexity auto-install on first use (~30s delay).
+
+Researchers have automatic access to these tools without explicit declaration.
+
+
 ## When to Use
 
 Auto-invoke when user asks:
@@ -36,20 +52,83 @@ Do NOT invoke for:
 **Step 1.1: Understand the Research Question**
 Analyze user's query to identify core topic, scope, and intent.
 
-**Step 1.2: Decompose into Subtopics**
-Break topic into 2-4 focused subtopics that are:
-- Mutually exclusive (minimal overlap)
-- Collectively exhaustive (cover whole topic)
-- Independently researchable
-- Together provide comprehensive coverage
+**Step 1.2: Adaptive Decomposition**
 
-**Decomposition Patterns:**
+Use AI-powered pattern selection for optimal subtopic breakdown.
 
-**Temporal**: Past → Current → Future
-**Categorical**: Category 1, 2, 3
-**Stakeholder**: Technical → Business → Policy → User
-**Problem-Solution**: Problem → Solutions → Gaps → Future
-**Geographic**: Region A → Region B → Comparison
+**Sub-step A: Analyze Topic Characteristics**
+
+Identify the topic type to select the best decomposition pattern:
+
+| Topic Type | Indicators | Example | Pattern |
+|------------|-----------|---------|---------|
+| **Temporal** | Time progression keywords (history, evolution, future) | "Evolution of AI" | Past → Present → Future |
+| **Categorical** | Natural category divisions | "Programming languages" | Compiled, Interpreted, Hybrid |
+| **Stakeholder** | Multiple perspectives/groups | "Climate policy" | Scientific, Economic, Political, Social |
+| **Problem-Solution** | Issue-focused, challenges | "Cybersecurity threats" | Threats → Defenses → Gaps → Future |
+| **Geographic** | Location-based, regional | "Healthcare systems" | US, Europe, Asia, Global |
+| **Hierarchical** | Layers/levels | "Cloud computing" | Infrastructure, Platform, Software |
+
+**Sub-step B: Select Optimal Pattern**
+
+Decision logic:
+```
+IF topic contains {history, evolution, timeline, past, future} 
+  → Use Temporal pattern
+
+ELSE IF topic has {types, categories, kinds, classifications}
+  → Use Categorical pattern
+
+ELSE IF topic involves {stakeholders, perspectives, groups, actors}
+  → Use Stakeholder pattern
+
+ELSE IF topic mentions {problem, challenge, issue, threat}
+  → Use Problem-Solution pattern
+
+ELSE IF topic spans {regions, countries, global, international}
+  → Use Geographic pattern
+
+ELSE IF topic has {layers, levels, hierarchy, stack}
+  → Use Hierarchical pattern
+
+ELSE
+  → Use Categorical (default)
+```
+
+**Sub-step C: Generate Subtopics**
+
+Apply selected pattern to create 2-4 well-balanced subtopics.
+
+**Example 1: Temporal**
+```
+Topic: "Quantum Error Correction Development"
+Pattern: Temporal (contains "development" = progression)
+Subtopics:
+1. Historical Foundations (1990s-2010)
+2. Current State-of-Art (2020-2025)
+3. Future Directions (2025+)
+```
+
+**Example 2: Problem-Solution**
+```
+Topic: "AI Safety Challenges"
+Pattern: Problem-Solution (contains "challenges")
+Subtopics:
+1. Current AI Safety Threats
+2. Existing Mitigation Strategies
+3. Research Gaps & Future Work
+```
+
+**Example 3: Stakeholder**
+```
+Topic: "Cryptocurrency Regulation"
+Pattern: Stakeholder (involves governments, users, industry)
+Subtopics:
+1. Government/Regulatory Perspective
+2. Industry/Exchange Perspective
+3. User/Consumer Perspective
+4. Technical/Developer Perspective
+```
 
 **Step 1.3: Create Research Plan**
 Use TodoWrite to track:
@@ -83,6 +162,17 @@ Conduct thorough web research, gather authoritative sources, extract key finding
 
 **Critical**: Spawn ALL researchers in parallel (multiple Task calls in same message), not sequentially.
 
+**After spawning, notify user of progress**:
+```
+✅ Research initiated: {N} parallel researchers spawned
+- Researcher 1: {subtopic name}
+- Researcher 2: {subtopic name}
+- Researcher 3: {subtopic name}
+
+⏱️ Estimated completion: ~15-20 minutes
+🔍 MCP tools available: Exa, Tavily, Brave, Perplexity
+```
+
 **Step 2.2: Monitor Completion**
 Update TodoWrite as researchers complete.
 
@@ -92,6 +182,68 @@ Use Glob to confirm all files exist: `files/research_notes/*.md`
 ---
 
 ### Phase 3: Synthesis & Report Generation
+
+**Standard Path**: See below for mandatory report-writer delegation.
+
+**Incremental Path** (Optional): See Phase 3A for progressive synthesis.
+
+---
+
+### Phase 3A: Incremental Synthesis (Optional - v2.5.0)
+
+> **Use when**: Speed is priority, user wants early insights
+
+**Process Overview**:
+Instead of waiting for all researchers to complete, begin synthesis progressively as each finishes.
+
+**Step 3A.1: First Researcher Complete**
+When FIRST researcher finishes:
+```
+Task:
+subagent_type: "incremental-synthesizer"
+description: "Start progressive report building"
+prompt: "Initialize report framework:
+- Create draft report structure
+- Add findings from completed researcher
+- Mark pending sections as IN PROGRESS
+- Save as files/reports/{topic}_draft_v1.md"
+```
+
+**Step 3A.2: Progressive Updates**
+For EACH additional completing researcher:
+- increm ental-synthesizer updates draft report
+- Adds new findings
+- Updates cross-cutting insights
+- Publishes new version (v2, v3...)
+
+**Step 3A.3: Final Synthesis**
+When ALL researchers complete:
+- incremental-synthesizer finalizes report
+- Comprehensive cross-analysis
+- Removes [DRAFT] label
+- Publishes final version
+
+**Benefits**:
+- ✅ Faster time-to-first-insight (~7 min vs ~20 min)
+- ✅ Progressive value delivery
+- ✅ Early feedback opportunity
+
+**Trade-offs**:
+- ⚠️ Multiple report revisions
+- ⚠️ Additional agent overhead
+- ⚠️ Preliminary insights may change
+
+**Timeline**:
+```
+Standard: ░░░░░░░░░░░░░░░░░░░░ 100% @ 20 min
+Incremental: ██████░░░░░░░░░░░░░░ 33% @ 7 min
+             ████████████░░░░░░░░ 66% @ 14 min
+             ████████████████████ 100% @ 20 min
+```
+
+---
+
+### Phase 3: Synthesis & Report Generation (Standard)
 
 **⚠️ CRITICAL: ARCHITECTURAL ENFORCEMENT ACTIVE ⚠️**
 
@@ -163,22 +315,22 @@ After spawning report-writer agent, wait for completion. The agent will:
 
 **Step 4.1: Create User Summary**
 ```markdown
-# Research Complete: {Topic}
+# ✅ Research Complete: {Topic}
 
 Comprehensive research completed with {N} specialized researchers.
 
-## Key Findings
+## 🔑 Key Findings
 1. {Finding 1}
 2. {Finding 2}
 3. {Finding 3}
 
-## Research Scope
+## 🔬 Research Scope
 {N} subtopics investigated:
 - {Subtopic 1}
 - {Subtopic 2}
 - {Subtopic 3}
 
-## Files Generated
+## 📁 Files Generated
 **Research Notes**: `files/research_notes/`
 - {file1}.md
 - {file2}.md
@@ -186,8 +338,12 @@ Comprehensive research completed with {N} specialized researchers.
 
 **Final Report**: `files/reports/{filename}.md`
 
-## Next Steps
+## 🎯 Next Steps
 {Optional suggestions}
+
+---
+
+**💡 Tip**: Use `/research-quick` for faster results or `/research-deep` for comprehensive analysis.
 ```
 
 **Step 4.2: Update TodoWrite**
