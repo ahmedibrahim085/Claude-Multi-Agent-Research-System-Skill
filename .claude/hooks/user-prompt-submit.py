@@ -12,9 +12,110 @@ Enhancement: Multi-skill detection, regex pattern matching, comprehensive enforc
 """
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
+
+# =============================================================================
+# DEBUG MODE (set COMPOUND_DETECTION_DEBUG=true to enable verbose logging)
+# =============================================================================
+DEBUG = os.environ.get('COMPOUND_DETECTION_DEBUG', 'false').lower() == 'true'
+
+# =============================================================================
+# NEGATION PATTERNS (Critical Fix #2)
+# =============================================================================
+# These patterns indicate user explicitly does NOT want a skill
+# Check these BEFORE other pattern matching
+
+NEGATION_PATTERNS = {
+    'research': [
+        r"(don't|do not|dont|skip|without|no need to|not going to|won't|will not|shouldn't|should not|avoid)\s+(the\s+)?(research|search|investigat|analyz|study|explor)",
+        r"(research|search|investigation|analysis)\s+(is\s+)?(not\s+)?(needed|required|necessary)",
+        r"(skip|bypass|ignore)\s+(the\s+)?(research|search|investigation|analysis)",
+        r"(already\s+)?(researched|searched|investigated|analyzed|studied)",
+    ],
+    'planning': [
+        r"(don't|do not|dont|skip|without|no need to|not going to|won't|will not|shouldn't|should not|avoid)\s+(the\s+)?(plan|build|design|creat|develop|implement|architect)",
+        r"(planning|building|design|development|implementation)\s+(is\s+)?(not\s+)?(needed|required|necessary)",
+        r"(skip|bypass|ignore)\s+(the\s+)?(planning|design|architecture|specs|specification)",
+        r"(already\s+)?(planned|built|designed|created|developed|implemented)",
+    ],
+}
+
+# =============================================================================
+# COMPOUND NOUN PATTERNS (High Fix #4)
+# =============================================================================
+# These look like TRUE compounds but are actually single planning actions
+# "Build a search and analysis tool" - compound noun, not two actions
+
+COMPOUND_NOUN_PATTERNS = [
+    r'(build|create|design|develop|implement)\s+(a|an|the)\s+\w{0,20}\s*(search|research|analysis|investigation)\s+and\s+(search|research|analysis|analytics|investigation|exploration|study)\s+(tool|system|feature|platform|dashboard|interface|engine|module|component|service|application|app)',
+    r'(build|create|design|develop|implement)\s+(a|an|the)\s+\w{0,20}\s*(build|design|plan|development)\s+and\s+(build|design|plan|development|deploy|test)\s+(tool|system|pipeline|workflow|process|platform)',
+    r'(build|create|design|develop|implement)\s+(a|an|the)\s+\w{0,20}\s*\w+-and-\w+\s+(tool|system|feature|component|module)',
+    r'(build|create|design|develop|implement)\s+(a|an|the)?\s*(research\s+and\s+development|R&D|r&d)\s+(team|department|lab|facility|center|process|pipeline|workflow|system)',
+]
+
+# =============================================================================
+# AGENT NOUN EXCLUSIONS (Critical Fix #1 - supplementary)
+# =============================================================================
+# Words that contain skill keywords but are agent nouns, not action verbs
+
+AGENT_NOUN_EXCLUSIONS = [
+    'researcher', 'researchers',
+    'builder', 'builders',
+    'designer', 'designers',
+    'planner', 'planners',
+    'developer', 'developers',
+    'architect', 'architects',
+    'analyst', 'analysts',
+    'investigator', 'investigators',
+    'explorer', 'explorers',
+    'examiner', 'examiners',
+]
+
+# =============================================================================
+# TRUE COMPOUND PATTERNS
+# =============================================================================
+# Both keywords are ACTION verbs (user wants BOTH workflows)
+
+TRUE_COMPOUND_PATTERNS = [
+    r'(search|research|investigate|analyze|find|explore|study|examine)\s+.{0,60}\s+(and|then|,\s*then|;\s*then|after that|followed by)\s+(build|plan|design|create|implement|develop|architect|make)',
+    r'(build|plan|design|create|develop|implement)\s+.{0,60}\s+(and|then|after|;\s*then)\s+(research|search|investigate|analyze|study)',
+    r'first\s+(research|search|investigate|explore|analyze).{0,60}(then|after|before).{0,30}(build|plan|design|create|implement)',
+    r'(research|investigate|search|analyze|explore)\s+.{0,60}\s+and\s+(build|design|create|plan|implement)\s+(it|that|this|the\s+\w+)',
+    r'(want to|need to|going to|let\'s|we should|I\'ll|i\'ll)\s+(research|search|investigate).{0,60}(and|then)\s+(build|plan|design|create)',
+    r'(building|planning|designing|creating|developing|implementing)\s+.{0,60}\s+(after|before|while)\s+(researching|searching|investigating|analyzing|studying)',
+    r'(researching|searching|investigating|analyzing|studying|exploring)\s+.{0,60}\s+(before|then|and)\s+(building|planning|designing|creating|implementing)',
+    r'(research|investigate|search|analyze|explore|study)\s+\w+.{0,40},\s*(build|plan|design|create|implement|develop)\s+',
+]
+
+# =============================================================================
+# FALSE COMPOUND: Planning is ACTION, research keyword is SUBJECT
+# =============================================================================
+# Route to: PLANNING skill
+
+FALSE_COMPOUND_PLANNING_ACTION = [
+    r'(build|create|design|plan|develop|architect|implement|make|construct)\s+(a|an|the)\s+\w{0,30}\s*(search|research|analytics?|investigation|analysis|exploration|study|survey|review|assessment|evaluation|finder|explorer)\s*(feature|tool|system|platform|module|component|interface|dashboard|service|API|endpoint|functionality|capability|engine|mechanism|solution|application|app|page|widget|bar)?',
+    r'(design|plan|create|build|develop|architect)\s+(a\s+|an\s+|the\s+)?(research|search|analysis|investigation|exploration|study)\s+(method|methodology|approach|strategy|plan|workflow|process|pipeline|system|framework|architecture|tool|platform|solution|technique|procedure)',
+    r'(create|build|design|develop|implement|establish)\s+(research|search|analysis|investigation)\s+(infrastructure|tooling|capabilities|capacity|resources|team|department|lab|center|facility)',
+    r'(building|creating|designing|planning|developing|implementing|constructing)\s+(a|an|the)\s+\w{0,25}\s*(search|research|analytics?|analysis|investigation)\s*(feature|tool|system|interface|component|module|page|widget)?',
+]
+
+# =============================================================================
+# FALSE COMPOUND: Research is ACTION, planning keyword is SUBJECT
+# =============================================================================
+# Route to: RESEARCH skill
+
+FALSE_COMPOUND_RESEARCH_ACTION = [
+    r'(research|search|find|look|investigate|analyze|study|explore|examine|review|assess|evaluate)\s+(for\s+)?(the\s+)?(best\s+|good\s+|top\s+|recommended\s+|popular\s+|common\s+|modern\s+)?\w{0,20}\s*(build|design|architecture|architectural|planning|implementation|development|deployment|infrastructure|construction)\s*(tool|tools|pattern|patterns|practice|practices|method|methods|approach|approaches|framework|frameworks|system|systems|process|processes|solution|solutions|technique|techniques|strategy|strategies|software|platform|platforms|failure|failures|error|errors|issue|issues|problem|problems|performance|speed|time|output|results|configuration|settings|options|dependencies|requirement|requirements|pipeline|pipelines|workflow|workflows|automation|script|scripts|guide|guides|tutorial|tutorials|documentation|docs|example|examples|template|templates)',
+    r'(search|find|look|grep|scan|check)\s+(for\s+|in\s+|through\s+)?(the\s+)?\w{0,15}\s*(build|design|plan|implementation|deployment|architecture|development|test|testing)\s*(log|logs|file|files|doc|docs|document|documents|output|outputs|error|errors|issue|issues|record|records|history|artifact|artifacts|report|reports|result|results|failure|failures|warning|warnings|message|messages|trace|traces|dump|dumps|metric|metrics|stat|stats|status)',
+    r'(research|analyze|study|examine|investigate|review|assess|evaluate|audit|inspect|explore|understand|learn about)\s+(the\s+)?(existing\s+|current\s+|legacy\s+|old\s+|previous\s+|original\s+|proposed\s+|new\s+|updated\s+)?(design|architecture|architectural|plan|planning|implementation|build|system|infrastructure|codebase|code|structure|schema|model|spec|specification|blueprint|diagram|flow|workflow)',
+    r'(research|search|find|investigate|study|explore|analyze|examine|review)\s+(design|architectural|build|implementation|development|deployment|coding|programming|software|system)\s+(pattern|patterns|principle|principles|practice|practices|standard|standards|convention|conventions|guideline|guidelines|approach|approaches|anti-pattern|anti-patterns|smell|smells|idiom|idioms)',
+    r'(researching|searching|finding|investigating|studying|exploring|analyzing|examining|reviewing|learning about|looking into|checking)\s+(design|architectural|build|implementation|development|planning|deployment|infrastructure|system)\s+(pattern|patterns|tool|tools|practice|practices|method|methods|approach|approaches|failure|failures|error|errors|issue|issues|option|options|alternative|alternatives|solution|solutions)',
+    r'(research|search|find|investigate|study|explore|learn|understand)\s+(how\s+to\s+|ways\s+to\s+|methods\s+to\s+|approaches\s+to\s+)(build|design|plan|implement|develop|architect|create|deploy)',
+    r'(research|search|find|investigate|study|explore|analyze)\s+.{3,40}\s+(for|to help with|to support|to enable|to improve)\s+(building|designing|planning|implementing|developing|creating|deploying)',
+]
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
@@ -39,62 +140,408 @@ def load_skill_rules() -> dict:
         return {}
 
 
-def check_keywords(prompt: str, keywords: list) -> list:
-    """Check if any keywords are present in the prompt (case-insensitive)"""
-    prompt_lower = prompt.lower()
-    matched = []
+# =============================================================================
+# HELPER FUNCTIONS FOR COMPOUND DETECTION
+# =============================================================================
 
-    for keyword in keywords:
-        if keyword.lower() in prompt_lower:
-            matched.append(keyword)
+def check_negation(prompt: str, skill_type: str) -> bool:
+    """
+    Check if the prompt contains negation for a specific skill.
 
-    return matched
+    Args:
+        prompt: User's input prompt
+        skill_type: 'research' or 'planning'
 
-
-def check_patterns(prompt: str, patterns: list) -> list:
-    """Check if any regex patterns match the prompt (case-insensitive)"""
-    matched = []
-
+    Returns:
+        True if negation detected (skill should NOT be triggered)
+    """
+    patterns = NEGATION_PATTERNS.get(skill_type, [])
     for pattern in patterns:
         try:
             if re.search(pattern, prompt, re.IGNORECASE):
-                matched.append(pattern)
+                if DEBUG:
+                    print(f"DEBUG: Negation detected for {skill_type}: {pattern}", file=sys.stderr)
+                return True
         except re.error:
-            # Skip invalid regex patterns
+            continue
+    return False
+
+
+def check_compound_noun(prompt: str) -> bool:
+    """
+    Check if prompt contains a compound noun that looks like a TRUE compound.
+
+    Example: "Build a search and analysis tool" - NOT a true compound
+
+    Returns:
+        True if compound noun detected (should NOT be treated as TRUE compound)
+    """
+    for pattern in COMPOUND_NOUN_PATTERNS:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                if DEBUG:
+                    print(f"DEBUG: Compound noun detected: {pattern}", file=sys.stderr)
+                return True
+        except re.error:
+            continue
+    return False
+
+
+def is_agent_noun_only(prompt: str, keyword: str) -> bool:
+    """
+    Check if a keyword appears only as part of an agent noun.
+
+    Example: "researcher" contains "research" but is a noun, not action.
+
+    Args:
+        prompt: User's input prompt
+        keyword: The keyword to check
+
+    Returns:
+        True if keyword only appears in agent noun context
+    """
+    prompt_lower = prompt.lower()
+    keyword_lower = keyword.lower()
+
+    # Check if keyword appears as standalone word (word boundary)
+    standalone_pattern = r'\b' + re.escape(keyword_lower) + r'\b'
+    standalone_matches = re.findall(standalone_pattern, prompt_lower)
+
+    # Check if keyword appears in agent nouns
+    agent_noun_count = 0
+    for agent_noun in AGENT_NOUN_EXCLUSIONS:
+        if agent_noun.lower() in prompt_lower:
+            # Check if this agent noun contains our keyword
+            if keyword_lower in agent_noun.lower():
+                agent_noun_count += prompt_lower.count(agent_noun.lower())
+
+    # If all occurrences are within agent nouns, it's agent noun only
+    return len(standalone_matches) <= agent_noun_count
+
+
+# =============================================================================
+# CORE COMPOUND DETECTION FUNCTIONS
+# =============================================================================
+
+def get_signal_strength(prompt: str, skill_config: dict, skill_type: str = None) -> dict:
+    """
+    Analyze signal strength for a skill based on keyword vs pattern matching.
+
+    KEY INSIGHT:
+    - Intent pattern match = keyword is used as ACTION verb = STRONG signal
+    - Keyword only match = keyword might be SUBJECT noun = WEAK signal
+
+    CRITICAL FIX #1: Uses word boundary matching to avoid substring false positives
+    CRITICAL FIX #2: Checks negation patterns to exclude negated skills
+
+    Args:
+        prompt: User's input prompt
+        skill_config: Skill configuration from skill-rules.json
+        skill_type: 'research' or 'planning' (for negation checking)
+
+    Returns:
+        {
+            'strength': 'strong' | 'medium' | 'weak' | 'none',
+            'keywords': list of matched keywords,
+            'patterns': list of matched patterns,
+            'is_action': bool - Is keyword used as action verb?,
+            'negated': bool - Was this skill negated?
+        }
+    """
+    prompt_triggers = skill_config.get('promptTriggers', {})
+    keywords = prompt_triggers.get('keywords', [])
+    patterns = prompt_triggers.get('intentPatterns', [])
+
+    # CRITICAL FIX #2: Check negation first
+    if skill_type and check_negation(prompt, skill_type):
+        return {
+            'strength': 'none',
+            'keywords': [],
+            'patterns': [],
+            'is_action': False,
+            'negated': True
+        }
+
+    # CRITICAL FIX #1: Check keyword matches with WORD BOUNDARY (not substring)
+    prompt_lower = prompt.lower()
+    matched_keywords = []
+    for k in keywords:
+        keyword_lower = k.lower()
+        # Use word boundary regex instead of simple 'in' check
+        word_boundary_pattern = r'\b' + re.escape(keyword_lower) + r'\b'
+        if re.search(word_boundary_pattern, prompt_lower):
+            # Additional check: is this only appearing as agent noun?
+            if not is_agent_noun_only(prompt, k):
+                matched_keywords.append(k)
+
+    # Check pattern matches
+    matched_patterns = []
+    for pattern in patterns:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                matched_patterns.append(pattern)
+        except re.error:
             continue
 
-    return matched
+    # Determine strength based on match type
+    if matched_patterns:
+        return {
+            'strength': 'strong',
+            'keywords': matched_keywords,
+            'patterns': matched_patterns,
+            'is_action': True,
+            'negated': False
+        }
+    elif len(matched_keywords) >= 3:
+        return {
+            'strength': 'medium',
+            'keywords': matched_keywords,
+            'patterns': [],
+            'is_action': False,
+            'negated': False
+        }
+    elif matched_keywords:
+        return {
+            'strength': 'weak',
+            'keywords': matched_keywords,
+            'patterns': [],
+            'is_action': False,
+            'negated': False
+        }
+    else:
+        return {
+            'strength': 'none',
+            'keywords': [],
+            'patterns': [],
+            'is_action': False,
+            'negated': False
+        }
 
 
-def detect_skill_triggers(prompt: str, skill_rules: dict) -> dict:
+def check_compound_patterns(prompt: str) -> dict:
     """
-    Detect which skills should be triggered based on the prompt
+    Check if prompt matches known compound patterns.
 
-    Returns: {
-        'multi-agent-researcher': {'keywords': [...], 'patterns': [...]},
-        'spec-workflow-orchestrator': {'keywords': [...], 'patterns': [...]}
+    HIGH FIX #4: Checks COMPOUND_NOUN_PATTERNS first to avoid misdetection.
+
+    Returns:
+        {
+            'type': 'true_compound' | 'false_compound' | 'compound_noun' | 'unclear',
+            'primary_skill': 'research' | 'planning' | None
+        }
+    """
+    # HIGH FIX #4: Check compound nouns FIRST
+    if check_compound_noun(prompt):
+        if DEBUG:
+            print(f"DEBUG: Compound noun detected, routing to planning", file=sys.stderr)
+        return {'type': 'compound_noun', 'primary_skill': 'planning'}
+
+    # Check TRUE compound patterns
+    for pattern in TRUE_COMPOUND_PATTERNS:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                if DEBUG:
+                    print(f"DEBUG: TRUE compound match: {pattern}", file=sys.stderr)
+                return {'type': 'true_compound', 'primary_skill': None}
+        except re.error:
+            continue
+
+    # Check FALSE compound patterns - Planning is ACTION
+    for pattern in FALSE_COMPOUND_PLANNING_ACTION:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                if DEBUG:
+                    print(f"DEBUG: FALSE compound (planning action): {pattern}", file=sys.stderr)
+                return {'type': 'false_compound', 'primary_skill': 'planning'}
+        except re.error:
+            continue
+
+    # Check FALSE compound patterns - Research is ACTION
+    for pattern in FALSE_COMPOUND_RESEARCH_ACTION:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                if DEBUG:
+                    print(f"DEBUG: FALSE compound (research action): {pattern}", file=sys.stderr)
+                return {'type': 'false_compound', 'primary_skill': 'research'}
+        except re.error:
+            continue
+
+    return {'type': 'unclear', 'primary_skill': None}
+
+
+def analyze_request(prompt: str, skill_rules: dict) -> dict:
+    """
+    Complete analysis of request for compound detection.
+
+    Decision matrix:
+    | Research Signal | Planning Signal | Action          |
+    |-----------------|-----------------|-----------------|
+    | Strong          | Strong          | ASK USER        |
+    | Strong          | Weak/Medium     | Research only   |
+    | Weak/Medium     | Strong          | Planning only   |
+    | Weak            | Weak            | ASK USER (safe) |
+    | None            | Any             | That skill only |
+    | Any             | None            | That skill only |
+
+    Returns:
+        {
+            'action': 'ask_user' | 'research_only' | 'planning_only' | 'none',
+            'confidence': 'high' | 'medium' | 'low',
+            'research_signal': signal strength dict,
+            'planning_signal': signal strength dict,
+            'compound_type': 'true_compound' | 'false_compound' | 'compound_noun' | 'unclear'
+        }
+    """
+    skills = skill_rules.get('skills', {})
+
+    # Get signal strength for each skill
+    research_signal = get_signal_strength(
+        prompt,
+        skills.get('multi-agent-researcher', {}),
+        skill_type='research'
+    )
+    planning_signal = get_signal_strength(
+        prompt,
+        skills.get('spec-workflow-orchestrator', {}),
+        skill_type='planning'
+    )
+
+    result = {
+        'action': 'none',
+        'confidence': 'low',
+        'research_signal': research_signal,
+        'planning_signal': planning_signal,
+        'compound_type': 'unclear'
     }
+
+    if DEBUG:
+        print(f"DEBUG: Research signal: {research_signal}", file=sys.stderr)
+        print(f"DEBUG: Planning signal: {planning_signal}", file=sys.stderr)
+
+    # Case 1: Only one skill has signal
+    if research_signal['strength'] == 'none' and planning_signal['strength'] != 'none':
+        result['action'] = 'planning_only'
+        result['confidence'] = 'high' if planning_signal['strength'] == 'strong' else 'medium'
+        return result
+
+    if planning_signal['strength'] == 'none' and research_signal['strength'] != 'none':
+        result['action'] = 'research_only'
+        result['confidence'] = 'high' if research_signal['strength'] == 'strong' else 'medium'
+        return result
+
+    if research_signal['strength'] == 'none' and planning_signal['strength'] == 'none':
+        result['action'] = 'none'
+        return result
+
+    # Case 2: Both skills have signals - check compound patterns
+    compound_result = check_compound_patterns(prompt)
+    result['compound_type'] = compound_result['type']
+
+    if DEBUG:
+        print(f"DEBUG: Compound pattern result: {compound_result}", file=sys.stderr)
+
+    if compound_result['type'] == 'true_compound':
+        result['action'] = 'ask_user'
+        result['confidence'] = 'high'
+        return result
+
+    if compound_result['type'] == 'compound_noun':
+        result['action'] = 'planning_only'
+        result['confidence'] = 'high'
+        return result
+
+    if compound_result['type'] == 'false_compound':
+        if compound_result['primary_skill'] == 'planning':
+            result['action'] = 'planning_only'
+            result['confidence'] = 'high'
+        elif compound_result['primary_skill'] == 'research':
+            result['action'] = 'research_only'
+            result['confidence'] = 'high'
+        return result
+
+    # Case 3: Unclear - use signal strength matrix
+    rs = research_signal['strength']
+    ps = planning_signal['strength']
+
+    if rs == 'strong' and ps == 'strong':
+        result['action'] = 'ask_user'
+        result['confidence'] = 'medium'
+    elif rs == 'strong' and ps in ['medium', 'weak']:
+        result['action'] = 'research_only'
+        result['confidence'] = 'medium'
+    elif ps == 'strong' and rs in ['medium', 'weak']:
+        result['action'] = 'planning_only'
+        result['confidence'] = 'medium'
+    else:
+        result['action'] = 'ask_user'
+        result['confidence'] = 'low'
+
+    return result
+
+
+def build_compound_clarification_message(analysis: dict) -> str:
     """
-    triggers = {}
+    Build system message for compound requests requiring user clarification.
+    """
+    confidence = analysis['confidence'].upper()
+    research = analysis['research_signal']
+    planning = analysis['planning_signal']
 
-    for skill_name, skill_config in skill_rules.get('skills', {}).items():
-        prompt_triggers = skill_config.get('promptTriggers', {})
-        keywords = prompt_triggers.get('keywords', [])
-        patterns = prompt_triggers.get('intentPatterns', [])
+    # Format matched triggers with "(none)" fallback
+    if research['keywords']:
+        research_kw = ', '.join(f'"{k}"' for k in research['keywords'][:3])
+        if len(research['keywords']) > 3:
+            research_kw += f' (+{len(research["keywords"]) - 3} more)'
+    else:
+        research_kw = "(none)"
 
-        matched_keywords = check_keywords(prompt, keywords)
-        matched_patterns = check_patterns(prompt, patterns)
+    if planning['keywords']:
+        planning_kw = ', '.join(f'"{k}"' for k in planning['keywords'][:3])
+        if len(planning['keywords']) > 3:
+            planning_kw += f' (+{len(planning["keywords"]) - 3} more)'
+    else:
+        planning_kw = "(none)"
 
-        if matched_keywords or matched_patterns:
-            triggers[skill_name] = {
-                'keywords': matched_keywords,
-                'patterns': matched_patterns,
-                'enforcement': skill_config.get('enforcement', 'recommend'),
-                'priority': skill_config.get('priority', 'medium')
-            }
+    research_action = "Yes (verb)" if research['is_action'] else "Maybe (subject?)"
+    planning_action = "Yes (verb)" if planning['is_action'] else "Maybe (subject?)"
 
-    return triggers
+    return f"""
+<system-reminder>
+⚠️ COMPOUND REQUEST DETECTED - CLARIFICATION REQUIRED
 
+Detection Confidence: {confidence}
+
+Your request triggers MULTIPLE skill workflows:
+
+RESEARCH SKILL (multi-agent-researcher)
+  Signal Strength: {research['strength'].upper()}
+  Matched Triggers: {research_kw}
+  Used as Action: {research_action}
+
+PLANNING SKILL (spec-workflow-orchestrator)
+  Signal Strength: {planning['strength'].upper()}
+  Matched Triggers: {planning_kw}
+  Used as Action: {planning_action}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🛑 MANDATORY: Use AskUserQuestion BEFORE invoking any skill
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You MUST present these options to the user:
+
+1. "Research → Plan" - Research first, then I'll ask you to proceed with planning
+2. "Research only" - Just investigate and report findings
+3. "Plan only" - Create specifications using existing knowledge
+4. "Both sequentially" - Research first, then plan (separate workflows, no data sharing)
+
+DO NOT invoke ANY skill until user responds.
+</system-reminder>
+""".strip()
+
+
+# =============================================================================
+# ENFORCEMENT MESSAGE BUILDERS
+# =============================================================================
 
 def build_research_enforcement_message(triggers: dict) -> str:
     """Build enforcement message for multi-agent-researcher skill"""
@@ -198,32 +645,40 @@ def main():
     if not skill_rules:
         sys.exit(0)
 
-    # Detect which skills should be triggered
-    triggers = detect_skill_triggers(user_prompt, skill_rules)
+    # NEW: Use analyze_request for smart compound detection
+    analysis = analyze_request(user_prompt, skill_rules)
 
-    if not triggers:
+    if DEBUG:
+        print(f"DEBUG: Analysis result: {analysis}", file=sys.stderr)
+
+    # Handle based on action
+    action = analysis['action']
+
+    if action == 'none':
         # No skill triggers detected
         sys.exit(0)
 
-    # Build enforcement messages
-    messages = []
-
-    # Priority order: research (critical) > planning (high)
-    if 'multi-agent-researcher' in triggers:
-        messages.append(build_research_enforcement_message(triggers['multi-agent-researcher']))
-
-    if 'spec-workflow-orchestrator' in triggers:
-        messages.append(build_planning_enforcement_message(triggers['spec-workflow-orchestrator']))
-
-    # Output enforcement messages
-    if messages:
-        combined_message = '\n\n'.join(messages)
-        output = {
-            'systemMessage': combined_message
-        }
+    if action == 'ask_user':
+        # Compound request - need user clarification
+        message = build_compound_clarification_message(analysis)
+        output = {'systemMessage': message}
         print(json.dumps(output))
+        sys.exit(0)
 
-    # Exit successfully
+    # Single skill action
+    if action == 'research_only':
+        message = build_research_enforcement_message(analysis['research_signal'])
+        output = {'systemMessage': message}
+        print(json.dumps(output))
+        sys.exit(0)
+
+    if action == 'planning_only':
+        message = build_planning_enforcement_message(analysis['planning_signal'])
+        output = {'systemMessage': message}
+        print(json.dumps(output))
+        sys.exit(0)
+
+    # Fallback - should not reach here
     sys.exit(0)
 
 
