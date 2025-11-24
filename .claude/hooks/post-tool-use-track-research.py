@@ -70,7 +70,8 @@ def main():
         skill_name = tool_input.get('skill')
         if skill_name:
             try:
-                timestamp = session_logger.datetime.now(session_logger.datetime.UTC).isoformat()
+                from datetime import timezone
+                timestamp = session_logger.datetime.now(timezone.utc).isoformat()
                 current_skill = state_manager.get_current_skill()
 
                 # Check if re-invocation

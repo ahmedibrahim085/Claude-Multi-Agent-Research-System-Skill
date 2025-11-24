@@ -109,7 +109,8 @@ def main():
     if has_completion_pattern(transcript_path, skill_name):
         # Skill completed!
         try:
-            timestamp = datetime.now(datetime.UTC).isoformat()
+            from datetime import timezone
+            timestamp = datetime.now(timezone.utc).isoformat()
             ended_skill = state_manager.end_current_skill(timestamp, 'Stop')
 
             if ended_skill:

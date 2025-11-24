@@ -268,7 +268,8 @@ def main():
         current_skill = state_manager.get_current_skill()
         if current_skill and not current_skill.get('endTime'):
             # Found active skill without end time - likely from crash/abrupt termination
-            timestamp = datetime.now(datetime.UTC).isoformat()
+            from datetime import timezone
+            timestamp = datetime.now(timezone.utc).isoformat()
             skill_name = current_skill['name']
             invocation = current_skill.get('invocationNumber', 1)
             source = input_data.get('source', 'unknown')

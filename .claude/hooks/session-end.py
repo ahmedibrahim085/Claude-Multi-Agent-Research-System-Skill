@@ -33,7 +33,8 @@ def main():
     if current_skill and not current_skill.get('endTime'):
         # Force end on session termination
         try:
-            timestamp = datetime.now(datetime.UTC).isoformat()
+            from datetime import timezone
+            timestamp = datetime.now(timezone.utc).isoformat()
             reason = data.get('reason', 'unknown')
             ended_skill = state_manager.end_current_skill(timestamp, 'SessionEnd')
 
