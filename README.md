@@ -2,27 +2,34 @@
 
 **Orchestrated multi-agent research with architectural enforcement, parallel execution, and comprehensive audit trails.**
 
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill/releases)
+[![Version](https://img.shields.io/badge/version-2.2.1-blue.svg)](https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 ---
 
-## 🎉 New in v2.2.0: Planning Skill
+## 🎉 v2.2.x: Dual-Skill Orchestration Platform
 
-This release adds a **second skill** for comprehensive project planning:
+A **dual-skill platform** with smart routing and compound request detection:
 
 | Skill | Purpose | Agents |
 |-------|---------|--------|
 | **multi-agent-researcher** | Comprehensive topic investigation | researcher, report-writer |
 | **spec-workflow-orchestrator** | Planning from ideation to dev-ready specs | spec-analyst, spec-architect, spec-planner |
 
-**Quick Example**:
+**Key Features**:
+- **Smart Compound Detection** - When prompts trigger both skills, asks for clarification
+- **148 Trigger Keywords** - Automatic skill routing via hook
+- **Quality Gates** - 85% threshold with max 3 iterations
+
+**Quick Examples**:
 ```
-plan a task management PWA with offline support
+research quantum computing fundamentals     → multi-agent-researcher
+plan a task management PWA with offline     → spec-workflow-orchestrator
+research auth methods and build login page  → asks which skill to use
 ```
 
-See [Planning Workflow](#planning-workflow-new-in-v220) section and [CHANGELOG.md](CHANGELOG.md) for details.
+See [Planning Workflow](#planning-workflow-new-in-v220) and [CHANGELOG.md](CHANGELOG.md) for details.
 
 ---
 
@@ -408,8 +415,9 @@ The project includes a comprehensive test suite following a 3-layer architecture
 
 | Layer | Tests | Purpose |
 |-------|-------|---------|
-| Infrastructure | ~166 | Hook behavior, utilities, state management |
-| Behavior | ~57 | Agent structure, deliverable format, ADR compliance |
+| Infrastructure | 158 | Hook behavior (148), utilities (10) |
+| Behavior | 22 | Agent structure, file validation |
+| Integration | Manual | Deliverable format, ADR compliance (require skill output) |
 | Quality | Manual | Human evaluation of content quality |
 
 ### Running Tests
@@ -436,7 +444,7 @@ See [tests/TEST_ARCHITECTURE.md](tests/TEST_ARCHITECTURE.md) for detailed docume
 - What can vs cannot be automated
 - Manual test evidence documentation
 
-**Total: ~223 automated tests**
+**Total: 180 automated tests** (run without user input)
 
 ---
 
