@@ -167,6 +167,85 @@ def check_patterns(prompt: str, patterns: list) -> list:
     return matched
 
 
+# =============================================================================
+# HELPER FUNCTIONS FOR COMPOUND DETECTION
+# =============================================================================
+
+def check_negation(prompt: str, skill_type: str) -> bool:
+    """
+    Check if the prompt contains negation for a specific skill.
+
+    Args:
+        prompt: User's input prompt
+        skill_type: 'research' or 'planning'
+
+    Returns:
+        True if negation detected (skill should NOT be triggered)
+    """
+    patterns = NEGATION_PATTERNS.get(skill_type, [])
+    for pattern in patterns:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                if DEBUG:
+                    print(f"DEBUG: Negation detected for {skill_type}: {pattern}", file=sys.stderr)
+                return True
+        except re.error:
+            continue
+    return False
+
+
+def check_compound_noun(prompt: str) -> bool:
+    """
+    Check if prompt contains a compound noun that looks like a TRUE compound.
+
+    Example: "Build a search and analysis tool" - NOT a true compound
+
+    Returns:
+        True if compound noun detected (should NOT be treated as TRUE compound)
+    """
+    for pattern in COMPOUND_NOUN_PATTERNS:
+        try:
+            if re.search(pattern, prompt, re.IGNORECASE):
+                if DEBUG:
+                    print(f"DEBUG: Compound noun detected: {pattern}", file=sys.stderr)
+                return True
+        except re.error:
+            continue
+    return False
+
+
+def is_agent_noun_only(prompt: str, keyword: str) -> bool:
+    """
+    Check if a keyword appears only as part of an agent noun.
+
+    Example: "researcher" contains "research" but is a noun, not action.
+
+    Args:
+        prompt: User's input prompt
+        keyword: The keyword to check
+
+    Returns:
+        True if keyword only appears in agent noun context
+    """
+    prompt_lower = prompt.lower()
+    keyword_lower = keyword.lower()
+
+    # Check if keyword appears as standalone word (word boundary)
+    standalone_pattern = r'\b' + re.escape(keyword_lower) + r'\b'
+    standalone_matches = re.findall(standalone_pattern, prompt_lower)
+
+    # Check if keyword appears in agent nouns
+    agent_noun_count = 0
+    for agent_noun in AGENT_NOUN_EXCLUSIONS:
+        if agent_noun.lower() in prompt_lower:
+            # Check if this agent noun contains our keyword
+            if keyword_lower in agent_noun.lower():
+                agent_noun_count += prompt_lower.count(agent_noun.lower())
+
+    # If all occurrences are within agent nouns, it's agent noun only
+    return len(standalone_matches) <= agent_noun_count
+
+
 def detect_skill_triggers(prompt: str, skill_rules: dict) -> dict:
     """
     Detect which skills should be triggered based on the prompt
