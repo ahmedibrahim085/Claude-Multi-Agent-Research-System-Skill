@@ -2,7 +2,7 @@
 
 **Orchestrated multi-agent research with architectural enforcement, parallel execution, and comprehensive audit trails.**
 
-[![Version](https://img.shields.io/badge/version-2.2.1-blue.svg)](https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill/releases)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 

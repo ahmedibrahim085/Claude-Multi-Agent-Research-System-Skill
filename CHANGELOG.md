@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.0] - 2025-11-25
+
+### ✨ Added
+
+#### Skill Orchestrator Logging & Tracking
+
+Session-aware tracking for the dual-skill platform.
+
+**New State Architecture:**
+- `logs/state/current.json` - Active skill pointer (~100 bytes, never grows)
+- `logs/session_*_state.json` - Per-session skill invocations history
+
+**Why Split?** Claude Code's Read tool has 25K token limit. Single file would fail at ~359 skill invocations.
+
+**Tracked Data:**
+- `currentSkill`: Which skill is active (multi-agent-researcher or spec-workflow-orchestrator)
+- `skillInvocations[]`: All skill activations per session (both skills)
+- Start/end times, duration, trigger source
+
+**Enables:**
+- Skill routing (prevent concurrent conflicting skills)
+- Session restoration (resume interrupted workflows)
+- Audit trail (track all skill usage)
+
+### 🔧 Changed
+
+- Moved state directory from `.claude/state/` to `logs/state/` (Claude Code best practices)
+- Updated hooks to write skill history to per-session state files
+- Enhanced README with dual-skill state architecture documentation
+
+### 🐛 Fixed
+
+- Python 3.9 compatibility: `timezone.utc` instead of `datetime.UTC`
+
+---
+
 ## [2.2.0] - 2025-11-23
 
 ### 🎉 New Feature: Spec-Workflow-Orchestrator Skill
