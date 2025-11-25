@@ -77,7 +77,7 @@ allowed-tools: Task, Read, Glob, TodoWrite
 ### 2. State Tracking System (Layer 4)
 
 **Files**:
-- `.claude/state/research-workflow-state.json` - Root state
+- `logs/state/research-workflow-state.json` - Root state
 - `.claude/utils/state-manager.ts` - State operations
 - `.claude/validation/quality-gates.ts` - Gate validators
 
@@ -166,7 +166,7 @@ Remediation:
 - Check state.json for details
 
 Audit Trail:
-Logged to: .claude/state/research-workflow-state.json
+Logged to: logs/state/research-workflow-state.json
 ```
 
 ### 5. Session Persistence (Bonus Feature)
@@ -236,7 +236,7 @@ npm install -g ts-node
 
 **Test state tracking**:
 - Complete research workflow
-- Check: `.claude/state/research-workflow-state.json`
+- Check: `logs/state/research-workflow-state.json`
 - **Expected**: All phases logged with agent assignments
 
 ## Reliability Analysis
@@ -263,7 +263,7 @@ npm install -g ts-node
 - Skill not activating when expected
 
 **Mitigation**:
-- Monitor `.claude/state/research-workflow-state.json` for violations
+- Monitor `logs/state/research-workflow-state.json` for violations
 - Quality gates catch and log all bypasses
 - Continuous improvement based on logged violations
 
@@ -284,7 +284,7 @@ npm install -g ts-node
 
 **Resolution**:
 - Violation is logged for analysis
-- Review `.claude/state/research-workflow-state.json`
+- Review `logs/state/research-workflow-state.json`
 - Check `qualityGates.synthesis.validation` for details
 - Process improvement: Update enforcement layers
 
@@ -302,15 +302,15 @@ See: `.claude/hooks/HOOKS_SETUP.md`
 **Recovery**:
 ```bash
 # Backup current state
-cp .claude/state/research-workflow-state.json .claude/state/backup.json
+cp logs/state/research-workflow-state.json logs/state/backup.json
 
 # Reset to initial state
-echo '{"version":"1.0","currentResearch":null,"sessions":[]}' > .claude/state/research-workflow-state.json
+echo '{"version":"1.0","currentResearch":null,"sessions":[]}' > logs/state/research-workflow-state.json
 ```
 
 **Prevention**:
 - State manager uses atomic writes with backup
-- Backups kept in `.claude/state/*.backup.*`
+- Backups kept in `logs/state/*.backup.*`
 - Restore from most recent backup if needed
 
 ## Metrics and Monitoring
@@ -326,13 +326,13 @@ echo '{"version":"1.0","currentResearch":null,"sessions":[]}' > .claude/state/re
 
 ```bash
 # View state file
-cat .claude/state/research-workflow-state.json | jq .
+cat logs/state/research-workflow-state.json | jq .
 
 # Count total sessions
-cat .claude/state/research-workflow-state.json | jq '.sessions | length'
+cat logs/state/research-workflow-state.json | jq '.sessions | length'
 
 # Find violations
-cat .claude/state/research-workflow-state.json | jq '.sessions[] | select(.qualityGates.synthesis.status == "failed")'
+cat logs/state/research-workflow-state.json | jq '.sessions[] | select(.qualityGates.synthesis.status == "failed")'
 ```
 
 ## Future Enhancements

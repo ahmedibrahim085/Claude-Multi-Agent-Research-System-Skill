@@ -87,7 +87,7 @@ def load_config() -> Dict[str, Any]:
             "research_notes": "files/research_notes",
             "reports": "files/reports",
             "logs": "logs",
-            "state": ".claude/state"
+            "state": "logs/state"
         },
         "logging": {
             "enabled": True,

@@ -1,11 +1,11 @@
 #!/bin/bash
 # Workflow state management for spec-workflow-orchestrator
-# Manages state file: .claude/state/spec-workflow-state.json
+# Manages state file: logs/state/spec-workflow-state.json
 
 set -euo pipefail
 
-STATE_FILE=".claude/state/spec-workflow-state.json"
-STATE_DIR=".claude/state"
+STATE_FILE="logs/state/spec-workflow-state.json"
+STATE_DIR="logs/state"
 
 # Ensure state directory exists
 mkdir -p "$STATE_DIR"

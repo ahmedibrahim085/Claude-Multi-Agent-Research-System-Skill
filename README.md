@@ -2,7 +2,7 @@
 
 **Orchestrated multi-agent research with architectural enforcement, parallel execution, and comprehensive audit trails.**
 
-[![Version](https://img.shields.io/badge/version-2.2.1-blue.svg)](https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill/releases)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
@@ -106,7 +106,7 @@ research quantum computing fundamentals
 
 **Expected output**:
 ```
-📝 Session logs initialized: logs/session_YYYYMMDD_HHMMSS_{transcript.txt,tool_calls.jsonl}
+📝 Session logs initialized: logs/session_YYYYMMDD_HHMMSS_{transcript.txt,tool_calls.jsonl,state.json}
 
 # Research Complete: Quantum Computing Fundamentals
 
@@ -491,7 +491,9 @@ See [tests/TEST_ARCHITECTURE.md](tests/TEST_ARCHITECTURE.md) for detailed docume
 ├── docs/
 │   ├── projects/                  # Planning outputs (v2.2.0)
 │   └── adrs/                      # Architecture Decision Records (v2.2.0)
-├── logs/                          # Session transcripts
+├── logs/                          # Session logs + state
+│   ├── session_*_{transcript,tool_calls,state}.*
+│   └── state/current.json         # Active skill pointer
 └── setup.py                       # Interactive setup script
 ```
 
@@ -517,7 +519,8 @@ Complete reference of all files and their roles:
 | `.claude/settings.local.json` | User-specific overrides (gitignored, optional) | Settings | Optional |
 | **Configuration & State** | | | |
 | `.claude/config.json` | Paths, logging settings, research parameters | Config | Customize |
-| `.claude/state/research-workflow-state.json` | Tracks current research session state (phases, outputs) | State | Auto-Generated |
+| `logs/state/current.json` | Active skill pointer for dual-skill routing (~100 bytes) | State | Auto-Generated |
+| `logs/session_*_state.json` | Per-session history: skill invocations (both skills) | State | Auto-Generated |
 | `.claude/skills/skill-rules.json` | Trigger patterns for skill activation | Config | View |
 | **Data Outputs** | | | |
 | `files/research_notes/*.md` | Individual researcher findings (one file per subtopic) | Research Data | Auto-Generated |
@@ -527,6 +530,7 @@ Complete reference of all files and their roles:
 | **Logs & Audit Trail** | | | |
 | `logs/session_*_transcript.txt` | Human-readable session log with agent identification | Log | Auto-Generated |
 | `logs/session_*_tool_calls.jsonl` | Structured JSON log for programmatic analysis | Log | Auto-Generated |
+| `logs/session_*_state.json` | Session skill invocations and research sessions | Log | Auto-Generated |
 | **Utilities** | | | |
 | `setup.py` | Interactive configuration wizard for advanced customization | Setup Script | Run When Needed |
 | `.claude/utils/*.sh` | Production utilities for planning (v2.2.0) | Scripts | Run When Needed |
@@ -549,7 +553,7 @@ Configured in `.claude/config.json`:
     "research_notes": "files/research_notes",
     "reports": "files/reports",
     "logs": "logs",
-    "state": ".claude/state"
+    "state": "logs/state"
   },
   "logging": {
     "enabled": true,
@@ -642,28 +646,57 @@ When this skill is active, Claude can **only** use the listed tools<sup>[[4]](#r
 
 **Reliability**: ~95% (cannot be bypassed through prompt injection).
 
+From `.claude/skills/spec-workflow-orchestrator/SKILL.md`:
+
+```yaml
+---
+name: spec-workflow-orchestrator
+allowed-tools: Task, Read, Glob, TodoWrite, Write, Edit
+---
+```
+
+Spec skill **has Write access** - enforcement is via quality gates (85% threshold), not tool restriction. Orchestrator delegates to spec-analyst → spec-architect → spec-planner sequentially, validating each deliverable before proceeding.
+
 #### 2. Quality Gates
 
-Implemented in hooks (`post-tool-use-track-research.py`):
+**Research Skill** - Implemented in hooks:
 
 ```python
-# Pseudo-code representation
+# Detect orchestrator bypassing report-writer
 if synthesis_phase and tool == "Write" and agent == "orchestrator":
     violation = "Orchestrator attempted to write synthesis report"
     log_violation(violation)
-    # Report-writer agent should have been used
 ```
+
+**Spec Skill** - 85% threshold scoring (100 points total):
+
+| Criteria | Points | Applies To |
+|----------|--------|------------|
+| Completeness | 25 | All deliverables |
+| Technical Depth | 25 | Architecture, ADRs |
+| Actionability | 25 | Tasks, requirements |
+| Clarity | 25 | All deliverables |
+
+Max 3 iterations per agent. Below threshold → feedback loop → retry.
 
 #### 3. Session State Tracking
 
-Tracks workflow progression:
-- Decomposition complete?
-- All researchers spawned?
-- All research notes exist?
-- Report-writer spawned?
-- Synthesis complete?
+Tracks active skill and workflow progression for the **dual-skill platform**.
 
-Stored in `.claude/state/research-workflow-state.json`.
+**Current State** (`logs/state/current.json` ~100 bytes):
+- `currentSkill`: Which skill is active (multi-agent-researcher **or** spec-workflow-orchestrator)
+- `currentResearch`: Active research session details (if research skill)
+
+**Session History** (`logs/session_*_state.json`):
+- `skillInvocations[]`: All skill activations this session (both skills)
+- `researchSessions[]`: Completed research sessions
+
+**Enables**:
+- **Routing**: Hooks check `currentSkill` before activating another skill
+- **Restoration**: Resume interrupted workflows (either skill)
+- **Audit**: Track all skill usage across sessions
+
+**Why Split Architecture?** Claude Code's Read tool has 25K token limit. A single persistent file would fail at ~359 skill invocations. Split keeps `current.json` tiny (~100 bytes) while session files are bounded per-session.
 
 ### Hooks Architecture
 
@@ -742,10 +775,11 @@ Our hooks are registered in `.claude/settings.json`:
        log_violation(violation)
    ```
 
-4. **Phase Tracking**
-   - Updates `.claude/state/research-workflow-state.json`
-   - Tracks: decomposition → research → synthesis → delivery
-   - Records outputs (research note paths, report path)
+4. **Skill & Phase Tracking**
+   - Updates `logs/state/current.json` with active skill
+   - Writes completed skills to `logs/session_*_state.json`
+   - **Research**: decomposition → parallel research → synthesis → delivery
+   - **Planning**: analyze → architect → plan → validate (quality gate)
 
 **Example log entry**:
 ```
@@ -767,22 +801,22 @@ Our hooks are registered in `.claude/settings.json`:
    create_directory("files/research_notes/")
    create_directory("files/reports/")
    create_directory("logs/")
-   create_directory(".claude/state/")
+   create_directory("logs/state/")
    ```
 
 2. **Session Initialization**
    - Generates unique session ID (e.g., `session_20251118_105714`)
-   - Creates new log files (`transcript.txt`, `tool_calls.jsonl`)
+   - Creates log files (`transcript.txt`, `tool_calls.jsonl`, `state.json`)
    - Displays setup status to user
 
 3. **Session Restoration** (if previous session was interrupted)
-   - Reads `.claude/state/research-workflow-state.json`
-   - Checks if research was incomplete
+   - Reads `logs/state/current.json` for active skill
+   - Detects incomplete research **or** planning workflows
    - Offers to resume or start fresh
 
 **Example output**:
 ```
-📝 Session logs initialized: logs/session_20251118_105714_{transcript.txt,tool_calls.jsonl}
+📝 Session logs initialized: logs/session_20251118_105714_{transcript.txt,tool_calls.jsonl,state.json}
 ✅ All directories exist
 ✅ Hooks configured correctly
 ```
@@ -848,6 +882,8 @@ All phases tracked ✅
 Audit trail complete ✅
 ```
 
+**Same pattern for Planning Skill**: Replace "research X" → "plan X", researchers → spec-analyst/architect/planner, report-writer → quality gate validation. State tracks `currentSkill: spec-workflow-orchestrator`.
+
 **Without hooks**: `allowed-tools` would prevent violations, but you'd have no logs, no tracking, no session management, no quality gate verification.
 
 **With hooks**: Complete observability + enforcement + automation.
@@ -858,8 +894,11 @@ Audit trail complete ✅
 
 ```
 logs/
-├── session_20251118_105714_transcript.txt       # Human-readable
-└── session_20251118_105714_tool_calls.jsonl    # Structured JSON
+├── session_20251118_105714_transcript.txt      # Human-readable
+├── session_20251118_105714_tool_calls.jsonl    # Structured JSON
+├── session_20251118_105714_state.json          # Session skill/research history
+└── state/
+    └── current.json                            # Active skill pointer (~100 bytes)
 ```
 
 **Benefits of flat structure**:

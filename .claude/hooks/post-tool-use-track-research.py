@@ -63,6 +63,33 @@ def main():
         print(f"Failed to log tool call: {e}", file=sys.stderr)
         # Continue execution even if logging fails
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SKILL INVOCATION TRACKING (Non-Destructive Extension)
+    # ═══════════════════════════════════════════════════════════════════════════
+    if tool_name == 'Skill':
+        skill_name = tool_input.get('skill')
+        if skill_name:
+            try:
+                from datetime import timezone
+                timestamp = session_logger.datetime.now(timezone.utc).isoformat()
+                current_skill = state_manager.get_current_skill()
+
+                # Check if re-invocation
+                if current_skill and current_skill.get('name') == skill_name and not current_skill.get('endTime'):
+                    invocation_num = current_skill.get('invocationNumber', 1) + 1
+                    print(f"🔄 SKILL RE-INVOKED: {skill_name} (invocation #{invocation_num})", flush=True)
+                else:
+                    print(f"🎯 SKILL START: {skill_name} (invocation #1)", flush=True)
+
+                # Set current skill (returns ended skill if one was active)
+                ended_skill = state_manager.set_current_skill(skill_name, timestamp)
+
+                # Write ended skill to session state file (historical data)
+                if ended_skill:
+                    session_logger.append_skill_invocation(session_id, ended_skill)
+            except Exception as e:
+                print(f"Failed to track skill invocation: {e}", file=sys.stderr)
+
     # Early exit for non-Write operations (rest of hook is Write-specific tracking)
     if tool_name != 'Write':
         sys.exit(0)
@@ -166,11 +193,11 @@ the specialized report-writer agent, not the orchestrator.
 **Remediation**:
 1. Verify multi-agent-researcher skill v2.0.0+ is active
 2. Confirm allowed-tools excludes Write tool
-3. Check .claude/state/research-workflow-state.json for details
+3. Check logs/state/research-workflow-state.json for details
 4. Review quality gate validation in state.qualityGates.synthesis
 
 **Audit Trail**:
-All details logged to: .claude/state/research-workflow-state.json
+All details logged to: logs/state/research-workflow-state.json
 Session ID: {session['id']}
 Violation timestamp: {session_logger.datetime.now().isoformat()}
 

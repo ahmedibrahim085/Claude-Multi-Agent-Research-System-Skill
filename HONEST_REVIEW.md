@@ -77,7 +77,7 @@ Set workflow mode to `refinement`.
 - What if orchestrator spawns as subprocess?
 
 **What's needed**:
-- State file: `.claude/state/spec-workflow-state.json`
+- State file: `logs/state/spec-workflow-state.json`
 - State structure: `{ "project": "...", "mode": "fresh|refinement", "timestamp": "..." }`
 - Read/write utilities
 

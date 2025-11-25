@@ -1,14 +1,12 @@
 # User-specific settings (DO NOT commit)
 .claude/settings.local.json
 
-# Session logs (runtime-generated) - keep structure, ignore contents
+# Session logs and state files (runtime-generated) - keep structure, ignore contents
 logs/*
 !logs/.gitkeep
-.claude/utils/logs/
 *.log
 
-# State files (contain session data)
-.claude/state/
+# Note: State files now in logs/state/ (covered by logs/* above)
 
 # User-generated research artifacts
 files/research_notes/*.md

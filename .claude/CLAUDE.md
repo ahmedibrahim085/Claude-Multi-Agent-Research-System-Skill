@@ -327,11 +327,13 @@ This project uses several **custom** files that are NOT part of official Claude 
 }
 ```
 
-### .claude/state/
+### logs/state/
 **Purpose**: Runtime state management directory (gitignored)
 **Content**: Session state, workflow progress tracking
 **Files**:
 - `research-workflow-state.json`: Tracks active research sessions
+- `spec-workflow-state.json`: Tracks active planning sessions
+**Note**: Moved from `.claude/state/` to follow Claude Code best practices
 
 ### .claude/utils/
 **Purpose**: Python utility modules for hooks and validation
@@ -387,11 +389,11 @@ This project uses several **custom** files that are NOT part of official Claude 
 
 **Custom project files** (project-specific):
 - 🔧 `.claude/config.json` - Custom paths configuration
-- 🔧 `.claude/state/` - Runtime state directory
 - 🔧 `.claude/utils/` - Python utility modules
 - 🔧 `.claude/validation/` - Quality gate logic
 - 🔧 `.claude/workflows/` - Workflow definitions
 - 🔧 `.claude/skills/skill-rules.json` - Custom trigger rules
+- 🔧 `logs/state/` - Runtime state directory (following best practices)
 
 **Note**: Custom files enable advanced features but are not required for basic Claude Code usage.
 
