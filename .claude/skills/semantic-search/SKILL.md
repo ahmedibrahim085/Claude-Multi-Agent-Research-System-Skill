@@ -8,6 +8,7 @@ description: >
   unfamiliar codebases, finding similar implementations, or locating functionality across multiple files.
   NOT for simple keyword searches (use Grep) or finding files by name (use Glob). Provides indexing, searching,
   status checking, and similarity finding capabilities.
+allowed-tools: Bash, Read, Glob, Grep
 ---
 
 # Semantic Search Skill
@@ -15,6 +16,29 @@ description: >
 **Bash Orchestrators for Semantic Intelligence**
 
 This skill provides bash scripts that orchestrate the claude-context-local MCP server's CodeSearchServer class. Each script calls Python methods directly using the venv Python interpreter, enabling semantic search, indexing, and similarity finding across any text content (code, docs, markdown, configs). Unlike traditional text-based search (Grep) or pattern matching (Glob), semantic search understands the **meaning** of content, finding functionally similar text even when using different wording, variable names, or patterns.
+
+## 🎬 Orchestration Instructions
+
+**When this skill is active, you MUST:**
+
+1. **For Indexing Operations**: Run `scripts/index` bash script with appropriate arguments
+2. **For Search Operations**: Run `scripts/search` bash script with natural language query
+3. **For Status Checks**: Run `scripts/status` or `scripts/list-projects` bash scripts
+4. **For Similarity Finding**: Run `scripts/find-similar` bash script with chunk_id
+
+**Example Orchestration Pattern**:
+```bash
+# When user asks to search for authentication:
+scripts/search --query "user authentication and credential verification" --k 10 --project /path/to/project
+
+# When user asks to reindex:
+scripts/index /path/to/project --full
+
+# When user asks what's indexed:
+scripts/list-projects
+```
+
+**DO NOT**: Run these scripts outside of skill context - always invoke skill first, then run scripts.
 
 ## 🎯 When to Use This Skill
 
