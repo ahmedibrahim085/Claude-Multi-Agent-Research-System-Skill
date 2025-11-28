@@ -1,26 +1,5 @@
 # Project Instructions for anthropic_research
 
-## CRITICAL: Search Hierarchy Rules
-
-### ALWAYS Search Within This Project Using semantic-search Skill
-
-**When searching for ANYTHING within this project codebase:**
-
-1. **FIRST**: Use semantic-search skill by activating it with `/skill semantic-search`
-2. **THEN**: Let the skill run its scripts to search
-3. **ONLY IF**: Skill fails or index doesn't exist, fallback to Grep/Glob
-
-**NEVER run bash scripts directly** - Always use the skill to orchestrate the search.
-
-**Examples:**
-- ❌ WRONG: `bash ~/.claude/skills/semantic-search/scripts/search --query "..."`
-- ✅ CORRECT: Activate skill, let skill handle the search operation
-
-**Why This Matters:**
-- Skills are designed to orchestrate operations
-- Direct bash usage bypasses the skill's intended workflow
-- Maintains consistency with other skills (multi-agent-researcher, spec-workflow-orchestrator)
-
 ---
 
 ## CRITICAL: Research Orchestration Rules
@@ -321,10 +300,10 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 **MANDATORY Workflow**:
 1. **STOP** - Do NOT use Grep/Glob for functionality-based searches
-2. **VERIFY**: Check if index exists using `list-projects` or `status` scripts
-3. **INVOKE**: Use bash scripts from `.claude/skills/semantic-search/scripts/`
-4. **SEARCH**: Start with `search` script using natural language query
-5. **NARROW**: Optionally use `find-similar` script to discover related content
+2. **INVOKE**: Activate skill, skill runs bash scripts internally
+3. **SEARCH**: Skill executes search script with natural language query
+4. **RESULTS**: Skill returns search results
+5. **DELIVER**: Present results to user
 
 ### Direct Tool Use vs Semantic Search
 
@@ -353,10 +332,15 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
    → I run 20 Grep searches guessing function names: `"login"`, `"auth"`, `"authenticate"`, `"verify"`
    → Results are incomplete because actual code uses `"validateCredentials"` and `"checkUserSession"`
 
+❌ **ALSO WRONG**: User asks "how does authentication work?"
+   → I run bash scripts directly: `~/.claude/skills/semantic-search/scripts/search --query "..."`
+   → Bypasses skill orchestration pattern
+
 ✅ **CORRECT**: User asks "how does authentication work in this codebase?"
-   → I check index status with `scripts/list-projects` or `scripts/status`
-   → I run semantic search: `scripts/search --query "user authentication and credential verification" --k 10`
-   → Results include ALL relevant content regardless of naming: `validateCredentials()`, `checkUserSession()`, `verifyJWT()`, etc.
+   → I invoke semantic-search skill
+   → Skill runs search script internally with query "user authentication and credential verification"
+   → Skill returns results with ALL relevant content: `validateCredentials()`, `checkUserSession()`, `verifyJWT()`, etc.
+   → I deliver results to user
 
 ### Self-Check Before Acting
 
