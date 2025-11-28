@@ -53,3 +53,6 @@ node_modules/
 
 # MCP Server - Code Search Index (project-local, regenerated per developer)
 .code-search-index/
+
+# Design artifacts (working documents, not for public commit)
+docs/design-docs/
