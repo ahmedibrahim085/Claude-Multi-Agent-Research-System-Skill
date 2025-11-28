@@ -10,6 +10,8 @@ __pycache__/
 .coverage
 htmlcov/
 *.pyc
+.benchmarks/
+logs/
 
 # IDE
 .vscode/
