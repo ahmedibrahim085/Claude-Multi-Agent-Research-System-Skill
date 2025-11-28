@@ -291,19 +291,23 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 ### ALWAYS Use semantic-search Skill When:
 
-**Trigger Keywords in User Prompt**:
-- **Understanding Code**: "how does this work", "how is X implemented", "where is Y handled", "explain the code for", "understand the implementation"
-- **Functionality Search**: "find code that does X", "locate functionality for", "where is the logic for", "show me implementations of"
-- **Pattern Discovery**: "find similar code", "find other implementations", "discover patterns", "identify all instances of"
-- **Cross-Reference**: "where else is this used", "find related code", "show all references"
-- **Without Keywords**: User describes functionality but doesn't know exact variable/function names
+**Trigger Keywords - When I Need To**:
+- **Search/Find**: "search", "find", "locate", "look for", "discover", "where is", "show me"
+- **Understanding**: "how does this work", "how is X implemented", "where is Y handled", "explain the code for"
+- **Similarity**: "find similar", "similar to", "like this", "related to", "find other implementations"
+- **Patterns**: "discover patterns", "identify instances", "all occurrences of"
+- **Cross-Reference**: "where else", "find related", "show all references", "used by"
+
+**ABSOLUTE PROHIBITION**:
+- ❌ NEVER run `~/.claude/skills/semantic-search/scripts/*` yourself
+- ❌ NEVER use Grep/Glob as first attempt for functionality searches
+- ❌ NEVER search the codebase yourself without trying skill first
 
 **MANDATORY Workflow**:
-1. **STOP** - Do NOT use Grep/Glob for functionality-based searches
-2. **INVOKE**: Activate skill, skill runs bash scripts internally
-3. **SEARCH**: Skill executes search script with natural language query
-4. **RESULTS**: Skill returns search results
-5. **DELIVER**: Present results to user
+1. **STOP** - Do NOT use Grep/Glob/bash scripts directly
+2. **INVOKE**: Use semantic-search skill FIRST
+3. **ONLY IF SKILL FAILS**: Then fallback to Grep/Glob
+4. **NEVER SKIP**: Always try skill before doing it yourself
 
 ### Direct Tool Use vs Semantic Search
 
@@ -328,27 +332,36 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 ### Example Violations to AVOID
 
-❌ **WRONG**: User asks "how does authentication work in this codebase?"
-   → I run 20 Grep searches guessing function names: `"login"`, `"auth"`, `"authenticate"`, `"verify"`
-   → Results are incomplete because actual code uses `"validateCredentials"` and `"checkUserSession"`
+❌ **WRONG #1**: User asks "how does authentication work in this codebase?"
+   → I run 20 Grep searches myself: `"login"`, `"auth"`, `"authenticate"`, `"verify"`
+   → VIOLATION: Did the work myself instead of using skill
 
-❌ **ALSO WRONG**: User asks "how does authentication work?"
-   → I run bash scripts directly: `~/.claude/skills/semantic-search/scripts/search --query "..."`
-   → Bypasses skill orchestration pattern
+❌ **WRONG #2**: User asks "find the orchestrator pattern"
+   → I run: `~/.claude/skills/semantic-search/scripts/search --query "..."`
+   → VIOLATION: Ran bash scripts directly instead of using skill
+
+❌ **WRONG #3**: I need to find error handling code
+   → I use Grep without trying skill first
+   → VIOLATION: Didn't try semantic-search skill first
 
 ✅ **CORRECT**: User asks "how does authentication work in this codebase?"
    → I invoke semantic-search skill
-   → Skill runs search script internally with query "user authentication and credential verification"
-   → Skill returns results with ALL relevant content: `validateCredentials()`, `checkUserSession()`, `verifyJWT()`, etc.
+   → Skill handles everything internally
+   → Skill returns results
    → I deliver results to user
+
+✅ **ALSO CORRECT**: I need to find authentication code
+   → I invoke semantic-search skill first
+   → If skill fails, THEN I use Grep/Glob
+   → Always try skill before doing it myself
 
 ### Self-Check Before Acting
 
-**Before using Grep/Glob for code discovery, ask yourself**:
-1. Do I know the exact variable/function name? → No? Use semantic search
-2. Am I searching by functionality description? → Yes? Use semantic search
-3. Would this require guessing naming conventions? → Yes? Use semantic search
-4. Am I in an unfamiliar codebase? → Yes? Use semantic search
+**Before searching/finding ANYTHING in this project, ask yourself**:
+1. Did I try semantic-search skill? → NO? STOP and use skill first
+2. Did the skill fail? → NO? Then don't do it yourself
+3. Am I about to run Grep/Glob/bash? → YES? STOP and use skill first
+4. Do I need to search/find/locate anything? → YES? Use semantic-search skill first
 
 ### Prerequisites
 
