@@ -219,7 +219,7 @@ For detailed guidance, see the `references/` directory:
 3. **Testability**: Scripts can be unit tested independently of MCP server state.
 4. **Stability**: Script API remains stable even if MCP server internals change.
 
-See `README.md` for full architectural decisions and API stability policy.
+See `references/api-stability.md` for API stability policy and script versioning guarantees.
 
 ## 📝 Notes
 
