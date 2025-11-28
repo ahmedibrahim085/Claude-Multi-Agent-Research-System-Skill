@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Orchestrator for search - calls MCP server method directly
+
+VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
+export PYTHONPATH="$HOME/.local/share/claude-context-local"
+
+cd "$HOME/.local/share/claude-context-local"
+
+# Call the server's search_code method directly
+"$VENV_PYTHON" -c "
+import sys
+import json
+from mcp_server.code_search_server import CodeSearchServer
+
+# Parse arguments
+query = None
+k = 5
+project_path = None
+
+i = 1
+while i < len(sys.argv):
+    if sys.argv[i] == '--query':
+        query = sys.argv[i+1]
+        i += 2
+    elif sys.argv[i] == '--k':
+        k = int(sys.argv[i+1])
+        i += 2
+    elif sys.argv[i] == '--project':
+        project_path = sys.argv[i+1]
+        i += 2
+    else:
+        i += 1
+
+if not query:
+    print('Usage: search --query \"your query\" [--k NUM] [--project PATH]', file=sys.stderr)
+    sys.exit(1)
+
+# Create server and search
+server = CodeSearchServer()
+if project_path:
+    server.switch_project(project_path)
+
+result = server.search_code(query, k=k)
+print(result)
+" "$@"

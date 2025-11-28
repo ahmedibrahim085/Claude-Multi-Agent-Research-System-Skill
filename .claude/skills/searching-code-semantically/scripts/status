@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Orchestrator for status - calls CodeSearchServer.get_index_status()
+
+VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
+export PYTHONPATH="$HOME/.local/share/claude-context-local"
+
+cd "$HOME/.local/share/claude-context-local"
+
+"$VENV_PYTHON" -c "
+import sys
+from mcp_server.code_search_server import CodeSearchServer
+
+# Parse project path if provided
+project_path = None
+if len(sys.argv) > 1 and sys.argv[1] == '--project':
+    project_path = sys.argv[2]
+
+server = CodeSearchServer()
+if project_path:
+    server.switch_project(project_path)
+
+result = server.get_index_status()
+print(result)
+" "$@"

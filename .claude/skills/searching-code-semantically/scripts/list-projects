@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Orchestrator for list-projects - calls CodeSearchServer.list_projects()
+
+VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
+export PYTHONPATH="$HOME/.local/share/claude-context-local"
+
+cd "$HOME/.local/share/claude-context-local"
+
+"$VENV_PYTHON" -c "
+from mcp_server.code_search_server import CodeSearchServer
+
+server = CodeSearchServer()
+result = server.list_projects()
+print(result)
+"

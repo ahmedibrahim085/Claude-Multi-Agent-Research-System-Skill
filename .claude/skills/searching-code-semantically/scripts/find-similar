@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Orchestrator for find-similar - calls CodeSearchServer.find_similar_code()
+
+VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
+export PYTHONPATH="$HOME/.local/share/claude-context-local"
+
+cd "$HOME/.local/share/claude-context-local"
+
+"$VENV_PYTHON" -c "
+import sys
+from mcp_server.code_search_server import CodeSearchServer
+
+# Parse arguments
+chunk_id = None
+k = 5
+project_path = None
+
+i = 1
+while i < len(sys.argv):
+    if sys.argv[i] == '--chunk-id':
+        chunk_id = sys.argv[i+1]
+        i += 2
+    elif sys.argv[i] == '--k':
+        k = int(sys.argv[i+1])
+        i += 2
+    elif sys.argv[i] == '--project':
+        project_path = sys.argv[i+1]
+        i += 2
+    else:
+        i += 1
+
+if not chunk_id:
+    print('Usage: find-similar --chunk-id \"chunk_id\" [--k NUM] [--project PATH]', file=sys.stderr)
+    sys.exit(1)
+
+server = CodeSearchServer()
+if project_path:
+    server.switch_project(project_path)
+
+result = server.find_similar_code(chunk_id, k=k)
+print(result)
+" "$@"

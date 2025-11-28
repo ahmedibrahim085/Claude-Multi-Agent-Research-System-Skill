@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Orchestrator for indexing - calls CodeSearchServer.index_directory()
+
+VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
+export PYTHONPATH="$HOME/.local/share/claude-context-local"
+
+cd "$HOME/.local/share/claude-context-local"
+
+"$VENV_PYTHON" -c "
+import sys
+from mcp_server.code_search_server import CodeSearchServer
+
+# Parse arguments
+directory = None
+project_name = None
+incremental = True
+
+i = 1
+while i < len(sys.argv):
+    if sys.argv[i] in ['-h', '--help']:
+        print('Usage: index DIRECTORY [--project-name NAME] [--full]')
+        print('')
+        print('Arguments:')
+        print('  DIRECTORY          Directory to index')
+        print('  --project-name     Project name (default: directory basename)')
+        print('  --full             Do full reindex (default: incremental)')
+        sys.exit(0)
+    elif sys.argv[i] == '--project-name':
+        project_name = sys.argv[i+1]
+        i += 2
+    elif sys.argv[i] == '--full':
+        incremental = False
+        i += 1
+    elif not directory:
+        directory = sys.argv[i]
+        i += 1
+    else:
+        i += 1
+
+if not directory:
+    print('Error: DIRECTORY argument required', file=sys.stderr)
+    print('Usage: index DIRECTORY [--project-name NAME] [--full]', file=sys.stderr)
+    sys.exit(1)
+
+server = CodeSearchServer()
+result = server.index_directory(directory, project_name=project_name, incremental=incremental)
+print(result)
+" "$@"

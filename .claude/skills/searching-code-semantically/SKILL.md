@@ -2,19 +2,19 @@
 name: searching-code-semantically
 description: >
   Semantic code search using natural language queries to find code by functionality rather than exact text matching.
-  Wraps the claude-context-local MCP server's intelligent search capabilities in lightweight Python scripts.
+  Orchestrates the claude-context-local MCP server's CodeSearchServer class via bash scripts that call Python methods directly.
   Use when searching for "how authentication works" or "error handling patterns" where Grep/Glob would require
   guessing exact variable names. Requires global installation of claude-context-local. Best for understanding
   unfamiliar codebases, finding similar implementations, or locating functionality across multiple files.
-  NOT for simple keyword searches (use Grep) or finding files by name (use Glob). Works by querying a
-  pre-built semantic index stored in .code-search-index/ directory.
+  NOT for simple keyword searches (use Grep) or finding files by name (use Glob). Provides indexing, searching,
+  status checking, and similarity finding capabilities.
 ---
 
 # Semantic Code Search Skill
 
-**Progressive Search from Keyword → Semantic → Similarity**
+**Bash Orchestrators for Semantic Code Intelligence**
 
-This skill enables semantic code search using natural language queries. Unlike traditional text-based search (Grep) or pattern matching (Glob), semantic search understands the **meaning** of code, finding functionally similar implementations even when they use different variable names, syntax, or patterns.
+This skill provides bash scripts that orchestrate the claude-context-local MCP server's CodeSearchServer class. Each script calls Python methods directly using the venv Python interpreter, enabling semantic code search, indexing, and similarity finding. Unlike traditional text-based search (Grep) or pattern matching (Glob), semantic search understands the **meaning** of code, finding functionally similar implementations even when they use different variable names, syntax, or patterns.
 
 ## 🎯 When to Use This Skill
 
@@ -72,65 +72,85 @@ Installation location:
 - **macOS/Linux**: `~/.local/share/claude-context-local`
 - **Windows**: `%LOCALAPPDATA%\claude-context-local`
 
-**Required: Pre-Built Index**
+**Index Creation**
 
-Before searching, the codebase must be indexed. This skill does NOT handle indexing (that's the MCP server's responsibility). Verify index exists:
+This skill provides an `index` script that creates and updates the semantic code index. The index is stored in `~/.claude_code_search/projects/{project_name}_{hash}/` and contains:
+- `code.index` - FAISS vector index
+- `metadata.db` - SQLite database with chunk metadata
+- `chunk_ids.pkl` - Chunk ID mappings
+- `stats.json` - Index statistics
 
-```bash
-# Check for index directory
-ls -la .code-search-index/
-
-# Expected: vector_store.db, file_mappings.json, metadata.json
-```
-
-If index doesn't exist, you must use the MCP server directly to create it (outside this skill).
+You can verify an index exists using the `status` script or the `list-projects` script.
 
 ## 🚀 Quick Start
 
-### Operation 1: Search by Natural Language Query
+### Operation 1: Index a Codebase
+
+**When to use**: Create or update the semantic index for a project
+
+```bash
+# Full index (recommended on first run or after major changes)
+scripts/index /path/to/project --full
+
+# Incremental index (faster, only processes changed files)
+scripts/index /path/to/project
+
+# Custom project name
+scripts/index /path/to/project --project-name my-project --full
+```
+
+**Output**: JSON with indexing statistics (files added/modified/removed, chunks indexed, time taken).
+
+### Operation 2: List Indexed Projects
+
+**When to use**: See all projects that have been indexed
+
+```bash
+scripts/list-projects
+```
+
+**Output**: JSON with array of projects including paths, hashes, creation dates, and index statistics.
+
+### Operation 3: Check Index Status
+
+**When to use**: Verify index exists and inspect statistics for a project
+
+```bash
+scripts/status --project /path/to/project
+```
+
+**Output**: JSON with index statistics (chunk count, embedding dimension, files indexed, top folders, chunk types).
+
+### Operation 4: Search by Natural Language Query
 
 **When to use**: Find code by describing what it does
 
 ```bash
 # Basic search (returns top 5 results)
-python scripts/search.py --query "user authentication logic"
+scripts/search --query "user authentication logic" --project /path/to/project
 
 # More results
-python scripts/search.py --query "error handling patterns" --k 10
+scripts/search --query "error handling patterns" --k 10 --project /path/to/project
 
-# Custom index location
-python scripts/search.py --query "database queries" --storage-dir /path/to/index
+# Search across all indexed projects (omit --project)
+scripts/search --query "database queries" --k 5
 ```
 
-**Output**: JSON with ranked results including file paths, line numbers, similarity scores, and code snippets.
+**Output**: JSON with ranked results including file paths, line numbers, kind, similarity scores, chunk IDs, and snippets.
 
-### Operation 2: Find Similar Code Chunks
+### Operation 5: Find Similar Code Chunks
 
 **When to use**: Discover code functionally similar to a reference chunk
 
 ```bash
-# Find similar implementations
-python scripts/find-similar.py --chunk-id "src/auth.py:45-67"
+# Find similar implementations (use chunk_id from search results)
+scripts/find-similar --chunk-id "src/auth.py:45-67:function:authenticate" --project /path/to/project
 
 # More results
-python scripts/find-similar.py --chunk-id "lib/utils.py:120-145" --k 10
+scripts/find-similar --chunk-id "lib/utils.py:120-145:method:retry" --k 10 --project /path/to/project
 ```
 
-**Output**: JSON with chunks ranked by semantic similarity to the reference.
-
-### Operation 3: Check Index Status
-
-**When to use**: Verify index exists and inspect statistics
-
-```bash
-# Default location (.code-search-index/)
-python scripts/status.py
-
-# Custom location
-python scripts/status.py --storage-dir /path/to/index
-```
-
-**Output**: JSON with index statistics (chunk count, file count, last updated, model info).
+**Output**: JSON with reference chunk and array of similar chunks ranked by semantic similarity.
 
 ## 📊 JSON Output Format
 
@@ -160,23 +180,39 @@ All scripts output standardized JSON:
 
 ## 🔄 Typical Workflow
 
-**Step 1: Verify Index Exists**
+**Step 1: Index the Codebase (One-Time Setup)**
 ```bash
-python scripts/status.py
+scripts/index /path/to/project --full
 ```
 
-**Step 2: Broad Semantic Search**
+**Step 2: Verify Index Status**
 ```bash
-python scripts/search.py --query "authentication methods" --k 10
+scripts/status --project /path/to/project
+# or
+scripts/list-projects
 ```
 
-**Step 3: Find Similar Implementations**
+**Step 3: Broad Semantic Search**
+```bash
+scripts/search --query "authentication methods" --k 10 --project /path/to/project
+```
+
+**Step 4: Find Similar Implementations**
 ```bash
 # Using chunk_id from search results
-python scripts/find-similar.py --chunk-id "src/auth/oauth.py:34-56"
+scripts/find-similar --chunk-id "src/auth/oauth.py:34-56:function:oauth_login" --project /path/to/project
 ```
 
-**Step 4: Narrow with Traditional Tools**
+**Step 5: Reindex After Changes**
+```bash
+# Incremental reindex (fast, only changed files)
+scripts/index /path/to/project
+
+# Full reindex (after major refactoring)
+scripts/index /path/to/project --full
+```
+
+**Step 6: Narrow with Traditional Tools**
 ```bash
 # After identifying relevant files, use Read/Grep for details
 ```
@@ -191,18 +227,28 @@ For detailed guidance, see the `references/` directory:
 
 ## ⚙️ Arguments Reference
 
-### search.py
-- `--query` (required): Natural language search query
-- `--k` (optional, default: 5): Number of results (5-50 recommended)
-- `--storage-dir` (optional, default: `.code-search-index`): Index directory path
+### index
+- `DIRECTORY` (required): Directory to index (positional argument)
+- `--project-name NAME` (optional): Custom project name (default: directory basename)
+- `--full` (optional): Do full reindex (default: incremental)
+- `-h, --help`: Show usage information
 
-### find-similar.py
-- `--chunk-id` (required): Reference chunk identifier from search results
-- `--k` (optional, default: 5): Number of similar chunks to return
-- `--storage-dir` (optional, default: `.code-search-index`): Index directory path
+### list-projects
+- No arguments required
+- Lists all indexed projects with statistics
 
-### status.py
-- `--storage-dir` (optional, default: `.code-search-index`): Index directory path
+### status
+- `--project PATH` (optional): Project path to check status for (default: current project or error)
+
+### search
+- `--query "QUERY"` (required): Natural language search query
+- `--k NUM` (optional, default: 5): Number of results (5-50 recommended)
+- `--project PATH` (optional): Project path to search in (default: all projects)
+
+### find-similar
+- `--chunk-id "CHUNK_ID"` (required): Reference chunk identifier from search results
+- `--k NUM` (optional, default: 5): Number of similar chunks to return
+- `--project PATH` (optional): Project path to search in (default: current project)
 
 ## 🎓 Learning Path
 
@@ -212,22 +258,38 @@ For detailed guidance, see the `references/` directory:
 
 ## 🔒 Design Rationale
 
-**Why Separate Scripts Instead of Direct MCP Usage?**
+**Why Bash Orchestrators Instead of Direct MCP Usage?**
 
-1. **Token Efficiency**: MCP server loads ~10k tokens. Scripts use progressive disclosure (30-50 tokens when inactive).
-2. **Composability**: Scripts output JSON, enabling shell pipelines and automation.
-3. **Testability**: Scripts can be unit tested independently of MCP server state.
-4. **Stability**: Script API remains stable even if MCP server internals change.
+1. **Simplicity**: Bash scripts call existing Python code directly - no reimplementation needed
+2. **Reusability**: Uses the same CodeSearchServer class that the MCP server uses
+3. **Auto-venv**: Scripts automatically use the correct venv Python interpreter
+4. **Token Efficiency**: Scripts are compact (~50 lines each) vs full MCP server integration
+5. **Composability**: Scripts output JSON, enabling shell pipelines and automation
+6. **Maintainability**: Changes to MCP server's CodeSearchServer are automatically available
 
-See `references/api-stability.md` for API stability policy and script versioning guarantees.
+**Orchestrator Pattern**
+
+Each bash script:
+1. Sets `VENV_PYTHON` to `~/.local/share/claude-context-local/.venv/bin/python`
+2. Sets `PYTHONPATH` for proper imports
+3. Changes to claude-context-local directory
+4. Calls CodeSearchServer methods via inline Python
+
+This pattern avoids code duplication while maintaining the benefits of thin wrapper scripts.
 
 ## 📝 Notes
 
-- Scripts use `pathlib.Path` for cross-platform compatibility (Windows/macOS/Linux)
-- All errors output JSON to stderr for programmatic error handling
-- Scripts follow Unix philosophy: do one thing well, compose via pipes
+- Scripts use the venv Python from claude-context-local installation
+- All errors are output from the MCP server's error handling
 - Chunk IDs are stable only within a single index build (reindexing may change IDs)
+- Index location: `~/.claude_code_search/projects/{project_name}_{hash}/`
+- Uses FAISS IndexFlatIP for semantic similarity search
+- Embedding model: google/embeddinggemma-300m (768 dimensions)
+
+## ⚠️ Known Issues
+
+**Auto-Reindexing Bug**: The MCP server has a bug in incremental auto-reindexing (triggered when index is >5 minutes old). This can cause "list index out of range" errors during search. Workaround: Run `scripts/index --full` before searching after long intervals.
 
 ---
 
-**Next Steps**: Read `references/effective-queries.md` to learn how to craft effective semantic search queries.
+**Next Steps**: Start by indexing your codebase with `scripts/index /path/to/project --full`, then explore with semantic search queries.
