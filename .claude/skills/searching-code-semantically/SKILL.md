@@ -1,4 +1,5 @@
 ---
+name: searching-code-semantically
 description: >
   Semantic code search using natural language queries to find code by functionality rather than exact text matching.
   Wraps the claude-context-local MCP server's intelligent search capabilities in lightweight Python scripts.
@@ -7,11 +8,6 @@ description: >
   unfamiliar codebases, finding similar implementations, or locating functionality across multiple files.
   NOT for simple keyword searches (use Grep) or finding files by name (use Glob). Works by querying a
   pre-built semantic index stored in .code-search-index/ directory.
-allowed-tools:
-  - Bash
-  - Read
-  - Glob
-  - Grep
 ---
 
 # Semantic Code Search Skill
