@@ -285,10 +285,116 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 ---
 
+## CRITICAL: Semantic Code Search Rules
+
+### ALWAYS Use searching-code-semantically Skill When:
+
+**Trigger Keywords in User Prompt**:
+- **Understanding Code**: "how does this work", "how is X implemented", "where is Y handled", "explain the code for", "understand the implementation"
+- **Functionality Search**: "find code that does X", "locate functionality for", "where is the logic for", "show me implementations of"
+- **Pattern Discovery**: "find similar code", "find other implementations", "discover patterns", "identify all instances of"
+- **Cross-Reference**: "where else is this used", "find related code", "show all references"
+- **Without Keywords**: User describes functionality but doesn't know exact variable/function names
+
+**MANDATORY Workflow**:
+1. **STOP** - Do NOT use Grep/Glob for functionality-based searches
+2. **VERIFY**: Check if index exists (`.code-search-index/`)
+3. **INVOKE**: Use scripts from `.claude/skills/searching-code-semantically/scripts/`
+4. **SEARCH**: Start with `search.py` using natural language query
+5. **NARROW**: Optionally use `find-similar.py` to discover related code
+
+### Direct Tool Use vs Semantic Search
+
+**Use Grep ONLY for**:
+- Exact string matching (e.g., `"import React"`)
+- Known variable/function names (e.g., `"getUserById"`)
+- Regex patterns (e.g., `"function.*export"`)
+- File content search with known keywords
+
+**Use Glob ONLY for**:
+- Finding files by name pattern (e.g., `"**/*.test.js"`)
+- Locating configuration files (e.g., `"**/config.yml"`)
+- File system navigation (e.g., `"src/components/**/*.tsx"`)
+
+**Use searching-code-semantically Skill for**:
+- Finding code by describing WHAT it does (not what it's named)
+- Searching for "authentication logic" (could be named anything)
+- Discovering patterns like "retry mechanisms" across codebase
+- Finding similar implementations
+- Understanding unfamiliar codebases
+- Cross-language searches (same concept, different syntax)
+
+### Example Violations to AVOID
+
+❌ **WRONG**: User asks "how does authentication work in this codebase?"
+   → I run 20 Grep searches guessing function names: `"login"`, `"auth"`, `"authenticate"`, `"verify"`
+   → Results are incomplete because actual code uses `"validateCredentials"` and `"checkUserSession"`
+
+✅ **CORRECT**: User asks "how does authentication work in this codebase?"
+   → I check if `.code-search-index/` exists
+   → I run semantic search: `python scripts/search.py --query "user authentication and credential verification"`
+   → Results include ALL relevant code regardless of naming: `validateCredentials()`, `checkUserSession()`, `verifyJWT()`, etc.
+
+### Self-Check Before Acting
+
+**Before using Grep/Glob for code discovery, ask yourself**:
+1. Do I know the exact variable/function name? → No? Use semantic search
+2. Am I searching by functionality description? → Yes? Use semantic search
+3. Would this require guessing naming conventions? → Yes? Use semantic search
+4. Am I in an unfamiliar codebase? → Yes? Use semantic search
+
+### Prerequisites
+
+**Required**:
+- Global installation: `~/.local/share/claude-context-local` (macOS/Linux) or `%LOCALAPPDATA%\claude-context-local` (Windows)
+- Pre-built index: `.code-search-index/` directory must exist in project root
+
+**If index missing**:
+- Inform user that semantic search requires pre-built index
+- User must create index using MCP server (outside this skill)
+- Fallback to Grep/Glob for keyword-based search
+
+### Usage Examples
+
+**Basic Search**:
+```bash
+python .claude/skills/searching-code-semantically/scripts/search.py --query "user authentication logic" --k 10
+```
+
+**Find Similar Code**:
+```bash
+# After getting chunk_id from search results
+python .claude/skills/searching-code-semantically/scripts/find-similar.py --chunk-id "src/auth.py:45-67" --k 5
+```
+
+**Check Index Status**:
+```bash
+python .claude/skills/searching-code-semantically/scripts/status.py
+```
+
+### Performance Guidelines
+
+- **Default k=5**: Fast, usually sufficient
+- **k=10-20**: Thorough search, moderate speed
+- **k>50**: Slow, use only when comprehensive coverage needed
+- **Index on SSD**: 5-10x faster than HDD
+
+### When NOT to Use
+
+**Do NOT use semantic search when**:
+- You know the exact file name (use Read)
+- You know the exact function/variable name (use Grep)
+- You want file patterns (use Glob)
+- Index doesn't exist and you need immediate results (use Grep/Glob)
+- Searching for exact strings like import statements (use Grep)
+
+---
+
 ## Available Skills
 
 - **multi-agent-researcher**: Orchestrates 2-4 parallel researchers for comprehensive topic investigation
 - **spec-workflow-orchestrator**: Orchestrates 3 sequential planning agents for development-ready specifications
+- **searching-code-semantically**: Semantic code search using natural language queries (wraps claude-context-local MCP server)
 
 ## Available Agents
 
