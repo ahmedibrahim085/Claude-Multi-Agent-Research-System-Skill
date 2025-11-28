@@ -13,7 +13,14 @@ from utils import setup, error_exit, success
 
 def main():
     """Execute semantic code search."""
-    IntelligentSearcher, _ = setup()
+    IntelligentSearcher, CodeIndexManager = setup()
+
+    # Import CodeEmbedder
+    import sys
+    from pathlib import Path
+    INSTALL_DIR = Path.home() / ".local" / "share" / "claude-context-local"
+    sys.path.insert(0, str(INSTALL_DIR))
+    from embeddings.embedder import CodeEmbedder
 
     parser = argparse.ArgumentParser(description="Search code semantically")
     parser.add_argument('--query', required=True, help='Natural language search query')
@@ -24,9 +31,23 @@ def main():
     args = parser.parse_args()
 
     try:
-        searcher = IntelligentSearcher(storage_dir=str(args.storage_dir))
+        # Create index manager and embedder
+        index_manager = CodeIndexManager(storage_dir=str(args.storage_dir))
+        embedder = CodeEmbedder()  # Uses default model
+
+        # Create searcher with required dependencies
+        searcher = IntelligentSearcher(index_manager=index_manager, embedder=embedder)
+
+        # Perform search
         results = searcher.search(query=args.query, k=args.k)
-        success(results)
+
+        # Format results for output
+        formatted_results = {
+            "query": args.query,
+            "k": args.k,
+            "results": results
+        }
+        success(formatted_results)
     except FileNotFoundError as e:
         error_exit("Index not found",
                    suggestion="Run indexing first or check storage-dir path",

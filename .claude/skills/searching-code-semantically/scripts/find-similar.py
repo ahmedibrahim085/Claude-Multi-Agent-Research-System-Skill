@@ -13,7 +13,14 @@ from utils import setup, error_exit, success
 
 def main():
     """Find similar code chunks by chunk ID."""
-    IntelligentSearcher, _ = setup()
+    IntelligentSearcher, CodeIndexManager = setup()
+
+    # Import CodeEmbedder
+    import sys
+    from pathlib import Path
+    INSTALL_DIR = Path.home() / ".local" / "share" / "claude-context-local"
+    sys.path.insert(0, str(INSTALL_DIR))
+    from embeddings.embedder import CodeEmbedder
 
     parser = argparse.ArgumentParser(description="Find similar code chunks")
     parser.add_argument('--chunk-id', required=True, help='Reference chunk ID')
@@ -24,9 +31,23 @@ def main():
     args = parser.parse_args()
 
     try:
-        searcher = IntelligentSearcher(storage_dir=str(args.storage_dir))
+        # Create index manager and embedder
+        index_manager = CodeIndexManager(storage_dir=str(args.storage_dir))
+        embedder = CodeEmbedder()  # Uses default model
+
+        # Create searcher with required dependencies
+        searcher = IntelligentSearcher(index_manager=index_manager, embedder=embedder)
+
+        # Find similar chunks
         results = searcher.find_similar_to_chunk(chunk_id=args.chunk_id, k=args.k)
-        success(results)
+
+        # Format results for output
+        formatted_results = {
+            "chunk_id": args.chunk_id,
+            "k": args.k,
+            "results": results
+        }
+        success(formatted_results)
     except FileNotFoundError:
         error_exit("Index not found", suggestion="Check storage-dir path")
     except Exception as e:
