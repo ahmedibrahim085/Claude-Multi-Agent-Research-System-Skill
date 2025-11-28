@@ -285,9 +285,9 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 ---
 
-## CRITICAL: Semantic Code Search Rules
+## CRITICAL: Semantic Search Rules
 
-### ALWAYS Use searching-code-semantically Skill When:
+### ALWAYS Use semantic-search Skill When:
 
 **Trigger Keywords in User Prompt**:
 - **Understanding Code**: "how does this work", "how is X implemented", "where is Y handled", "explain the code for", "understand the implementation"
@@ -298,10 +298,10 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 **MANDATORY Workflow**:
 1. **STOP** - Do NOT use Grep/Glob for functionality-based searches
-2. **VERIFY**: Check if index exists (`.code-search-index/`)
-3. **INVOKE**: Use scripts from `.claude/skills/searching-code-semantically/scripts/`
-4. **SEARCH**: Start with `search.py` using natural language query
-5. **NARROW**: Optionally use `find-similar.py` to discover related code
+2. **VERIFY**: Check if index exists using `list-projects` or `status` scripts
+3. **INVOKE**: Use bash scripts from `.claude/skills/semantic-search/scripts/`
+4. **SEARCH**: Start with `search` script using natural language query
+5. **NARROW**: Optionally use `find-similar` script to discover related content
 
 ### Direct Tool Use vs Semantic Search
 
@@ -316,13 +316,13 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 - Locating configuration files (e.g., `"**/config.yml"`)
 - File system navigation (e.g., `"src/components/**/*.tsx"`)
 
-**Use searching-code-semantically Skill for**:
-- Finding code by describing WHAT it does (not what it's named)
+**Use semantic-search Skill for**:
+- Finding content by describing WHAT it does (not exact keywords)
 - Searching for "authentication logic" (could be named anything)
 - Discovering patterns like "retry mechanisms" across codebase
-- Finding similar implementations
+- Finding similar implementations or documentation
 - Understanding unfamiliar codebases
-- Cross-language searches (same concept, different syntax)
+- Cross-language/format searches (same concept, different syntax)
 
 ### Example Violations to AVOID
 
@@ -331,9 +331,9 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
    → Results are incomplete because actual code uses `"validateCredentials"` and `"checkUserSession"`
 
 ✅ **CORRECT**: User asks "how does authentication work in this codebase?"
-   → I check if `.code-search-index/` exists
-   → I run semantic search: `python scripts/search.py --query "user authentication and credential verification"`
-   → Results include ALL relevant code regardless of naming: `validateCredentials()`, `checkUserSession()`, `verifyJWT()`, etc.
+   → I check index status with `scripts/list-projects` or `scripts/status`
+   → I run semantic search: `scripts/search --query "user authentication and credential verification" --k 10`
+   → Results include ALL relevant content regardless of naming: `validateCredentials()`, `checkUserSession()`, `verifyJWT()`, etc.
 
 ### Self-Check Before Acting
 
@@ -347,29 +347,39 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 **Required**:
 - Global installation: `~/.local/share/claude-context-local` (macOS/Linux) or `%LOCALAPPDATA%\claude-context-local` (Windows)
-- Pre-built index: `.code-search-index/` directory must exist in project root
+- Index created using `scripts/index` command
 
 **If index missing**:
-- Inform user that semantic search requires pre-built index
-- User must create index using MCP server (outside this skill)
+- Use `scripts/index /path/to/project --full` to create index
+- Or inform user to create index first
 - Fallback to Grep/Glob for keyword-based search
 
 ### Usage Examples
 
-**Basic Search**:
+**Create/Update Index**:
 ```bash
-python .claude/skills/searching-code-semantically/scripts/search.py --query "user authentication logic" --k 10
+~/.claude/skills/semantic-search/scripts/index /path/to/project --full
 ```
 
-**Find Similar Code**:
+**List Indexed Projects**:
 ```bash
-# After getting chunk_id from search results
-python .claude/skills/searching-code-semantically/scripts/find-similar.py --chunk-id "src/auth.py:45-67" --k 5
+~/.claude/skills/semantic-search/scripts/list-projects
 ```
 
 **Check Index Status**:
 ```bash
-python .claude/skills/searching-code-semantically/scripts/status.py
+~/.claude/skills/semantic-search/scripts/status --project /path/to/project
+```
+
+**Basic Search**:
+```bash
+~/.claude/skills/semantic-search/scripts/search --query "user authentication logic" --k 10 --project /path/to/project
+```
+
+**Find Similar Content**:
+```bash
+# After getting chunk_id from search results
+~/.claude/skills/semantic-search/scripts/find-similar --chunk-id "src/auth.py:45-67:function:authenticate" --k 5 --project /path/to/project
 ```
 
 ### Performance Guidelines
@@ -394,7 +404,7 @@ python .claude/skills/searching-code-semantically/scripts/status.py
 
 - **multi-agent-researcher**: Orchestrates 2-4 parallel researchers for comprehensive topic investigation
 - **spec-workflow-orchestrator**: Orchestrates 3 sequential planning agents for development-ready specifications
-- **searching-code-semantically**: Semantic code search using natural language queries (wraps claude-context-local MCP server)
+- **semantic-search**: Semantic search using natural language queries to find any text content by meaning (orchestrates claude-context-local via bash scripts)
 
 ## Available Agents
 

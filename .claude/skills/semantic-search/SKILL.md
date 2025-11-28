@@ -1,20 +1,20 @@
 ---
-name: searching-code-semantically
+name: semantic-search
 description: >
-  Semantic code search using natural language queries to find code by functionality rather than exact text matching.
+  Semantic search using natural language queries to find content by meaning rather than exact text matching.
   Orchestrates the claude-context-local MCP server's CodeSearchServer class via bash scripts that call Python methods directly.
   Use when searching for "how authentication works" or "error handling patterns" where Grep/Glob would require
-  guessing exact variable names. Requires global installation of claude-context-local. Best for understanding
+  guessing exact keywords. Works on any text (code, documentation, markdown, comments, configs). Best for understanding
   unfamiliar codebases, finding similar implementations, or locating functionality across multiple files.
   NOT for simple keyword searches (use Grep) or finding files by name (use Glob). Provides indexing, searching,
   status checking, and similarity finding capabilities.
 ---
 
-# Semantic Code Search Skill
+# Semantic Search Skill
 
-**Bash Orchestrators for Semantic Code Intelligence**
+**Bash Orchestrators for Semantic Intelligence**
 
-This skill provides bash scripts that orchestrate the claude-context-local MCP server's CodeSearchServer class. Each script calls Python methods directly using the venv Python interpreter, enabling semantic code search, indexing, and similarity finding. Unlike traditional text-based search (Grep) or pattern matching (Glob), semantic search understands the **meaning** of code, finding functionally similar implementations even when they use different variable names, syntax, or patterns.
+This skill provides bash scripts that orchestrate the claude-context-local MCP server's CodeSearchServer class. Each script calls Python methods directly using the venv Python interpreter, enabling semantic search, indexing, and similarity finding across any text content (code, docs, markdown, configs). Unlike traditional text-based search (Grep) or pattern matching (Glob), semantic search understands the **meaning** of content, finding functionally similar text even when using different wording, variable names, or patterns.
 
 ## 🎯 When to Use This Skill
 
