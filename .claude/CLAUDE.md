@@ -1,5 +1,28 @@
 # Project Instructions for anthropic_research
 
+## CRITICAL: Search Hierarchy Rules
+
+### ALWAYS Search Within This Project Using semantic-search Skill
+
+**When searching for ANYTHING within this project codebase:**
+
+1. **FIRST**: Use semantic-search skill by activating it with `/skill semantic-search`
+2. **THEN**: Let the skill run its scripts to search
+3. **ONLY IF**: Skill fails or index doesn't exist, fallback to Grep/Glob
+
+**NEVER run bash scripts directly** - Always use the skill to orchestrate the search.
+
+**Examples:**
+- ❌ WRONG: `bash ~/.claude/skills/semantic-search/scripts/search --query "..."`
+- ✅ CORRECT: Activate skill, let skill handle the search operation
+
+**Why This Matters:**
+- Skills are designed to orchestrate operations
+- Direct bash usage bypasses the skill's intended workflow
+- Maintains consistency with other skills (multi-agent-researcher, spec-workflow-orchestrator)
+
+---
+
 ## CRITICAL: Research Orchestration Rules
 
 ### ALWAYS Use multi-agent-researcher Skill When:
