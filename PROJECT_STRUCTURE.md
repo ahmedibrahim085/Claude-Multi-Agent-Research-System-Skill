@@ -44,7 +44,7 @@ Claude-Multi-Agent-Research-System-Skill/
 │   │   │   ├── reference.md                  # Documentation (optional)
 │   │   │   └── examples.md                   # Examples (optional)
 │   │   │
-│   │   ├── semantic-search/                  # Code Search Skill
+│   │   ├── semantic-search/                  # Semantic Content Search Skill
 │   │   │   ├── SKILL.md                      # Orchestrator (required)
 │   │   │   ├── scripts/                      # Bash orchestrators (skill-specific)
 │   │   │   ├── tests/                        # Skill tests (skill-specific)
