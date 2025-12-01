@@ -199,6 +199,47 @@ These implementations share a common pattern:
 The API token renewal is most similar to your reference code.
 ```
 
+### Search Operation - Documentation Example
+
+```
+Found 4 content chunks related to "deployment process documentation":
+
+1. ⭐ Production Deployment Guide (similarity: 0.89)
+   File: docs/deployment/production.md:12-56
+   Type: markdown
+   Summary: Comprehensive step-by-step guide for deploying to production.
+   Covers Docker setup, environment variables, database migrations, and rollback procedures.
+
+2. Environment Configuration Reference (similarity: 0.82)
+   File: docs/configuration/environment.md:34-78
+   Type: markdown
+   Summary: Complete documentation of all environment variables.
+   Includes examples for development, staging, and production configurations.
+
+3. CI/CD Deployment Workflow (similarity: 0.76)
+   File: .github/workflows/deploy.yml:15-45
+   Type: config (YAML)
+   Summary: GitHub Actions workflow for automated deployments.
+   Triggers on main branch pushes, runs tests, builds Docker images, deploys to production.
+
+4. Quick Start Setup Guide (similarity: 0.71)
+   File: README.md:89-134
+   Type: markdown
+   Summary: Initial project setup and deployment prerequisites.
+   Documents required tools (Docker, Node.js), permissions, and first-time deployment steps.
+
+---
+
+The deployment process is documented across multiple formats:
+- Detailed guides: docs/deployment/ (step-by-step instructions)
+- Configuration reference: docs/configuration/ (environment variables)
+- Automation scripts: .github/workflows/ (CI/CD pipelines)
+- Quick start: README.md (getting started)
+
+Start with the production deployment guide (docs/deployment/production.md) for
+complete instructions, then refer to environment.md for configuration details.
+```
+
 ### List-Projects Operation - Good Response
 
 ```
