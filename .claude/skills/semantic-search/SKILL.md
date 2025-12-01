@@ -40,7 +40,7 @@ This skill uses a **2-agent architecture** for token optimization:
 **Example 1: Search Operation** (semantic-search-reader)
 ```python
 Task(
-    subagent_type="general-purpose",
+    subagent_type="semantic-search-reader",
     description="Search codebase semantically",
     prompt="""You are the semantic-search-reader agent.
 
@@ -56,7 +56,7 @@ Execute the search operation using scripts/search and return interpreted results
 **Example 2: Index Operation** (semantic-search-indexer)
 ```python
 Task(
-    subagent_type="general-purpose",
+    subagent_type="semantic-search-indexer",
     description="Index codebase for semantic search",
     prompt="""You are the semantic-search-indexer agent.
 
@@ -71,7 +71,7 @@ Execute the indexing operation using scripts/index and return interpreted result
 **Example 3: Find Similar** (semantic-search-reader)
 ```python
 Task(
-    subagent_type="general-purpose",
+    subagent_type="semantic-search-reader",
     description="Find similar code chunks",
     prompt="""You are the semantic-search-reader agent.
 
@@ -87,7 +87,7 @@ Execute the find-similar operation using scripts/find-similar and return interpr
 **Example 4: Status Check** (semantic-search-indexer)
 ```python
 Task(
-    subagent_type="general-purpose",
+    subagent_type="semantic-search-indexer",
     description="Check semantic index status",
     prompt="""You are the semantic-search-indexer agent.
 
