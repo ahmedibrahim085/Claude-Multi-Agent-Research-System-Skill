@@ -287,7 +287,7 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 ---
 
-## CRITICAL: Codebase Search Hierarchy (Token Savings)
+## CRITICAL: Project Content Search Hierarchy (Token Savings)
 
 ### WHY This Matters: Token Economics
 
@@ -303,9 +303,9 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 ### ABSOLUTE SEARCH HIERARCHY
 
-**BEFORE using Grep/Glob to find functionality, ask yourself:**
+**BEFORE using Grep/Glob to find functionality or content, ask yourself:**
 
-1. **Am I searching for WHAT code does** (not exact keywords)? → Use semantic-search
+1. **Am I searching for WHAT content describes** (not exact keywords)? → Use semantic-search
 2. **Do I know the exact function/variable name**? → Use Grep
 3. **Do I know the exact file path**? → Use Read
 4. **Am I searching for file name patterns**? → Use Glob
@@ -314,14 +314,14 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 **Trigger Keywords - When I Need To**:
 - **Search/Find**: "search", "find", "locate", "look for", "discover", "where is", "show me"
-- **Understanding**: "how does this work", "how is X implemented", "where is Y handled", "explain the code for"
+- **Understanding**: "how does this work", "how is X implemented", "where is Y handled", "explain the content about"
 - **Similarity**: "find similar", "similar to", "like this", "related to", "find other implementations"
 - **Patterns**: "discover patterns", "identify instances", "all occurrences of"
 - **Cross-Reference**: "where else", "find related", "show all references", "used by"
 
 **ABSOLUTE PROHIBITION**:
-- ❌ NEVER use Grep/Glob as first attempt for functionality searches
-- ❌ NEVER search the codebase without trying semantic-search first
+- ❌ NEVER use Grep/Glob as first attempt for functionality/content searches
+- ❌ NEVER search the project without trying semantic-search first
 - ❌ NEVER run bash scripts directly - activate skill and let it orchestrate
 
 **MANDATORY Workflow**:
@@ -373,9 +373,9 @@ SAVINGS: 7,400 tokens (92% reduction)
 **Use semantic-search Skill for** (TOKEN SAVINGS):
 - Finding content by describing WHAT it does (not exact keywords)
 - Searching for "authentication logic" (could be named anything)
-- Discovering patterns like "retry mechanisms" across codebase
+- Discovering patterns like "retry mechanisms" across project
 - Finding similar implementations or documentation
-- Understanding unfamiliar codebases
+- Understanding unfamiliar projects
 - Cross-language/format searches (same concept, different syntax)
 - **ANY exploratory task where you'd try multiple Grep searches**
 
