@@ -240,7 +240,7 @@
       "type": "efficiency",
       "enforcement": "recommend",
       "priority": "high",
-      "description": "Codebase search for functionality understanding - saves 5,000-10,000 tokens per exploration task by finding code by meaning instead of trial-and-error Grep",
+      "description": "Project content search for functionality and documentation - saves 5,000-10,000 tokens per exploration task by finding content by meaning (code, docs, configs, markdown) instead of trial-and-error Grep",
       "promptTriggers": {
         "keywords": [
           "how does",
@@ -276,7 +276,22 @@
           "find other implementations",
           "discover patterns",
           "code patterns",
-          "implementation patterns"
+          "implementation patterns",
+          "find documentation",
+          "search documentation",
+          "locate documentation",
+          "find config",
+          "search config",
+          "locate config",
+          "find markdown",
+          "search markdown",
+          "deployment documentation",
+          "configuration examples",
+          "setup documentation",
+          "troubleshooting guides",
+          "find ADR",
+          "find guide",
+          "locate guide"
         ],
         "intentPatterns": [
           "how (does|is|do)\\s+.*(work|implemented|handled|done|processed|managed|structured|organized)",
@@ -294,7 +309,10 @@
           "(used|called|referenced|implemented|invoked)\\s+(by|in|from).*",
           "(search|find)\\s+.*\\s+(code|codebase|implementation|source)",
           "locate\\s+.*(function|method|class|module|file|component|implementation)",
-          "what\\s+(code|implementation|logic)\\s+(does|handles|manages|processes).*"
+          "what\\s+(code|implementation|logic)\\s+(does|handles|manages|processes).*",
+          "(find|search|locate|show)\\s+.*(documentation|docs|guide|guides|README|ADR|markdown).*",
+          "(find|search|locate|show)\\s+.*(config|configuration|settings|environment|setup).*",
+          "(deployment|setup|installation|troubleshooting)\\s+(documentation|guide|docs|instructions)"
         ]
       },
       "fileTriggers": {

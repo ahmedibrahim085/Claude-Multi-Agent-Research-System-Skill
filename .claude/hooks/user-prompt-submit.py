@@ -642,16 +642,16 @@ def build_semantic_search_enforcement_message(triggers: dict) -> str:
     patterns_str = f'{len(matched_patterns)} intent pattern(s)' if matched_patterns else 'none'
 
     return f"""
-🔍 CODEBASE SEARCH ENFORCEMENT ACTIVATED (Token Savings)
+🔍 PROJECT CONTENT SEARCH ENFORCEMENT ACTIVATED (Token Savings)
 
-**Detected**: Codebase search keywords in your prompt
+**Detected**: Content search keywords in your prompt
 **Matched Keywords**: {keywords_str}
 **Matched Patterns**: {patterns_str}
 
 **Required Skill**: semantic-search
 
 **CRITICAL REMINDER - TOKEN SAVINGS**:
-❌ DO NOT use Grep/Glob as first attempt for functionality searches
+❌ DO NOT use Grep/Glob as first attempt for functionality/content searches
 ✅ MUST activate semantic-search skill FIRST
 
 **Why This Saves Tokens**:
@@ -659,21 +659,28 @@ def build_semantic_search_enforcement_message(triggers: dict) -> str:
 - Semantic search: ~600 tokens (1 search, 2 targeted reads)
 - **Token savings: 92-95% reduction in exploration overhead**
 
+**What Semantic-Search Finds**:
+- Code (functions, classes, logic patterns)
+- Documentation (markdown, guides, ADRs)
+- Configurations (YAML, JSON, env files)
+- Cross-format content (auth in code + docs + configs)
+
 **Mandatory Search Hierarchy**:
-1. **Am I searching for WHAT code does?** → Use semantic-search
+1. **Am I searching for WHAT content describes?** → Use semantic-search
 2. **Do I know exact function/variable name?** → Use Grep
 3. **Do I know exact file path?** → Use Read
 4. **Am I searching for file name patterns?** → Use Glob
 
 **Correct Workflow**:
-1. STOP - Don't use Grep/Glob/Read for functionality searches
+1. STOP - Don't use Grep/Glob/Read for functionality/content searches
 2. INVOKE - Activate semantic-search skill FIRST
 3. SKILL RUNS - Bash scripts executed within skill context
 4. ONLY IF SKILL FAILS - Then fallback to Grep/Glob
 
-**Example**:
+**Examples**:
 ❌ WRONG: Grep for "auth", "login", "verify" → 26 file reads → 8,000 tokens
 ✅ CORRECT: semantic-search "user authentication logic" → 2 file reads → 600 tokens
+✅ CORRECT: semantic-search "deployment documentation" → finds docs, configs, README
 
 **Enforcement Level**: HIGH (recommended - saves 5,000-10,000 tokens per task)
 
