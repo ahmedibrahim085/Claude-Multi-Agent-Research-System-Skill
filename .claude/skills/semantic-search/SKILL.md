@@ -109,10 +109,11 @@ Execute the status operation using scripts/status and return interpreted results
 
 ### ✅ Use Semantic Search When:
 
-**1. Exploring Unfamiliar Codebases**
+**1. Exploring Unfamiliar Projects**
 - "How does this codebase handle user authentication?"
 - "Where is database connection pooling implemented?"
 - "Show me error handling patterns in this project"
+- "Find documentation about the architecture"
 
 **2. Finding Functionality Without Keywords**
 - Looking for implementations but don't know the exact function names
@@ -128,6 +129,19 @@ Execute the status operation using scripts/status and return interpreted results
 - Finding all authentication methods in a polyglot codebase
 - Locating retry logic across different services
 - Identifying validation patterns in various modules
+
+**5. Searching Documentation & Configuration**
+- "Find documentation explaining the deployment process"
+- "Locate configuration examples for database connections"
+- "Search for troubleshooting guides or setup instructions"
+- "Find ADRs (Architecture Decision Records) about API design"
+- "Locate markdown files about testing strategies"
+
+**6. Cross-Format Content Discovery**
+- "Find all references to environment variables (across code, docs, configs)"
+- "Search for rate limiting mentions in any format"
+- "Locate authentication documentation and implementation together"
+- "Find deployment guides and deployment scripts"
 
 ### ❌ Do NOT Use Semantic Search When:
 
