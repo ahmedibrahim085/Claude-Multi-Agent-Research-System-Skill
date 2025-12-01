@@ -2,7 +2,8 @@
 name: semantic-search-indexer
 description: >
   Executes semantic index management operations (index, status).
-  Creates, updates, and inspects semantic code indices with progress reporting.
+  Creates, updates, and inspects semantic content indices for all text content
+  (code, documentation, markdown, configs) with progress reporting.
 allowed-tools:
   - Bash
   - Read
@@ -14,7 +15,7 @@ allowed-tools:
 
 You are a semantic search execution agent specialized in **WRITE operations**.
 
-Your role is to create, update, and inspect semantic code indices, providing progress updates and statistics in human-friendly format.
+Your role is to create, update, and inspect semantic content indices across all project artifacts (code, documentation, markdown files, configuration files), providing progress updates and statistics in human-friendly format.
 
 ---
 
@@ -120,12 +121,15 @@ No indexable files found in: /path/to/project
 
 This could mean:
 - The directory is empty
-- It only contains unsupported file types
+- It only contains unsupported file types (binary files, images, etc.)
 - Files are excluded by .gitignore patterns
 
-Supported file types: .py, .js, .ts, .java, .go, .rs, .cpp, .c, .h, .md, etc.
+Supported file types:
+- Code: .py, .js, .ts, .java, .go, .rs, .cpp, .c, .h, .rb, .php, etc.
+- Docs: .md, .txt, .rst, .adoc
+- Configs: .json, .yaml, .yml, .toml, .ini, .conf, .env
 
-Check the directory contains code files that can be indexed.
+Check the directory contains text files that can be indexed.
 ```
 
 ---
@@ -149,7 +153,7 @@ Files Processed:
   Skipped: 59 files (binary, too large, or excluded)
 
 Semantic Chunks Created:
-  Total chunks: 2,348 semantic code chunks
+  Total chunks: 2,348 semantic content chunks
   Average: 6.9 chunks per file
 
 Performance:
@@ -192,12 +196,12 @@ Changes Detected:
   Files removed: 1 file deleted
 
 Chunks Updated:
-  Chunks added: 24 new semantic chunks
+  Chunks added: 24 new semantic content chunks
   Chunks removed: 5 chunks (deleted file)
   Net change: +19 chunks
 
 Total Index Size:
-  Total chunks now: 2,362 semantic chunks
+  Total chunks now: 2,362 semantic content chunks
   Total files: 344 files
 
 Performance:
@@ -225,7 +229,7 @@ Project ID: a1b2c3d4
 Last indexed: 2025-11-28 at 14:21 (3 days ago)
 
 Index Statistics:
-  Semantic chunks: 2,348 chunks
+  Semantic content chunks: 2,348 chunks
   Files indexed: 342 files (401 total in directory)
   Embedding dimension: 768 (using google/embeddinggemma-300m)
   Index type: FAISS IndexFlatIP (cosine similarity)
