@@ -56,3 +56,8 @@ node_modules/
 
 # Design artifacts (working documents, not for public commit)
 docs/design-docs/
+
+# Semantic-search development artifacts (skill-specific)
+.claude/skills/semantic-search/.benchmarks/
+.claude/skills/semantic-search/.code-search-index/
+.claude/skills/semantic-search/__pycache__/
