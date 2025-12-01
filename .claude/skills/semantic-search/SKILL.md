@@ -41,7 +41,7 @@ This skill uses a **2-agent architecture** for token optimization:
 ```python
 Task(
     subagent_type="semantic-search-reader",
-    description="Search codebase semantically",
+    description="Search project semantically",
     prompt="""You are the semantic-search-reader agent.
 
 Operation: search
@@ -57,7 +57,7 @@ Execute the search operation using scripts/search and return interpreted results
 ```python
 Task(
     subagent_type="semantic-search-indexer",
-    description="Index codebase for semantic search",
+    description="Index project for semantic search",
     prompt="""You are the semantic-search-indexer agent.
 
 Operation: index
@@ -72,7 +72,7 @@ Execute the indexing operation using scripts/index and return interpreted result
 ```python
 Task(
     subagent_type="semantic-search-reader",
-    description="Find similar code chunks",
+    description="Find similar content chunks",
     prompt="""You are the semantic-search-reader agent.
 
 Operation: find-similar
@@ -163,7 +163,7 @@ Installation location:
 
 **Index Creation**
 
-This skill provides an `index` script that creates and updates the semantic code index. The index is stored in `~/.claude_code_search/projects/{project_name}_{hash}/` and contains:
+This skill provides an `index` script that creates and updates the semantic content index. The index is stored in `~/.claude_code_search/projects/{project_name}_{hash}/` and contains:
 - `code.index` - FAISS vector index
 - `metadata.db` - SQLite database with chunk metadata
 - `chunk_ids.pkl` - Chunk ID mappings
@@ -173,7 +173,7 @@ You can verify an index exists using the `status` script or the `list-projects` 
 
 ## 🚀 Quick Start
 
-### Operation 1: Index a Codebase
+### Operation 1: Index a Project
 
 **When to use**: Create or update the semantic index for a project
 
@@ -212,7 +212,7 @@ scripts/status --project /path/to/project
 
 ### Operation 4: Search by Natural Language Query
 
-**When to use**: Find code by describing what it does
+**When to use**: Find content by describing what it does or contains
 
 ```bash
 # Basic search (returns top 5 results)
@@ -227,9 +227,9 @@ scripts/search --query "database queries" --k 5
 
 **Output**: JSON with ranked results including file paths, line numbers, kind, similarity scores, chunk IDs, and snippets.
 
-### Operation 5: Find Similar Code Chunks
+### Operation 5: Find Similar Content Chunks
 
-**When to use**: Discover code functionally similar to a reference chunk
+**When to use**: Discover content semantically similar to a reference chunk
 
 ```bash
 # Find similar implementations (use chunk_id from search results)
@@ -269,7 +269,7 @@ All scripts output standardized JSON:
 
 ## 🔄 Typical Workflow
 
-**Step 1: Index the Codebase (One-Time Setup)**
+**Step 1: Index the Project (One-Time Setup)**
 ```bash
 scripts/index /path/to/project --full
 ```
@@ -381,4 +381,4 @@ This pattern avoids code duplication while maintaining the benefits of thin wrap
 
 ---
 
-**Next Steps**: Start by indexing your codebase with `scripts/index /path/to/project --full`, then explore with semantic search queries.
+**Next Steps**: Start by indexing your project with `scripts/index /path/to/project --full`, then explore with semantic search queries.
