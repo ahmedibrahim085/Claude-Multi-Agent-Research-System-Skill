@@ -287,7 +287,28 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 
 ---
 
-## CRITICAL: Semantic Search Rules
+## CRITICAL: Codebase Search Hierarchy (Token Savings)
+
+### WHY This Matters: Token Economics
+
+**Problem**: Traditional exploration wastes 5,000-10,000 tokens per task:
+- Grep for "auth", "login", "verify", "authenticate" → 15+ searches
+- Read 20+ files to find the right implementation
+- Multiple failed attempts before finding correct code
+
+**Solution**: Semantic search finds functionality in 1 search by understanding MEANING:
+- Query: "user authentication logic" → Direct hit in 1 search
+- **Token Savings**: ~90% reduction in exploration overhead
+- **Speed**: Instant vs 5-10 minutes of trial-and-error
+
+### ABSOLUTE SEARCH HIERARCHY
+
+**BEFORE using Grep/Glob to find functionality, ask yourself:**
+
+1. **Am I searching for WHAT code does** (not exact keywords)? → Use semantic-search
+2. **Do I know the exact function/variable name**? → Use Grep
+3. **Do I know the exact file path**? → Use Read
+4. **Am I searching for file name patterns**? → Use Glob
 
 ### ALWAYS Use semantic-search Skill When:
 
@@ -299,61 +320,104 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 - **Cross-Reference**: "where else", "find related", "show all references", "used by"
 
 **ABSOLUTE PROHIBITION**:
-- ❌ NEVER run `~/.claude/skills/semantic-search/scripts/*` yourself
 - ❌ NEVER use Grep/Glob as first attempt for functionality searches
-- ❌ NEVER search the codebase yourself without trying skill first
+- ❌ NEVER search the codebase without trying semantic-search first
+- ❌ NEVER run bash scripts directly - activate skill and let it orchestrate
 
 **MANDATORY Workflow**:
-1. **STOP** - Do NOT use Grep/Glob/bash scripts directly
-2. **INVOKE**: Use semantic-search skill FIRST
-3. **ONLY IF SKILL FAILS**: Then fallback to Grep/Glob
-4. **NEVER SKIP**: Always try skill before doing it yourself
+1. **STOP** - Do NOT use Grep/Glob/Read for functionality searches
+2. **INVOKE**: Activate semantic-search skill FIRST
+3. **SKILL RUNS**: Bash scripts executed within skill context
+4. **ONLY IF SKILL FAILS**: Then fallback to Grep/Glob
+5. **NEVER SKIP**: Always try semantic-search before manual exploration
+
+### Token Cost Examples (WHY This Saves Tokens)
+
+#### ❌ BAD: Traditional Grep Exploration (~8,000 tokens wasted)
+
+**User**: "Find where authentication is handled"
+
+**My Wrong Approach**:
+```
+1. Grep for "auth" → 200 matches → Read 5 files → Wrong code
+2. Grep for "login" → 150 matches → Read 7 files → Still wrong
+3. Grep for "authenticate" → 80 matches → Read 4 files → Getting closer
+4. Grep for "session" → 300 matches → Read 10 files → Found it!
+
+Total: 26 file reads, 4 Grep searches, 5-10 minutes
+Token cost: ~8,000 tokens (file reads + failed attempts)
+```
+
+#### ✅ GOOD: Semantic Search (~400 tokens saved)
+
+**User**: "Find where authentication is handled"
+
+**My Correct Approach**:
+```
+1. Invoke semantic-search skill
+2. Query: "user authentication and credential verification"
+3. Get ranked results with exact file:line locations
+4. Read 1-2 most relevant files → Found it!
+
+Total: 1 semantic search, 2 file reads, 30 seconds
+Token cost: ~600 tokens (search overhead + targeted reads)
+SAVINGS: 7,400 tokens (92% reduction)
+```
 
 ### Direct Tool Use vs Semantic Search
 
-**Use Grep ONLY for**:
-- Exact string matching (e.g., `"import React"`)
-- Known variable/function names (e.g., `"getUserById"`)
-- Regex patterns (e.g., `"function.*export"`)
-- File content search with known keywords
-
-**Use Glob ONLY for**:
-- Finding files by name pattern (e.g., `"**/*.test.js"`)
-- Locating configuration files (e.g., `"**/config.yml"`)
-- File system navigation (e.g., `"src/components/**/*.tsx"`)
-
-**Use semantic-search Skill for**:
+**Use semantic-search Skill for** (TOKEN SAVINGS):
 - Finding content by describing WHAT it does (not exact keywords)
 - Searching for "authentication logic" (could be named anything)
 - Discovering patterns like "retry mechanisms" across codebase
 - Finding similar implementations or documentation
 - Understanding unfamiliar codebases
 - Cross-language/format searches (same concept, different syntax)
+- **ANY exploratory task where you'd try multiple Grep searches**
+
+**Use Grep ONLY for** (Known Targets):
+- Exact string matching (e.g., `"import React"`)
+- Known variable/function names (e.g., `"getUserById"`)
+- Regex patterns (e.g., `"function.*export"`)
+- File content search with known keywords
+- **When you KNOW exactly what string to match**
+
+**Use Glob ONLY for** (File Navigation):
+- Finding files by name pattern (e.g., `"**/*.test.js"`)
+- Locating configuration files (e.g., `"**/config.yml"`)
+- File system navigation (e.g., `"src/components/**/*.tsx"`)
+
+**Use Read ONLY for** (Known Files):
+- Reading specific known files
+- Examining files after semantic-search narrows results
 
 ### Example Violations to AVOID
 
-❌ **WRONG #1**: User asks "how does authentication work in this codebase?"
-   → I run 20 Grep searches myself: `"login"`, `"auth"`, `"authenticate"`, `"verify"`
-   → VIOLATION: Did the work myself instead of using skill
+❌ **WRONG #1** (~8,000 tokens wasted): User asks "how does authentication work?"
+   → I run 20 Grep searches: `"login"`, `"auth"`, `"authenticate"`, `"verify"`
+   → I read 26 files trying to find the right code
+   → VIOLATION: Wasted 8,000 tokens on exploration instead of 400 tokens with semantic-search
 
-❌ **WRONG #2**: User asks "find the orchestrator pattern"
+❌ **WRONG #2** (Tool misuse): User asks "find the orchestrator pattern"
    → I run: `~/.claude/skills/semantic-search/scripts/search --query "..."`
-   → VIOLATION: Ran bash scripts directly instead of using skill
+   → VIOLATION: Ran bash scripts directly - skill should orchestrate this
 
-❌ **WRONG #3**: I need to find error handling code
-   → I use Grep without trying skill first
-   → VIOLATION: Didn't try semantic-search skill first
+❌ **WRONG #3** (Skipped hierarchy): I need to find error handling code
+   → I use Grep without trying semantic-search first
+   → VIOLATION: Didn't follow search hierarchy
 
-✅ **CORRECT**: User asks "how does authentication work in this codebase?"
-   → I invoke semantic-search skill
-   → Skill handles everything internally
-   → Skill returns results
-   → I deliver results to user
+✅ **CORRECT** (~400 tokens, saved 7,600): User asks "how does authentication work?"
+   → I activate semantic-search skill
+   → Skill executes: `scripts/search --query "user authentication logic" --k 10`
+   → Get ranked results with exact locations
+   → Read 2 most relevant files
+   → Deliver answer
+   → **Token savings: 95%**
 
-✅ **ALSO CORRECT**: I need to find authentication code
-   → I invoke semantic-search skill first
-   → If skill fails, THEN I use Grep/Glob
-   → Always try skill before doing it myself
+✅ **ALSO CORRECT** (Proper fallback): I need to find authentication code
+   → I activate semantic-search skill first
+   → If index missing or search fails, THEN use Grep/Glob
+   → Always try semantic-search before manual exploration
 
 ### Self-Check Before Acting
 

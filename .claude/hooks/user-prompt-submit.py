@@ -630,6 +630,57 @@ def build_planning_enforcement_message(triggers: dict) -> str:
 """.strip()
 
 
+def build_semantic_search_enforcement_message(triggers: dict) -> str:
+    """Build enforcement message for semantic-search skill"""
+    matched_keywords = triggers.get('keywords', [])
+    matched_patterns = triggers.get('patterns', [])
+
+    keywords_str = ', '.join(f'"{k}"' for k in matched_keywords[:5])
+    if len(matched_keywords) > 5:
+        keywords_str += f' (+{len(matched_keywords) - 5} more)'
+
+    patterns_str = f'{len(matched_patterns)} intent pattern(s)' if matched_patterns else 'none'
+
+    return f"""
+🔍 CODEBASE SEARCH ENFORCEMENT ACTIVATED (Token Savings)
+
+**Detected**: Codebase search keywords in your prompt
+**Matched Keywords**: {keywords_str}
+**Matched Patterns**: {patterns_str}
+
+**Required Skill**: semantic-search
+
+**CRITICAL REMINDER - TOKEN SAVINGS**:
+❌ DO NOT use Grep/Glob as first attempt for functionality searches
+✅ MUST activate semantic-search skill FIRST
+
+**Why This Saves Tokens**:
+- Traditional Grep exploration: ~8,000 tokens (20+ Grep searches, 26 file reads)
+- Semantic search: ~600 tokens (1 search, 2 targeted reads)
+- **Token savings: 92-95% reduction in exploration overhead**
+
+**Mandatory Search Hierarchy**:
+1. **Am I searching for WHAT code does?** → Use semantic-search
+2. **Do I know exact function/variable name?** → Use Grep
+3. **Do I know exact file path?** → Use Read
+4. **Am I searching for file name patterns?** → Use Glob
+
+**Correct Workflow**:
+1. STOP - Don't use Grep/Glob/Read for functionality searches
+2. INVOKE - Activate semantic-search skill FIRST
+3. SKILL RUNS - Bash scripts executed within skill context
+4. ONLY IF SKILL FAILS - Then fallback to Grep/Glob
+
+**Example**:
+❌ WRONG: Grep for "auth", "login", "verify" → 26 file reads → 8,000 tokens
+✅ CORRECT: semantic-search "user authentication logic" → 2 file reads → 600 tokens
+
+**Enforcement Level**: HIGH (recommended - saves 5,000-10,000 tokens per task)
+
+---
+""".strip()
+
+
 def main():
     # Read hook input from stdin
     try:
@@ -656,13 +707,18 @@ def main():
     # Handle based on action
     action = analysis['action']
 
-    if action == 'none':
-        # No skill triggers detected
-        sys.exit(0)
-
     if action == 'ask_user':
         # Compound request - need user clarification
         message = build_compound_clarification_message(analysis)
+        # Check for semantic-search separately (can coexist with compound)
+        semantic_signal = get_signal_strength(
+            user_prompt,
+            skill_rules['skills'].get('semantic-search', {}),
+            skill_type=None
+        )
+        if semantic_signal['strength'] != 'none':
+            semantic_message = build_semantic_search_enforcement_message(semantic_signal)
+            message = message + '\n\n' + semantic_message
         output = {'systemMessage': message}
         print(json.dumps(output))
         sys.exit(0)
@@ -670,17 +726,48 @@ def main():
     # Single skill action
     if action == 'research_only':
         message = build_research_enforcement_message(analysis['research_signal'])
+        # Check for semantic-search separately (can coexist with research)
+        semantic_signal = get_signal_strength(
+            user_prompt,
+            skill_rules['skills'].get('semantic-search', {}),
+            skill_type=None
+        )
+        if semantic_signal['strength'] != 'none':
+            semantic_message = build_semantic_search_enforcement_message(semantic_signal)
+            message = message + '\n\n' + semantic_message
         output = {'systemMessage': message}
         print(json.dumps(output))
         sys.exit(0)
 
     if action == 'planning_only':
         message = build_planning_enforcement_message(analysis['planning_signal'])
+        # Check for semantic-search separately (can coexist with planning)
+        semantic_signal = get_signal_strength(
+            user_prompt,
+            skill_rules['skills'].get('semantic-search', {}),
+            skill_type=None
+        )
+        if semantic_signal['strength'] != 'none':
+            semantic_message = build_semantic_search_enforcement_message(semantic_signal)
+            message = message + '\n\n' + semantic_message
         output = {'systemMessage': message}
         print(json.dumps(output))
         sys.exit(0)
 
-    # Fallback - should not reach here
+    # Fallback - check if it's ONLY semantic-search (no research/planning)
+    if action == 'none':
+        semantic_signal = get_signal_strength(
+            user_prompt,
+            skill_rules['skills'].get('semantic-search', {}),
+            skill_type=None
+        )
+        if semantic_signal['strength'] != 'none':
+            message = build_semantic_search_enforcement_message(semantic_signal)
+            output = {'systemMessage': message}
+            print(json.dumps(output))
+            sys.exit(0)
+
+    # True fallback - no skills detected
     sys.exit(0)
 
 

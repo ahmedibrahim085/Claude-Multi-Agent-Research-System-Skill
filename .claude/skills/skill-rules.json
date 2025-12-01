@@ -235,6 +235,68 @@
           }
         }
       }
+    },
+    "semantic-search": {
+      "type": "efficiency",
+      "enforcement": "recommend",
+      "priority": "high",
+      "description": "Codebase search for functionality understanding - saves 5,000-10,000 tokens per exploration task by finding code by meaning instead of trial-and-error Grep",
+      "promptTriggers": {
+        "keywords": [
+          "search",
+          "find",
+          "locate",
+          "look for",
+          "discover",
+          "where is",
+          "show me",
+          "how does",
+          "how is",
+          "where is",
+          "what is",
+          "explain the code",
+          "find similar",
+          "similar to",
+          "like this",
+          "related to",
+          "find other implementations",
+          "discover patterns",
+          "identify instances",
+          "all occurrences of",
+          "where else",
+          "find related",
+          "show all references",
+          "used by",
+          "find in codebase",
+          "search codebase",
+          "search code",
+          "find code",
+          "locate code",
+          "where in the code"
+        ],
+        "intentPatterns": [
+          "how (does|is|do)\\s+.*(work|implemented|handled|done|processed|managed)",
+          "where (is|are|does|do)\\s+.*(handled|implemented|located|defined|stored|processed|managed)",
+          "(find|search|locate|show|discover)\\s+.*(in|across|through|within)\\s+(the\\s+)?(codebase|code|project|repository|repo)",
+          "(find|search|locate|show)\\s+(me\\s+)?(the\\s+)?(code|implementation|logic|function|method|class)\\s+(for|that|which).*",
+          "explain\\s+(the\\s+)?(code|implementation|logic)\\s+(for|that|which).*",
+          "(find|locate|show)\\s+(similar|related|other)\\s+(implementations?|code|functions?|methods?|classes?|patterns?)",
+          "(how|where)\\s+(to|do|does|is)\\s+.*(authenticate|handle|process|validate|parse|format|transform|convert|manage)",
+          "what\\s+(is|are|does)\\s+.*(pattern|mechanism|approach|strategy|implementation|logic)\\s+(for|used|in)",
+          "(discover|find|identify)\\s+(all|every|any)\\s+(pattern|instance|occurrence|usage|reference|implementation)",
+          "where\\s+(else|all)\\s+(is|are|does).*",
+          "(show|find|list)\\s+all\\s+(references|usages|implementations|occurrences)",
+          "(used|called|referenced|implemented)\\s+by.*"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": []
+      },
+      "validation": {
+        "requiredPhases": [],
+        "phaseSequence": "flexible",
+        "qualityGates": {}
+      }
     }
   }
 }
