@@ -707,15 +707,23 @@ def main():
     # Handle based on action
     action = analysis['action']
 
+    # Check semantic-search independently (orthogonal to research/planning)
+    # Must check BEFORE early exit to allow semantic-only prompts
+    semantic_signal = get_signal_strength(
+        user_prompt,
+        skill_rules['skills'].get('semantic-search', {}),
+        skill_type=None
+    )
+
+    # EARLY EXIT PROTECTION: If no skills matched, exit immediately (performance)
+    if action == 'none' and semantic_signal['strength'] == 'none':
+        # No skill triggers detected at all - don't waste CPU
+        sys.exit(0)
+
     if action == 'ask_user':
         # Compound request - need user clarification
         message = build_compound_clarification_message(analysis)
-        # Check for semantic-search separately (can coexist with compound)
-        semantic_signal = get_signal_strength(
-            user_prompt,
-            skill_rules['skills'].get('semantic-search', {}),
-            skill_type=None
-        )
+        # Append semantic-search if it also matched (already computed above)
         if semantic_signal['strength'] != 'none':
             semantic_message = build_semantic_search_enforcement_message(semantic_signal)
             message = message + '\n\n' + semantic_message
@@ -726,12 +734,7 @@ def main():
     # Single skill action
     if action == 'research_only':
         message = build_research_enforcement_message(analysis['research_signal'])
-        # Check for semantic-search separately (can coexist with research)
-        semantic_signal = get_signal_strength(
-            user_prompt,
-            skill_rules['skills'].get('semantic-search', {}),
-            skill_type=None
-        )
+        # Append semantic-search if it also matched (already computed above)
         if semantic_signal['strength'] != 'none':
             semantic_message = build_semantic_search_enforcement_message(semantic_signal)
             message = message + '\n\n' + semantic_message
@@ -741,12 +744,7 @@ def main():
 
     if action == 'planning_only':
         message = build_planning_enforcement_message(analysis['planning_signal'])
-        # Check for semantic-search separately (can coexist with planning)
-        semantic_signal = get_signal_strength(
-            user_prompt,
-            skill_rules['skills'].get('semantic-search', {}),
-            skill_type=None
-        )
+        # Append semantic-search if it also matched (already computed above)
         if semantic_signal['strength'] != 'none':
             semantic_message = build_semantic_search_enforcement_message(semantic_signal)
             message = message + '\n\n' + semantic_message
@@ -754,20 +752,16 @@ def main():
         print(json.dumps(output))
         sys.exit(0)
 
-    # Fallback - check if it's ONLY semantic-search (no research/planning)
-    if action == 'none':
-        semantic_signal = get_signal_strength(
-            user_prompt,
-            skill_rules['skills'].get('semantic-search', {}),
-            skill_type=None
-        )
-        if semantic_signal['strength'] != 'none':
-            message = build_semantic_search_enforcement_message(semantic_signal)
-            output = {'systemMessage': message}
-            print(json.dumps(output))
-            sys.exit(0)
+    # If action is 'none' but semantic_signal matched, show semantic-search only
+    # (This case is possible because semantic is orthogonal to research/planning)
+    if action == 'none' and semantic_signal['strength'] != 'none':
+        message = build_semantic_search_enforcement_message(semantic_signal)
+        output = {'systemMessage': message}
+        print(json.dumps(output))
+        sys.exit(0)
 
-    # True fallback - no skills detected
+    # Should never reach here due to early exit protection above
+    # But include failsafe
     sys.exit(0)
 
 
