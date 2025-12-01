@@ -1,1 +1,0 @@
-{"ts": "2025-11-28T17:26:56.036083", "agent": "ORCHESTRATOR", "tool": "Bash", "input": {"command": "ls -la ~/.claude/skills/ | grep -E \"semantic|searching\"", "description": "Verify deployment"}, "success": true, "output_size": null, "duration_ms": null}
