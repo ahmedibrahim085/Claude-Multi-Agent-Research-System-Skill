@@ -1,7 +1,7 @@
 # Project Structure
 
-**Last Updated**: 2025-11-19
-**Status**: Phase 2 Complete
+**Last Updated**: 2025-12-01
+**Status**: Post-Architecture-Cleanup
 
 This document describes the canonical file organization for the Claude Multi-Agent Research System project.
 
@@ -9,8 +9,10 @@ This document describes the canonical file organization for the Claude Multi-Age
 
 1. **No Absolute Paths**: All file references use relative/dynamic paths
 2. **Logs Consolidated**: All session logs in `./logs` (configured in `.claude/config.json`)
-3. **Skills Self-Contained**: Each skill has agents/, docs/ subdirectories within skill folder
-4. **Planning Documents Organized**: Active plans vs. completed vs. archived
+3. **Agents Centralized**: All agent definitions in `.claude/agents/` (NOT in skill subdirectories)
+4. **State Centralized**: All runtime state in `logs/state/` (NOT in `.claude/state/`)
+5. **Skills Minimal**: Skills contain SKILL.md + optional docs (examples.md, reference.md)
+6. **Planning Documents Organized**: Active plans vs. completed vs. archived
 
 ---
 
@@ -22,30 +24,77 @@ Claude-Multi-Agent-Research-System-Skill/
 ├── .claude/
 │   ├── config.json                           # Project configuration (logs, research settings)
 │   ├── CLAUDE.md                             # Project-specific instructions
+│   ├── settings.json                         # Claude Code settings
 │   ├── settings.local.json                   # (gitignored - user settings)
-│   ├── state/                                # (gitignored - session state)
 │   │
-│   └── skills/
-│       ├── skill-rules.json                  # Skill activation rules (BOTH skills)
-│       │
-│       ├── multi-agent-researcher/           # Research Skill
-│       │   ├── SKILL.md                      # Research orchestrator
-│       │   ├── README.md
-│       │   └── agents/                       # ⭐ RESEARCH AGENTS
-│       │       ├── researcher.md             # Web research agent
-│       │       └── report-writer.md          # Synthesis agent
-│       │
-│       └── spec-workflow-orchestrator/       # Planning Skill ✨ NEW
-│           ├── SKILL.md                      # Planning orchestrator
-│           ├── agents/                       # ⭐ PLANNING AGENTS
-│           │   ├── spec-analyst.md           # Requirements analysis
-│           │   ├── spec-architect.md         # Architecture design
-│           │   └── spec-planner.md           # Task breakdown
-│           └── docs/reference/
-│               ├── README.md
-│               └── spec-orchestrator-original.md  # Archived reference
+│   ├── agents/                               # ⭐ ALL AGENTS (centralized)
+│   │   ├── researcher.md                     # Research agent
+│   │   ├── report-writer.md                  # Synthesis agent
+│   │   ├── semantic-search-reader.md         # Search READ operations
+│   │   ├── semantic-search-indexer.md        # Search WRITE operations
+│   │   ├── spec-analyst.md                   # Requirements agent
+│   │   ├── spec-architect.md                 # Architecture agent
+│   │   └── spec-planner.md                   # Task breakdown agent
+│   │
+│   ├── skills/
+│   │   ├── skill-rules.json                  # Skill activation rules
+│   │   │
+│   │   ├── multi-agent-researcher/           # Research Skill
+│   │   │   ├── SKILL.md                      # Orchestrator (required)
+│   │   │   ├── reference.md                  # Documentation (optional)
+│   │   │   └── examples.md                   # Examples (optional)
+│   │   │
+│   │   ├── semantic-search/                  # Code Search Skill
+│   │   │   ├── SKILL.md                      # Orchestrator (required)
+│   │   │   ├── scripts/                      # Bash orchestrators (skill-specific)
+│   │   │   ├── tests/                        # Skill tests (skill-specific)
+│   │   │   └── references/                   # Documentation (skill-specific)
+│   │   │
+│   │   └── spec-workflow-orchestrator/       # Planning Skill
+│   │       ├── SKILL.md                      # Orchestrator (required)
+│   │       ├── reference.md                  # Documentation (optional)
+│   │       ├── examples.md                   # Examples (optional)
+│   │       └── docs/reference/               # Archived docs (optional)
+│   │           └── spec-orchestrator-original.md
+│   │
+│   ├── commands/                             # Slash commands
+│   │   ├── plan-feature.md
+│   │   ├── project-status.md
+│   │   ├── research-topic.md
+│   │   └── verify-structure.md
+│   │
+│   ├── hooks/                                # Hook scripts
+│   │   ├── post-tool-use-track-research.py
+│   │   ├── session-end.py
+│   │   ├── session-start.py
+│   │   ├── stop.py
+│   │   └── user-prompt-submit.py
+│   │
+│   └── utils/                                # Utility modules
+│       ├── config_loader.py
+│       ├── session_logger.py
+│       └── state_manager.py
 │
 ├── docs/
+│   ├── status/                               # Status & review documents
+│   │   ├── AUTO-VENV-IMPLEMENTED.md
+│   │   ├── COMPLIANCE-ACHIEVED.md
+│   │   ├── HONEST_REVIEW.md
+│   │   ├── PRODUCTION_READY_SUMMARY.md
+│   │   ├── SKILL-FIXES-APPLIED.md
+│   │   └── SKILL-REVIEW-FINAL.md
+│   │
+│   ├── architecture/                         # Architecture documentation
+│   │   ├── SKILL_USAGE_DECISION_TREE.md
+│   │   └── STRUCTURE_ALIGNMENT.md
+│   │
+│   ├── implementation/                       # Implementation notes
+│   │   ├── semantic-search-logging-integration.md
+│   │   ├── semantic-search-skill-agent-architecture-fix.md
+│   │   ├── bash-command-errors-and-fixes.md
+│   │   ├── semantic-search-folder-reorganization-analysis.md
+│   │   └── comprehensive-architecture-audit-20251201.md
+│   │
 │   ├── plans/                                # Planning documents (gitignored)
 │   │   ├── completed/                        # Phase 2 complete
 │   │   │   ├── FOCUSED_IMPLEMENTATION_PLAN.md
@@ -74,25 +123,36 @@ Claude-Multi-Agent-Research-System-Skill/
 │       ├── README.md                         # Placeholder only
 │       └── *.md                              # Final reports
 │
-├── logs/                                     # ALL session logs (gitignored, 1,700+ files)
+├── logs/                                     # ALL session logs (gitignored, 2,700+ files)
 │   ├── session_*_transcript.txt
 │   ├── session_*_tool_calls.jsonl
-│   └── ...
+│   └── state/                                # Runtime state (gitignored)
+│       ├── current.json                      # Current skill/session state
+│       ├── research-workflow-state.json      # Research workflow tracking
+│       └── spec-workflow-state.json          # Planning workflow tracking
+│
+├── scripts/                                  # Project-level scripts
+│   └── deploy-semantic-search.sh             # Skill deployment script
 │
 ├── .gitignore                                # Privacy & logs configuration
-├── PROJECT_STRUCTURE.md                      # This file
+├── CHANGELOG.md                              # Project changelog
+├── PROJECT_STRUCTURE.md                      # This file (structure documentation)
 └── README.md                                 # Project overview
 ```
 
 ---
 
-## ⭐ Agents Summary (5 Total)
+## ⭐ Agents Summary (7 Total)
 
-**Location**: `.claude/agents/` (All agents in standard registry)
+**Location**: `.claude/agents/` (All agents in centralized registry)
 
 ### Research Skill (2 agents)
 - **researcher.md** - Web research agent (WebSearch, Write, Read)
 - **report-writer.md** - Synthesis agent (Read, Glob, Write)
+
+### Semantic Search Skill (2 agents)
+- **semantic-search-reader.md** - READ operations (search, find-similar, list-projects)
+- **semantic-search-indexer.md** - WRITE operations (index, status)
 
 ### Planning Skill (3 agents)
 - **spec-analyst.md** - Requirements gathering & analysis
@@ -126,19 +186,42 @@ Claude-Multi-Agent-Research-System-Skill/
 
 ---
 
-### 2. Logs Directory
+### 2. Logs and State Directory
 
 **Location**: `./logs/` (project root)
 
 **Configuration**: `.claude/config.json` line 5: `"logs": "logs"`
 
-**Content**: All session logs (transcript.txt, tool_calls.jsonl)
+**Content**:
+- All session logs (transcript.txt, tool_calls.jsonl) - 2,700+ files
+- Runtime state in `logs/state/` subdirectory:
+  - `current.json` - Current skill/session state
+  - `research-workflow-state.json` - Research workflow tracking
+  - `spec-workflow-state.json` - Planning workflow tracking
 
-**Rule**: NEVER create logs subdirectories elsewhere. All logs consolidated here.
+**Rules**:
+- NEVER create logs subdirectories elsewhere. All logs consolidated here.
+- State was moved from `.claude/state/` to `logs/state/` (following best practices)
+- All state files are gitignored (runtime-generated)
 
 ---
 
 ### 3. Documentation Directory
+
+**docs/status/** (tracked - status & review documents):
+- Project status documents (AUTO-VENV-IMPLEMENTED.md, COMPLIANCE-ACHIEVED.md, etc.)
+- Review documents (HONEST_REVIEW.md, SKILL-REVIEW-FINAL.md, etc.)
+- Moved from project root for cleaner organization
+
+**docs/architecture/** (tracked - architecture documentation):
+- SKILL_USAGE_DECISION_TREE.md - Skill activation decision flow
+- STRUCTURE_ALIGNMENT.md - Structure alignment documentation
+- Moved from `.claude/` for better organization
+
+**docs/implementation/** (tracked - implementation notes):
+- Detailed implementation notes for features and fixes
+- Architecture decisions and analysis
+- Migration guides and audit reports
 
 **docs/plans/** (gitignored - private planning):
 - `completed/` - Finished implementation plans
