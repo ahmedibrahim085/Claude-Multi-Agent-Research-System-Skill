@@ -82,6 +82,8 @@ def identify_agent(tool_name: str, tool_input: Dict[str, Any], state: Optional[D
                 return 'research-orchestrator'
             elif skill_name == 'spec-workflow-orchestrator':
                 return 'spec-orchestrator'
+            elif skill_name == 'semantic-search':
+                return 'semantic-search-orchestrator'
 
     # Priority 2: Environment variable (if SDK provides it)
     if os.environ.get('CLAUDE_AGENT_TYPE'):
@@ -98,11 +100,19 @@ def identify_agent(tool_name: str, tool_input: Dict[str, Any], state: Optional[D
         if file_path.startswith(reports_dir + '/'):
             return 'report-writer'
 
-    # Priority 4: Detect from Task tool (spawning subagents)
+    # Priority 4: Detect semantic-search agents from Task tool prompt
+    if tool_name == 'Task' and tool_input.get('prompt'):
+        prompt = tool_input['prompt']
+        if 'You are the semantic-search-reader agent' in prompt:
+            return 'semantic-search-reader'
+        if 'You are the semantic-search-indexer agent' in prompt:
+            return 'semantic-search-indexer'
+
+    # Priority 5: Detect from Task tool (spawning subagents)
     if tool_name == 'Task' and tool_input.get('subagent_type'):
         return 'orchestrator'
 
-    # Priority 5: Check if we're in an active research session
+    # Priority 6: Check if we're in an active research session
     if state and state.get('currentResearch'):
         sessions = state.get('sessions', [])
         session = next((s for s in sessions if s['id'] == state['currentResearch']), None)
@@ -150,6 +160,21 @@ def get_agent_id(agent_type: str, tool_name: str, tool_input: Dict[str, Any], st
 
         # Default researcher numbering
         return 'RESEARCHER-?'
+
+    if agent_type == 'research-orchestrator':
+        return 'RESEARCH-ORCHESTRATOR'
+
+    if agent_type == 'spec-orchestrator':
+        return 'SPEC-ORCHESTRATOR'
+
+    if agent_type == 'semantic-search-orchestrator':
+        return 'SEMANTIC-SEARCH-ORCHESTRATOR'
+
+    if agent_type == 'semantic-search-reader':
+        return 'SEMANTIC-READER'
+
+    if agent_type == 'semantic-search-indexer':
+        return 'SEMANTIC-INDEXER'
 
     return agent_type.upper()
 
