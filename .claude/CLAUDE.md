@@ -327,9 +327,13 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 **MANDATORY Workflow**:
 1. **STOP** - Do NOT use Grep/Glob/Read for functionality searches
 2. **INVOKE**: Activate semantic-search skill FIRST
-3. **SKILL RUNS**: Bash scripts executed within skill context
-4. **ONLY IF SKILL FAILS**: Then fallback to Grep/Glob
-5. **NEVER SKIP**: Always try semantic-search before manual exploration
+3. **SKILL SPAWNS AGENT**:
+   - Reader agent for searches (90% of cases - search, find-similar, list-projects)
+   - Indexer agent for indexing (10% of cases - index, status)
+4. **AGENT EXECUTES**: Bash scripts run in agent's separate token budget
+5. **AGENT RETURNS**: Interpreted results in natural language (not raw JSON)
+6. **TOKEN SAVINGS**: Agent context separate from yours = 2-3x longer conversations
+7. **ONLY IF SKILL FAILS**: Then fallback to Grep/Glob
 
 ### Token Cost Examples (WHY This Saves Tokens)
 

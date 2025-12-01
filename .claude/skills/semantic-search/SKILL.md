@@ -19,26 +19,91 @@ This skill provides bash scripts that orchestrate the claude-context-local MCP s
 
 ## 🎬 Orchestration Instructions
 
-**When this skill is active, you MUST:**
+**When this skill is active, you MUST spawn the appropriate agent via Task tool.**
 
-1. **For Indexing Operations**: Run `scripts/index` bash script with appropriate arguments
-2. **For Search Operations**: Run `scripts/search` bash script with natural language query
-3. **For Status Checks**: Run `scripts/status` or `scripts/list-projects` bash scripts
-4. **For Similarity Finding**: Run `scripts/find-similar` bash script with chunk_id
+This skill uses a **2-agent architecture** for token optimization:
+- **semantic-search-reader**: Handles READ operations (search, find-similar, list-projects)
+- **semantic-search-indexer**: Handles WRITE operations (index, status)
 
-**Example Orchestration Pattern**:
-```bash
-# When user asks to search for authentication:
-scripts/search --query "user authentication and credential verification" --k 10 --project /path/to/project
+### Decision Logic: Which Agent to Spawn?
 
-# When user asks to reindex:
-scripts/index /path/to/project --full
+| User Request Contains | Operation Type | Agent to Spawn |
+|----------------------|----------------|----------------|
+| "find X", "search for Y", "where is Z" | **search** | semantic-search-reader |
+| "find similar to...", "similar chunks" | **find-similar** | semantic-search-reader |
+| "what projects", "list indexed", "show projects" | **list-projects** | semantic-search-reader |
+| "index this", "create index", "reindex" | **index** | semantic-search-indexer |
+| "check index", "index status", "is it indexed" | **status** | semantic-search-indexer |
 
-# When user asks what's indexed:
-scripts/list-projects
+### Agent Spawn Examples
+
+**Example 1: Search Operation** (semantic-search-reader)
+```python
+Task(
+    subagent_type="general-purpose",
+    description="Search codebase semantically",
+    prompt="""You are the semantic-search-reader agent.
+
+Operation: search
+Query: "user authentication logic"
+K: 10
+Project: /path/to/project
+
+Execute the search operation using scripts/search and return interpreted results with explanations."""
+)
 ```
 
-**DO NOT**: Run these scripts outside of skill context - always invoke skill first, then run scripts.
+**Example 2: Index Operation** (semantic-search-indexer)
+```python
+Task(
+    subagent_type="general-purpose",
+    description="Index codebase for semantic search",
+    prompt="""You are the semantic-search-indexer agent.
+
+Operation: index
+Directory: /path/to/project
+Full: true
+
+Execute the indexing operation using scripts/index and return interpreted results with statistics."""
+)
+```
+
+**Example 3: Find Similar** (semantic-search-reader)
+```python
+Task(
+    subagent_type="general-purpose",
+    description="Find similar code chunks",
+    prompt="""You are the semantic-search-reader agent.
+
+Operation: find-similar
+Chunk ID: "src/auth.py:45-67:function:authenticate"
+K: 5
+Project: /path/to/project
+
+Execute the find-similar operation using scripts/find-similar and return interpreted results."""
+)
+```
+
+**Example 4: Status Check** (semantic-search-indexer)
+```python
+Task(
+    subagent_type="general-purpose",
+    description="Check semantic index status",
+    prompt="""You are the semantic-search-indexer agent.
+
+Operation: status
+Project: /path/to/project
+
+Execute the status operation using scripts/status and return interpreted results with statistics."""
+)
+```
+
+### Important Notes
+
+- **NEVER run bash scripts directly** - always spawn the appropriate agent
+- **Agents handle error interpretation** - they convert JSON errors to natural language
+- **Token optimization**: Agent execution happens in separate context (saves YOUR tokens)
+- **Wait for agent completion** - agents return summarized results, not raw JSON
 
 ## 🎯 When to Use This Skill
 
