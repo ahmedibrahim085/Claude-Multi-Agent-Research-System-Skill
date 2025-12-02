@@ -1,6 +1,6 @@
 ---
 name: multi-agent-researcher
-description: Conduct comprehensive research on any topic by coordinating 2-4 specialized researcher agents in parallel, then synthesizing findings into a detailed report via mandatory report-writer agent delegation
+description: Conduct comprehensive research on any topic by coordinating 2-4 specialized researcher agents in parallel, then synthesizing findings into a detailed report via mandatory report-writer agent delegation (Full workflow documentation at docs/workflows/research-workflow.md)
 allowed-tools: Task, Read, Glob, TodoWrite
 version: 2.1.2
 ---

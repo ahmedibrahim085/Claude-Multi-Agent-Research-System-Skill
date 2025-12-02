@@ -8,6 +8,7 @@ description: >
   unfamiliar codebases, finding similar implementations, or locating functionality across multiple files.
   NOT for simple keyword searches (use Grep) or finding files by name (use Glob). Provides indexing, searching,
   status checking, and similarity finding capabilities.
+  (Full workflow documentation at docs/workflows/semantic-search-hierarchy.md)
 allowed-tools: Bash, Read, Glob, Grep
 ---
 

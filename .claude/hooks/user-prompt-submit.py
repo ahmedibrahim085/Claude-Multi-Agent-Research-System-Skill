@@ -583,6 +583,8 @@ def build_research_enforcement_message(triggers: dict) -> str:
 
 **Enforcement Level**: CRITICAL (guardrail - blocks direct tool use)
 
+📖 **Detailed workflow**: docs/workflows/research-workflow.md
+
 ---
 """.strip()
 
@@ -625,6 +627,8 @@ def build_planning_enforcement_message(triggers: dict) -> str:
 - Is this more than trivial planning? → Use Skill
 
 **Enforcement Level**: HIGH (recommended - helps ensure comprehensive planning)
+
+📖 **Detailed workflow**: docs/workflows/planning-workflow.md
 
 ---
 """.strip()
@@ -683,6 +687,8 @@ def build_semantic_search_enforcement_message(triggers: dict) -> str:
 ✅ CORRECT: semantic-search "deployment documentation" → finds docs, configs, README
 
 **Enforcement Level**: HIGH (recommended - saves 5,000-10,000 tokens per task)
+
+📖 **Detailed workflow**: docs/workflows/semantic-search-hierarchy.md
 
 ---
 """.strip()

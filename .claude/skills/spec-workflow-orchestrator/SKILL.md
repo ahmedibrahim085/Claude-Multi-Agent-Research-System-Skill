@@ -1,6 +1,6 @@
 ---
 name: spec-workflow-orchestrator
-description: Orchestrate comprehensive planning phase from ideation to development-ready specifications using 3 specialized agents
+description: Orchestrate comprehensive planning phase from ideation to development-ready specifications using 3 specialized agents (Full workflow documentation at docs/workflows/planning-workflow.md)
 allowed-tools: Task, Read, Glob, TodoWrite, Write, Edit
 version: 1.0.0
 ---
