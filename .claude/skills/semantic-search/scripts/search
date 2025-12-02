@@ -40,6 +40,6 @@ server = CodeSearchServer()
 if project_path:
     server.switch_project(project_path)
 
-result = server.search_code(query, k=k)
+result = server.search_code(query, k=k, max_age_minutes=240)
 print(result)
 " "$@"
