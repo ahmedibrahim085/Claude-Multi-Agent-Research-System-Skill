@@ -66,97 +66,17 @@ This workflow documents the absolute search hierarchy for finding content in the
 
 ---
 
-## Token Cost Examples (WHY This Saves Tokens)
+## Why This Saves Tokens
 
-### ❌ BAD: Traditional Grep Exploration (~8,000 tokens wasted)
+Semantic search reduces exploration overhead by **90%+ (~5,000-10,000 tokens per task)** compared to traditional Grep-based searching.
 
-**User**: "Find where authentication is handled"
+**Quick Example:**
+- **Traditional approach**: Finding authentication code requires 15+ Grep searches (`"auth"`, `"login"`, `"verify"`, etc.), reading 26 files across multiple attempts → ~8,000 tokens, 5-10 minutes
+- **Semantic search**: Query `"user authentication logic"` → Get ranked results → Read 2 relevant files → ~600 tokens, 30 seconds
+- **Savings**: 7,400 tokens (92% reduction)
 
-**My Wrong Approach**:
-```
-1. Grep for "auth" → 200 matches → Read 5 files → Wrong code
-2. Grep for "login" → 150 matches → Read 7 files → Still wrong
-3. Grep for "authenticate" → 80 matches → Read 4 files → Getting closer
-4. Grep for "session" → 300 matches → Read 10 files → Found it!
-
-Total: 26 file reads, 4 Grep searches, 5-10 minutes
-Token cost: ~8,000 tokens (file reads + failed attempts)
-```
-
-### ✅ GOOD: Semantic Search (~600 tokens saved)
-
-**User**: "Find where authentication is handled"
-
-**My Correct Approach**:
-```
-1. Invoke semantic-search skill
-2. Query: "user authentication and credential verification"
-3. Get ranked results with exact file:line locations
-4. Read 1-2 most relevant files → Found it!
-
-Total: 1 semantic search, 2 file reads, 30 seconds
-Token cost: ~600 tokens (search overhead + targeted reads)
-SAVINGS: 7,400 tokens (92% reduction)
-```
-
----
-
-## Direct Tool Use vs Semantic Search
-
-### Use semantic-search Skill for (TOKEN SAVINGS):
-- Finding content by describing WHAT it does (not exact keywords)
-- Searching for "authentication logic" (could be named anything)
-- Discovering patterns like "retry mechanisms" across project
-- Finding similar implementations or documentation
-- Understanding unfamiliar projects
-- Cross-language/format searches (same concept, different syntax)
-- **ANY exploratory task where you'd try multiple Grep searches**
-
-### Use Grep ONLY for (Known Targets):
-- Exact string matching (e.g., `"import React"`)
-- Known variable/function names (e.g., `"getUserById"`)
-- Regex patterns (e.g., `"function.*export"`)
-- File content search with known keywords
-- **When you KNOW exactly what string to match**
-
-### Use Glob ONLY for (File Navigation):
-- Finding files by name pattern (e.g., `"**/*.test.js"`)
-- Locating configuration files (e.g., `"**/config.yml"`)
-- File system navigation (e.g., `"src/components/**/*.tsx"`)
-
-### Use Read ONLY for (Known Files):
-- Reading specific known files
-- Examining files after semantic-search narrows results
-
----
-
-## Example Violations to AVOID
-
-❌ **WRONG #1** (~8,000 tokens wasted): User asks "how does authentication work?"
-- I run 20 Grep searches: `"login"`, `"auth"`, `"authenticate"`, `"verify"`
-- I read 26 files trying to find the right code
-- **VIOLATION**: Wasted 8,000 tokens on exploration instead of 600 tokens with semantic-search
-
-❌ **WRONG #2** (Tool misuse): User asks "find the orchestrator pattern"
-- I run: `~/.claude/skills/semantic-search/scripts/search --query "..."`
-- **VIOLATION**: Ran bash scripts directly - skill should orchestrate this
-
-❌ **WRONG #3** (Skipped hierarchy): I need to find error handling code
-- I use Grep without trying semantic-search first
-- **VIOLATION**: Didn't follow search hierarchy
-
-✅ **CORRECT** (~600 tokens, saved 7,400): User asks "how does authentication work?"
-- I activate semantic-search skill
-- Skill executes: `scripts/search --query "user authentication logic" --k 10`
-- Get ranked results with exact locations
-- Read 2 most relevant files
-- Deliver answer
-- **Token savings: 92%**
-
-✅ **ALSO CORRECT** (Proper fallback): I need to find authentication code
-- I activate semantic-search skill first
-- If index missing or search fails, THEN use Grep/Glob
-- Always try semantic-search before manual exploration
+**For comprehensive token economics, detailed cost comparisons, violation examples, and tool selection guidelines, see:**
+→ [Token Savings Guide](../guides/token-savings-guide.md)
 
 ---
 
