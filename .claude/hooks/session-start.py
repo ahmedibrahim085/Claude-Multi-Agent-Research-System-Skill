@@ -249,94 +249,12 @@ Full session details available at: `logs/state/research-workflow-state.json`
 """.strip()
 
 
-def check_and_reindex_semantic_search(source: str):
-    """Check semantic search index age and reindex if needed (only on true new sessions)"""
-    # Only reindex on TRUE new sessions (not after compaction)
-    if source not in ['startup', 'clear']:
-        print(f"ℹ️  Session source: {source} - Skipping semantic search reindex")
-        return
-
-    project_root = get_project_root()
-    index_script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'index'
-    status_script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'status'
-
-    # Check if scripts exist
-    if not index_script.exists() or not status_script.exists():
-        print("ℹ️  Semantic search scripts not found - Skipping reindex")
-        return
-
-    try:
-        import subprocess
-
-        # Get index status
-        result = subprocess.run(
-            [str(status_script), '--project', str(project_root)],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-
-        if result.returncode == 0:
-            status_output = result.stdout
-
-            # Parse index age from status output
-            import re
-            age_match = re.search(r'Index age:\s*(\d+)\s*minutes', status_output)
-
-            if age_match:
-                index_age = int(age_match.group(1))
-                print(f"📊 Semantic search index age: {index_age} minutes")
-
-                # Reindex if older than 60 minutes
-                if index_age > 60:
-                    print(f"🔄 Index >60min old, running full reindex...")
-                    reindex_result = subprocess.run(
-                        [str(index_script), '--full', str(project_root)],
-                        capture_output=True,
-                        text=True,
-                        timeout=300  # 5 minute timeout
-                    )
-
-                    if reindex_result.returncode == 0:
-                        print("✅ Semantic search index refreshed\n")
-                    else:
-                        print(f"⚠️  Reindex failed: {reindex_result.stderr}", file=sys.stderr)
-                else:
-                    print(f"✅ Index fresh (<60min) - No reindex needed\n")
-            else:
-                print("ℹ️  Could not parse index age - Skipping reindex")
-        else:
-            # No index exists or status check failed
-            if 'No index found' in result.stderr or 'No index found' in result.stdout:
-                print("📦 No semantic search index found, creating initial index...")
-                reindex_result = subprocess.run(
-                    [str(index_script), '--full', str(project_root)],
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-
-                if reindex_result.returncode == 0:
-                    print("✅ Initial semantic search index created\n")
-                else:
-                    print(f"⚠️  Initial indexing failed: {reindex_result.stderr}", file=sys.stderr)
-
-    except subprocess.TimeoutExpired:
-        print("⚠️  Semantic search operation timed out", file=sys.stderr)
-    except Exception as e:
-        print(f"⚠️  Semantic search check failed: {e}", file=sys.stderr)
-        # Don't fail entire hook
-
-
 def main():
     # Read hook input from stdin
     try:
         input_data = json.load(sys.stdin)
     except json.JSONDecodeError:
         sys.exit(0)
-
-    # Get session source (startup, resume, clear, compact)
-    source = input_data.get('source', 'unknown')
 
     # Step 1: Auto-setup (first-time only operations)
     check_and_setup_settings()  # Copy template if needed
@@ -345,9 +263,6 @@ def main():
 
     # Step 2: Initialize session logging
     initialize_session_logging()
-
-    # Step 2.1: Check and reindex semantic search (only on true new sessions)
-    check_and_reindex_semantic_search(source)
 
     # Step 2.5: Skill crash recovery (check for orphaned skills)
     try:

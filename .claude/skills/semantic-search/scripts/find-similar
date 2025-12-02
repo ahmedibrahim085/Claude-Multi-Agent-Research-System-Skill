@@ -37,6 +37,6 @@ server = CodeSearchServer()
 if project_path:
     server.switch_project(project_path)
 
-result = server.find_similar_code(chunk_id, k=k, max_age_minutes=240)
+result = server.find_similar_code(chunk_id, k=k)
 print(result)
 " "$@"
