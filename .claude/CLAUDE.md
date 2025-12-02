@@ -172,11 +172,30 @@ When multi-agent-researcher skill is active, you **DO NOT HAVE WRITE TOOL ACCESS
 
 ### Quality Gates
 
-The spec-workflow-orchestrator enforces quality standards:
-- **Threshold**: 85% (100 points total, 4 criteria per deliverable)
-- **Max Iterations**: 3 attempts per agent
-- **Criteria**: Completeness, Technical Depth, Actionability, Clarity
-- **Outputs**: requirements.md (~800-1,500 lines), architecture.md + ADRs, tasks.md (~500-800 lines)
+The spec-workflow-orchestrator enforces quality standards for all deliverables:
+
+**Scoring System**:
+- **Total Points**: 100 per deliverable
+- **Pass Threshold**: 85/100 (85%)
+- **Max Iterations**: 3 attempts per agent (fail after 3rd attempt)
+
+**4 Criteria (25 points each)**:
+1. **Completeness** (25 pts): All required sections present, no gaps, comprehensive coverage
+2. **Technical Depth** (25 pts): Detailed technical specifications, architectural decisions documented
+3. **Actionability** (25 pts): Clear implementation steps, testable acceptance criteria
+4. **Clarity** (25 pts): Well-structured, easy to understand, proper formatting
+
+**3 Deliverables Validated**:
+- **requirements.md** (spec-analyst): User stories, acceptance criteria, constraints (~800-1,500 lines)
+- **architecture.md + ADRs** (spec-architect): System design, technology choices, decision records (~600-1,000 lines)
+- **tasks.md** (spec-planner): Implementation tasks, priorities, dependencies (~500-800 lines)
+
+**Validation Flow**:
+1. Agent creates deliverable
+2. Quality gate validates (4 criteria × 25 points = 100 total)
+3. If score ≥85: PASS, proceed to next agent
+4. If score <85: FAIL, agent revises (max 3 iterations)
+5. After 3 failures: Workflow stops, user notified
 
 ---
 
@@ -313,11 +332,14 @@ When user selects "Research → Plan", Claude Code **cannot automatically chain*
 ### ALWAYS Use semantic-search Skill When:
 
 **Trigger Keywords - When I Need To**:
-- **Search/Find**: "search", "find", "locate", "look for", "discover", "where is", "show me"
+- **Search/Find**: "search", "find", "locate", "look for", "discover", "where is", "show me", "find in codebase", "search codebase", "find in code"
 - **Understanding**: "how does this work", "how is X implemented", "where is Y handled", "explain the content about"
 - **Similarity**: "find similar", "similar to", "like this", "related to", "find other implementations"
 - **Patterns**: "discover patterns", "identify instances", "all occurrences of"
 - **Cross-Reference**: "where else", "find related", "show all references", "used by"
+- **Documentation/Config**: "find documentation", "search documentation", "find config", "search config", "locate guide", "deployment documentation"
+
+**Total**: ~52 keywords + 14 intent patterns (see `.claude/skills/skill-rules.json` for complete list)
 
 **ABSOLUTE PROHIBITION**:
 - ❌ NEVER use Grep/Glob as first attempt for functionality/content searches
@@ -490,20 +512,35 @@ SAVINGS: 7,400 tokens (92% reduction)
 
 ## Available Skills
 
-- **multi-agent-researcher**: Orchestrates 2-4 parallel researchers for comprehensive topic investigation
+- **multi-agent-researcher**: Orchestrates 2-4 parallel researchers for comprehensive topic investigation, then synthesizes findings via mandatory report-writer agent delegation (architectural constraint: orchestrator lacks Write tool when skill active)
 - **spec-workflow-orchestrator**: Orchestrates 3 sequential planning agents for development-ready specifications
-- **semantic-search**: Semantic search using natural language queries to find any text content by meaning (orchestrates claude-context-local via bash scripts)
+- **semantic-search**: Semantic search using natural language queries to find any text content by meaning (code, documentation, markdown, configs). Uses 2-agent architecture (semantic-search-reader for searches, semantic-search-indexer for index management). Orchestrates claude-context-local via bash scripts. Saves 5,000-10,000 tokens vs traditional Grep exploration.
 
 ## Available Agents
 
 ### Research Agents:
-- **researcher**: Web research agent (WebSearch, Write, Read) - DO NOT invoke directly, use via skill
-- **report-writer**: Synthesis agent (Read, Glob, Write)
+- **researcher**: Web research agent. Tools: WebSearch, Write, Read. DO NOT invoke directly, use via skill
+- **report-writer**: Synthesis agent. Tools: Read, Glob, Write.
 
 ### Planning Agents:
-- **spec-analyst**: Requirements gathering agent (Read, Write) - DO NOT invoke directly, use via skill
-- **spec-architect**: System design agent (Read, Write) - DO NOT invoke directly, use via skill
-- **spec-planner**: Task breakdown agent (Read, Write) - DO NOT invoke directly, use via skill
+- **spec-analyst**: Requirements gathering agent. Tools: Read, Write, Glob, Grep, WebFetch, TodoWrite. DO NOT invoke directly, use via skill
+- **spec-architect**: System design agent. Tools: Read, Write, Glob, Grep, WebFetch, TodoWrite, mcp__sequential-thinking__sequentialthinking. DO NOT invoke directly, use via skill
+- **spec-planner**: Task breakdown agent. Tools: Read, Write, Glob, Grep, TodoWrite, mcp__sequential-thinking__sequentialthinking. DO NOT invoke directly, use via skill
+
+### Semantic-Search Agents:
+- **semantic-search-reader**: Executes semantic content search operations (search, find-similar, list-projects). Searches across all text content (code, documentation, markdown, configs). Tools: Bash, Read, Grep, Glob. DO NOT invoke directly, use via skill
+- **semantic-search-indexer**: Executes semantic index management operations (index, status). Creates and updates semantic content indices for all text content. Tools: Bash, Read, Grep, Glob. DO NOT invoke directly, use via skill
+
+## Available Slash Commands
+
+Project-specific commands for common workflows:
+
+- **`/project-status`**: Show current project implementation status (reads docs/status/, logs/, PROJECT_STRUCTURE.md)
+- **`/plan-feature`**: Plan a new feature using spec-workflow-orchestrator skill (interactive feature specification)
+- **`/research-topic`**: Research a topic using multi-agent-researcher skill (spawns 2-4 parallel researchers)
+- **`/verify-structure`**: Verify project structure aligns with official Claude Code standards (runs structural validation)
+
+**Usage**: Type `/command-name` in chat. Commands expand to prompts that activate relevant skills/agents.
 
 ## File Organization
 
@@ -600,6 +637,81 @@ This project uses several **custom** files that are NOT part of official Claude 
 - 🔧 `logs/state/` - Runtime state directory (following best practices)
 
 **Note**: Custom files enable advanced features but are not required for basic Claude Code usage.
+
+---
+
+## Hooks System
+
+This project uses **5 hooks** for workflow automation. Hooks run automatically - users don't interact with them directly.
+
+### User-Facing Hooks:
+- **user-prompt-submit.py** (777 lines): Universal skill activation engine. Detects trigger keywords for all 3 skills, handles compound request detection (research + planning), applies negation patterns, injects enforcement reminders. Achieves 95% reliability (vs 70% with instructions only).
+- **session-start.py**: Auto-setup, session logging initialization, research session restoration, skill crash recovery.
+
+### Internal Tracking Hooks:
+- **post-tool-use-track-research.py**: Research workflow phase tracking, quality gate validation (85% threshold), session logging, skill invocation tracking.
+- **stop.py**: Skill completion detection, duration tracking, end-of-turn validation.
+- **session-end.py**: Cleanup on session termination, finalize session state, close log files.
+
+### How Hooks Work:
+1. **user-prompt-submit** runs first - analyzes user prompt, detects skills, injects reminders
+2. **post-tool-use** tracks each tool call during skill execution
+3. **stop** detects when skill completes
+4. **session-start/end** handle session lifecycle
+
+### Debugging Hooks:
+```bash
+# Enable compound detection debug mode
+export COMPOUND_DETECTION_DEBUG=true
+
+# Check hook execution logs
+tail -f logs/session_YYYYMMDD_HHMMSS_transcript.txt
+```
+
+**Note**: Hooks are configured in `.claude/settings.json`. Trigger rules defined in `.claude/skills/skill-rules.json`.
+
+---
+
+## MCP Servers
+
+### claude-context-local
+**Purpose**: Semantic search backend for the semantic-search skill. Enables natural language queries across all project content (code, documentation, markdown, configs).
+
+**Technology**:
+- FAISS IndexFlatIP (inner product similarity)
+- google/embeddinggemma-300m embeddings (768 dimensions)
+- Supports ~10,000 files per index, ~4,686 chunks for this project
+
+**Installation**:
+```bash
+# macOS/Linux
+curl -fsSL https://raw.githubusercontent.com/FarhanAliRaza/claude-context-local/main/scripts/install.sh | bash
+
+# Windows
+# Use Windows installer from repository
+```
+
+**Location**:
+- macOS/Linux: `~/.local/share/claude-context-local`
+- Windows: `%LOCALAPPDATA%\claude-context-local`
+
+**Used by**: semantic-search skill orchestrates claude-context-local via bash scripts in `.claude/skills/semantic-search/scripts/`
+
+**Index Management**:
+```bash
+# Create/update index
+~/.claude/skills/semantic-search/scripts/index /path/to/project --full
+
+# Check status
+~/.claude/skills/semantic-search/scripts/status --project /path/to/project
+
+# List indexed projects
+~/.claude/skills/semantic-search/scripts/list-projects
+```
+
+**Note**: This is the ONLY external dependency. All other features use built-in Claude Code capabilities.
+
+---
 
 ## Commit Standards
 
