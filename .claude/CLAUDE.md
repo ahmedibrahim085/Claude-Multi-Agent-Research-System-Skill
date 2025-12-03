@@ -84,3 +84,14 @@ This project uses **3 specialized skills** with **hook-based auto-activation**. 
 **Progressive Disclosure**: @import loads detailed workflows on-demand, keeping core context focused
 
 For detailed workflows, trigger keywords, examples, configuration reference, and token economics, see imported documentation above.
+
+---
+
+## Architecture Decision Records
+
+**Auto-Reindex Design**: Direct Script vs Agent
+- **Decision**: Use direct bash scripts for automatic reindex (session start, post-write hooks)
+- **Rationale**: 5x faster (2.7s vs 14.6s), $0 cost vs $144/year per 10 developers, works offline, predictable
+- **Agent Use**: Reserved for manual operations where intelligence and rich output add value
+- **Full ADR**: `docs/architecture/ADR-001-direct-script-vs-agent-for-auto-reindex.md`
+- **Quick Reference**: `docs/architecture/auto-reindex-design-quick-reference.md`

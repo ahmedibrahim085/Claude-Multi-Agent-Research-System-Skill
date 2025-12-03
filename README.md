@@ -608,6 +608,22 @@ The setup script allows you to:
 
 ## Architecture Deep Dive
 
+### Architecture Decision Records (ADRs)
+
+**ADR-001: Direct Script vs Agent for Auto-Reindex** ([Full ADR](docs/architecture/ADR-001-direct-script-vs-agent-for-auto-reindex.md) | [Quick Reference](docs/architecture/auto-reindex-design-quick-reference.md))
+
+**Decision**: Use direct bash scripts for automatic reindex operations (session start, post-write hooks)
+
+**Key Metrics**:
+- **Performance**: 5x faster (2.7s vs 14.6s)
+- **Cost**: $0 vs $144/year per 10 developers
+- **Reliability**: Deterministic, works offline
+- **Hook Safety**: 9s buffer vs risky timeout
+
+**Agent Use**: Reserved for manual operations where intelligence and rich output add value (user explicitly invokes reindex, troubleshooting, diagnostics)
+
+---
+
 ### Comparison to Reference SDK
 
 This project adapts the multi-agent research pattern from [Anthropic's research-agent demo](https://github.com/anthropics/claude-agent-sdk-demos/tree/main/research-agent)<sup>[[5]](#ref-5)</sup> for Claude Code's skill system.
