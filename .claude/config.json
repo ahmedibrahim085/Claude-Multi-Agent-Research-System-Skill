@@ -21,15 +21,5 @@
     "research_note_format": "{subtopic-slug}.md",
     "report_format": "{topic-slug}_{timestamp}.md",
     "timestamp_format": "%Y%m%d-%H%M%S"
-  },
-  "semantic_search": {
-    "reindex": {
-      "file_include_patterns": [
-        "*.py", "*.ts", "*.js", "*.tsx", "*.jsx", "*.go", "*.rs", "*.java",
-        "*.md", "*.txt", "*.rst", "*.adoc",
-        "*.json", "*.yaml", "*.yml", "*.toml", "*.ini",
-        "*.ipynb"
-      ]
-    }
   }
 }

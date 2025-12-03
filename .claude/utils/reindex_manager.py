@@ -57,9 +57,10 @@ def get_reindex_config(force_reload: bool = False) -> Dict[str, Any]:
             - User can tune per-project needs
 
         file_include_patterns: Extensions to index
-            - Code: *.py, *.ts, *.js, *.tsx, *.jsx, *.go, *.rs, *.java
-            - Docs: *.md, *.txt, *.rst, *.adoc
-            - Config: *.json, *.yaml, *.yml, *.toml, *.ini
+            - Code: *.py, *.ts, *.js, *.tsx, *.jsx, *.go, *.rs, *.java, *.c, *.cpp, etc.
+            - Notebooks: *.ipynb
+            - Docs: *.md, *.txt, *.rst, *.adoc, *.org
+            - Config: *.json, *.yaml, *.yml, *.toml, *.ini, *.xml, etc.
 
         file_exclude_dirs: Directories to ignore
             - Build: dist, build, target, out
@@ -98,6 +99,8 @@ def get_reindex_config(force_reload: bool = False) -> Dict[str, Any]:
             '*.py', '*.ts', '*.js', '*.tsx', '*.jsx', '*.go', '*.rs', '*.java',
             '*.c', '*.cpp', '*.h', '*.hpp', '*.cs', '*.rb', '*.php', '*.swift',
             '*.kt', '*.scala', '*.r', '*.m', '*.sh', '*.bash', '*.zsh',
+            # Notebooks
+            '*.ipynb',
             # Documentation
             '*.md', '*.txt', '*.rst', '*.adoc', '*.org',
             # Config files
