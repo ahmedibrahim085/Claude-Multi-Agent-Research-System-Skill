@@ -64,11 +64,11 @@ Claude-Multi-Agent-Research-System-Skill/
 │   │   └── verify-structure.md
 │   │
 │   ├── hooks/                                # Hook scripts
-│   │   ├── post-tool-use-track-research.py
-│   │   ├── session-end.py
-│   │   ├── session-start.py
-│   │   ├── stop.py
-│   │   └── user-prompt-submit.py
+│   │   ├── post-tool-use-track-research.py  # Research phase tracking, quality gate validation
+│   │   ├── session-end.py                   # Session cleanup, finalize state
+│   │   ├── session-start.py                 # Auto-reindex (smart, 60-min cooldown), session logging, prerequisites check
+│   │   ├── stop.py                          # Skill completion detection, duration tracking
+│   │   └── user-prompt-submit.py            # Universal skill activation (3 skills), conditional enforcement, compound detection
 │   │
 │   └── utils/                                # Utility modules
 │       ├── config_loader.py

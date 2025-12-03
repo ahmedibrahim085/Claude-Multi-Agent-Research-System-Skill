@@ -26,10 +26,10 @@ This guide explains how to configure the workflow enforcement hooks in Claude Co
 - **Command**: `tsx .claude/hooks/post-tool-use-track-research.ts`
 - **Description**: Track research phases and agent assignments
 
-**SessionStart Hook** (Optional):
+**SessionStart Hook** (Required):
 - **Matcher**: (leave empty)
-- **Command**: `tsx .claude/hooks/session-start-restore-research.ts`
-- **Description**: Restore incomplete research sessions on restart
+- **Command**: `python3 .claude/hooks/session-start.py`
+- **Description**: Auto-reindex semantic search (smart change detection, 60-min cooldown), session logging initialization, prerequisites checking, skill crash recovery
 
 ### Option 2: Via settings.json
 
@@ -135,13 +135,15 @@ If hooks fail with Python errors:
 
 ### UserPromptSubmit
 
-- Matches user prompts against skill-rules.json for BOTH skills
-- **Research Keywords**: "research", "investigate", "analyze", "explore", "study", etc. (37+ keywords)
-- **Planning Keywords**: "plan", "design", "build", "architect", "specs", "requirements", etc. (90+ keywords)
+- Matches user prompts against skill-rules.json for **ALL THREE skills**
+- **Research Keywords**: "research", "investigate", "analyze", "explore", "study", etc. (49+ keywords)
+- **Planning Keywords**: "plan", "design", "build", "architect", "specs", "requirements", etc. (119+ keywords)
+- **Semantic-Search Keywords**: "search", "find", "locate", "where is", "how does X work", "find similar", etc. (52+ keywords)
 - **Pattern Matching**: Regex patterns like "(build|create)\\s+(a|an|the)?\\s*(app|system|feature)"
+- **Prerequisites Checking**: Conditionally enforces semantic-search based on prerequisites state file
 - Injects enforcement reminder into Claude's context BEFORE prompt is processed
-- Helps ensure automatic skill activation
-- Can detect multiple skills in single prompt (e.g., "research and design")
+- Helps ensure automatic skill activation (95% reliability vs 70% prompt-only)
+- Can detect multiple skills in single prompt (e.g., "research and design") → compound request detection
 
 ### PostToolUse
 
@@ -151,12 +153,16 @@ If hooks fail with Python errors:
 - Validates quality gates
 - Emits warnings on violations
 
-### SessionStart (Optional)
+### SessionStart (Required)
 
-- Checks for incomplete research sessions
-- Injects resumption context if found
-- Lists available research notes
-- Suggests next steps
+- **Auto-reindex semantic search**: Trigger-based logic (startup/resume/clear/compact) with smart change detection
+- **60-minute cooldown**: Prevents rapid full reindex spam during frequent restarts
+- **Concurrent protection**: PID-based lock files prevent duplicate indexing operations
+- **Prerequisites checking**: Validates semantic-search setup, enables conditional enforcement
+- **Session logging**: Initializes transcript, tool calls, and state tracking
+- **Skill crash recovery**: Detects and handles interrupted skill executions
+- **Directory setup**: Creates required directories (logs/, files/research_notes/, files/reports/)
+- **Performance**: <20ms overhead (non-blocking, background processes)
 
 ## Verification
 

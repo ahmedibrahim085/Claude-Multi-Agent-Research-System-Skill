@@ -8,24 +8,28 @@
 
 ---
 
-## 🎉 v2.2.x: Dual-Skill Orchestration Platform
+## 🎉 v2.3.x: Tri-Skill Orchestration Platform
 
-A **dual-skill platform** with smart routing and compound request detection:
+A **tri-skill platform** with smart routing, auto-indexing, and compound request detection:
 
 | Skill | Purpose | Agents |
 |-------|---------|--------|
 | **multi-agent-researcher** | Comprehensive topic investigation | researcher, report-writer |
 | **spec-workflow-orchestrator** | Planning from ideation to dev-ready specs | spec-analyst, spec-architect, spec-planner |
+| **semantic-search** | Natural language content search (code, docs, configs) | semantic-search-reader, semantic-search-indexer |
 
 **Key Features**:
-- **Smart Compound Detection** - When prompts trigger both skills, asks for clarification
-- **148 Trigger Keywords** - Automatic skill routing via hook
+- **Auto-Reindex on Session Start** - Smart change detection with 60-min cooldown
+- **Smart Compound Detection** - When prompts trigger multiple skills, asks for clarification
+- **200+ Trigger Keywords** - Automatic skill routing via hook (3 skills)
 - **Quality Gates** - 85% threshold with max 3 iterations
+- **Token Savings** - Semantic search saves 5,000-10,000 tokens per task (~90% reduction)
 
 **Quick Examples**:
 ```
 research quantum computing fundamentals     → multi-agent-researcher
 plan a task management PWA with offline     → spec-workflow-orchestrator
+find authentication logic in the codebase   → semantic-search
 research auth methods and build login page  → asks which skill to use
 ```
 
@@ -91,8 +95,10 @@ claude
 ```
 
 The SessionStart hook will automatically:
+- **Auto-reindex semantic search** (smart change detection, 60-min cooldown)
 - Create required directories (`files/research_notes/`, `files/reports/`, `logs/`)
 - Initialize session logging
+- Check prerequisites and enable conditional enforcement
 - Display setup status
 
 **Note**: Hooks are pre-configured in `.claude/settings.json` and work out-of-the-box. **Do not duplicate hooks in `settings.local.json`** to avoid duplicate hook executions.

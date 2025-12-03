@@ -204,6 +204,179 @@ This skill provides an `index` script that creates and updates the semantic cont
 
 You can verify an index exists using the `status` script or the `list-projects` script.
 
+## 🔄 Auto-Reindex System
+
+**Automatic Index Management** (New in v2.3.x)
+
+The semantic-search skill now automatically maintains index freshness via the SessionStart hook, eliminating the need for manual reindexing after code changes.
+
+### How It Works
+
+**Trigger-Based Logic**: The SessionStart hook analyzes the session type and index state to determine the optimal action:
+
+| Session Type | Index State | Action | Duration |
+|--------------|-------------|--------|----------|
+| `startup` / `resume` | Never indexed | **Full index** (background) | ~3 min |
+| `startup` / `resume` | Indexed before | **Smart reindex** (background) | ~5 sec (with Merkle tree) |
+| `startup` / `resume` | Last full <60min | **Smart reindex** (cooldown active) | ~5 sec (with Merkle tree) |
+| `clear` / `compact` | Any | **Skip** (no code changes) | N/A |
+
+**Key Benefits**:
+- ✅ **Automatic**: No manual reindexing required after code changes
+- ✅ **Smart**: Uses Merkle tree to detect only changed files
+- ✅ **Fast**: Incremental updates in ~5 seconds vs ~3 minutes full reindex
+- ✅ **Non-blocking**: Background process, session starts immediately (<20ms overhead)
+- ✅ **Efficient**: 60-minute cooldown prevents rapid full reindex spam
+
+### 60-Minute Cooldown Protection
+
+Prevents expensive full reindex spam during rapid restarts:
+
+**Problem**: User workflow pattern:
+```
+10:00 - First startup → Full index (3 min)
+10:05 - Close IDE, fix typo
+10:07 - Reopen IDE → Would do full index again (waste 3 min)
+10:10 - Close IDE, test change
+10:12 - Reopen IDE → Would do full index again (waste 3 min)
+```
+
+**Solution**: Cooldown logic:
+```
+10:00 - First startup → Full index (~3 min)
+10:05 - Close IDE, fix typo
+10:07 - Reopen IDE → Smart reindex (fast, cooldown active)
+10:10 - Close IDE, test change
+10:12 - Reopen IDE → Smart reindex (fast, cooldown active)
+11:05 - Restart after major refactor → Index exists, incremental anyway
+```
+
+**Result**: Saves 6 minutes in this example scenario.
+
+**Note**: Cooldown prevents CHOOSING full index when index directory deleted, but cannot prevent full index when Merkle snapshot is also missing (Merkle stored at `~/.claude_code_search/projects/{project}_{hash}/index/merkle_snapshot.json`). If entire index directory deleted, Merkle deleted with it, and incremental-reindex script falls back to full regardless of cooldown.
+
+### Concurrent Execution Protection
+
+**PID-Based Lock Files**: Prevents duplicate indexing when multiple Claude Code windows opened simultaneously:
+
+- **Lock file**: `~/.claude_code_search/projects/{project}_{hash}/indexing.lock`
+- **Contains**: Process ID (PID) of running index operation
+- **Validation**: Checks if process still alive before spawning new one
+- **Stale lock cleanup**: Automatically removes locks from dead processes
+- **Graceful handling**: Shows message if indexing already in progress
+
+**Behavior**:
+```
+Window 1: Opens → Spawns background index → Creates lock
+Window 2: Opens → Checks lock → PID alive → Skips, shows "already in progress"
+Window 1: Index completes → Removes lock
+Window 3: Opens → No lock → Proceeds normally
+```
+
+### State File Management
+
+**Prerequisites State**: `logs/state/semantic-search-prerequisites.json`
+- **Purpose**: Controls conditional enforcement in user-prompt-submit hook
+- **Updated by**: `scripts/check-prerequisites`
+- **Read by**: SessionStart hook (fast check, <5ms)
+- **Content**:
+  ```json
+  {
+    "SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY": true,
+    "last_checked": "2025-12-03T12:00:00Z",
+    "last_check_details": {
+      "total_checks": 23,
+      "passed": 23,
+      "failed": 0,
+      "warnings": 0
+    }
+  }
+  ```
+
+**Index State**: `~/.claude_code_search/projects/{project}_{hash}/index_state.json`
+- **Purpose**: Tracks indexing timestamps for 60-minute cooldown logic
+- **Updated by**: `scripts/index` (after full index), `scripts/incremental-reindex` (after any index)
+- **Read by**: SessionStart hook (determine index type)
+- **Content**:
+  ```json
+  {
+    "last_full_index": "2025-12-03T10:00:00Z",
+    "last_incremental_index": "2025-12-03T10:15:00Z",
+    "project_path": "/Users/.../project"
+  }
+  ```
+
+**Indexing Lock**: `~/.claude_code_search/projects/{project}_{hash}/indexing.lock`
+- **Purpose**: Prevent concurrent indexing operations
+- **Contains**: PID of running process
+- **Lifecycle**: Created on spawn, updated by script with its PID, removed on completion
+- **Validation**: Checks process alive via `os.kill(pid, 0)` (doesn't actually kill)
+
+### Conditional Enforcement
+
+**Prerequisites-Based**: The user-prompt-submit hook checks prerequisites before enforcing semantic-search skill:
+
+- **If prerequisites TRUE**: Enforcement active, semantic-search skill suggested/required
+- **If prerequisites FALSE**: Enforcement skipped, Claude uses Grep/Glob naturally (graceful degradation)
+- **Default behavior**: TRUE if state file missing (backward compatible, lazy initialization works)
+
+**Why This Matters**:
+- First-time users: Can work immediately with Grep/Glob while setup completes
+- Missing model: Graceful fallback, no errors
+- Network issues: System remains functional
+
+### Manual Control
+
+You can still manually trigger indexing operations:
+
+```bash
+# Force full reindex (ignores cooldown, always does full)
+scripts/index /path/to/project --full
+
+# Smart incremental (respects age threshold, default 60min)
+scripts/incremental-reindex /path/to/project
+
+# Custom age threshold (reindex if >30min old)
+scripts/incremental-reindex /path/to/project --max-age 30
+
+# Check if reindex needed without executing
+scripts/incremental-reindex /path/to/project --check-only
+```
+
+### Performance Characteristics
+
+**Hook Overhead**: <20ms per session start
+- Prerequisites check: <5ms (single file read)
+- Index existence check: <5ms (single file check)
+- Timestamp check: <1ms (JSON parse)
+- Spawn background process: <5ms (detached, non-blocking)
+
+**Background Indexing**:
+- Full index: ~3 minutes (first time or major changes)
+- Incremental: ~5 seconds (typical, with Merkle tree)
+- Hook never blocks: Process detached, survives IDE close
+
+**Cooldown Impact**:
+- Prevents: ~3 minutes wasted per rapid restart
+- Typical savings: 6-9 minutes per development session with frequent restarts
+
+### Troubleshooting
+
+**Auto-reindex not triggering?**
+- Check prerequisites: `scripts/check-prerequisites`
+- Verify state file: `cat logs/state/semantic-search-prerequisites.json`
+- Set prerequisites manually: `scripts/set-prerequisites-ready`
+
+**Index not updating after changes?**
+- Check last index time: `scripts/status --project /path/to/project`
+- Trigger manual reindex: `scripts/incremental-reindex /path/to/project`
+- Force full reindex: `scripts/index /path/to/project --full`
+
+**Concurrent indexing message?**
+- Another window already indexing (wait for completion)
+- Stale lock from crashed process (will auto-cleanup on next attempt)
+- Check lock file: `cat ~/.claude_code_search/projects/{project}_{hash}/indexing.lock`
+
 ## 🚀 Quick Start
 
 ### Operation 1: Index a Project
