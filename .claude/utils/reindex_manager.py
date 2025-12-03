@@ -163,9 +163,13 @@ def _validate_config(config: Dict[str, Any]) -> None:
     if not isinstance(cooldown, int) or cooldown <= 0:
         raise ValueError(f"cooldown_seconds must be positive integer, got: {cooldown}")
 
-    # Validate file_include_patterns (must be list of strings)
+    # Validate file_include_patterns (must be non-empty list of strings)
     include = config.get('file_include_patterns')
-    if not isinstance(include, list) or not all(isinstance(p, str) for p in include):
+    if not isinstance(include, list):
+        raise ValueError(f"file_include_patterns must be list of strings")
+    if not include:  # FIX: Issue #13 - Empty list breaks reindex (no files match)
+        raise ValueError(f"file_include_patterns cannot be empty (at least one pattern required)")
+    if not all(isinstance(p, str) for p in include):
         raise ValueError(f"file_include_patterns must be list of strings")
 
     # Validate file_exclude_dirs (must be list of strings)
@@ -480,7 +484,7 @@ def _release_reindex_lock(project_path: Path) -> None:
         pass
 
 
-def run_incremental_reindex_sync(project_path: Path) -> bool:
+def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
     """Run incremental reindex synchronously (simple, fast, visible errors)
 
     Design Rationale (PRESERVED FROM ORIGINAL):
@@ -516,7 +520,8 @@ def run_incremental_reindex_sync(project_path: Path) -> bool:
         project_path: Path to project
 
     Returns:
-        True if successful, False if failed (never raises)
+        True if successful, False if failed, None if skipped (another process reindexing)
+        (FIX: Issue #15 - Return None to indicate "skipped, not failed")
     """
     try:
         project_root = get_project_root()
@@ -531,8 +536,9 @@ def run_incremental_reindex_sync(project_path: Path) -> bool:
         # Acquire lock to prevent concurrent reindex (FIX: Issue #1)
         if not _acquire_reindex_lock(project_path):
             # Another process is reindexing, skip silently
-            # Return True because reindex IS happening (just not by us)
-            return True
+            # FIX: Issue #15 - Return None to indicate "skipped" (not success/failure)
+            # Prevents misleading "index updated" message when we didn't do anything
+            return None
 
         try:
             # Run synchronously with timeout (leave 10s buffer from 60s limit)
@@ -623,6 +629,12 @@ def should_reindex_after_cooldown(project_path: Path, cooldown_seconds: Optional
             last_reindex = last_reindex.replace(tzinfo=timezone.utc)
 
         elapsed = (now - last_reindex).total_seconds()
+
+        # FIX: Issue #14 - Handle future timestamps (clock skew or tampering)
+        if elapsed < 0:
+            # Timestamp is in future - likely clock skew or manual state file edit
+            # Treat as stale, allow reindex (safer than blocking forever)
+            return True
 
         # Cooldown expired?
         return elapsed >= cooldown_seconds
@@ -811,11 +823,15 @@ def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) 
         # Step 4: Run incremental reindex synchronously (~5 seconds)
         file_name = Path(file_path).name
         print(f"🔄 Updating semantic search index (file modified: {file_name})...")
-        success = run_incremental_reindex_sync(project_path)
+        result = run_incremental_reindex_sync(project_path)
 
-        if success:
+        # FIX: Issue #15 - Handle None (skipped), True (success), False (failed)
+        if result is True:
             print("✅ Semantic search index updated\n")
-        # Errors already printed by run_incremental_reindex_sync
+        elif result is None:
+            # Skipped (another process is reindexing) - no message needed
+            pass
+        # If False: Errors already printed by run_incremental_reindex_sync
 
     except Exception as e:
         # Don't fail hook if auto-indexing fails
@@ -880,11 +896,15 @@ def _reindex_on_session_start_core(trigger: str) -> None:
 
         # Step 5: Run incremental reindex synchronously (~5 seconds)
         print("🔄 Updating semantic search index...")
-        success = run_incremental_reindex_sync(project_path)
+        result = run_incremental_reindex_sync(project_path)
 
-        if success:
+        # FIX: Issue #15 - Handle None (skipped), True (success), False (failed)
+        if result is True:
             print("✅ Semantic search index updated\n")
-        # Errors already printed by run_incremental_reindex_sync
+        elif result is None:
+            # Skipped (another process is reindexing) - no message needed
+            pass
+        # If False: Errors already printed by run_incremental_reindex_sync
 
     except Exception as e:
         # Don't fail hook if auto-indexing fails
