@@ -23,7 +23,7 @@ import sys
 import os
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 # Add utils to path for config_loader
 sys.path.insert(0, str(Path(__file__).parent))
@@ -39,8 +39,12 @@ except ImportError:
 # SECTION 1: CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════
 
-def get_reindex_config() -> Dict[str, Any]:
-    """Load reindex configuration with sensible defaults
+# Config cache (Fix #9: Optimize multiple config loads)
+_config_cache: Optional[Dict[str, Any]] = None
+
+
+def get_reindex_config(force_reload: bool = False) -> Dict[str, Any]:
+    """Load reindex configuration with sensible defaults (cached - Fix #9)
 
     Config file: .claude/config.json
     Section: semantic_search.reindex
@@ -66,14 +70,26 @@ def get_reindex_config() -> Dict[str, Any]:
             - Temp: *.tmp, *.temp
             - Compiled: *.pyc, *.pyo, *.so, *.dylib
 
-        logs_state_include: true (CRITICAL!)
-            - Override exclude for logs/state/ directory
-            - State files are important configs, must be indexed
-            - Examples: semantic-search-prerequisites.json, research-workflow-state.json
+    Note on logs/ directory:
+        - 'logs' NOT in exclude_dirs (so logs/state/ files ARE indexed)
+        - Pattern-based exclusion handles transcripts: *_transcript.txt, *_tool_calls.jsonl
+        - State files (logs/state/*.json) indexed correctly (no pattern matches them)
+
+    Args:
+        force_reload: If True, bypass cache and reload from file
 
     Returns:
         Dict with configuration values (merged with defaults)
+
+    Raises:
+        ValueError: If config contains invalid types (validation enabled)
     """
+    global _config_cache
+
+    # Use cache if available (Fix #9: Optimize multiple config loads)
+    if _config_cache is not None and not force_reload:
+        return _config_cache
+
     defaults = {
         'cooldown_seconds': 300,
         'file_include_patterns': [
@@ -103,8 +119,7 @@ def get_reindex_config() -> Dict[str, Any]:
             '*.tmp', '*.temp',
             # Compiled
             '*.pyc', '*.pyo', '*.pyd', '*.so', '*.dylib', '*.dll'
-        ],
-        'logs_state_include': True  # CRITICAL: Don't exclude logs/state/
+        ]
     }
 
     try:
@@ -115,10 +130,52 @@ def get_reindex_config() -> Dict[str, Any]:
         reindex_config = config.get('semantic_search', {}).get('reindex', {})
 
         # Merge with defaults (user config overrides)
-        return {**defaults, **reindex_config}
+        merged = {**defaults, **reindex_config}
+
+        # Validate config types (Fix #6: Config validation)
+        _validate_config(merged)
+
+        # Cache for future calls (Fix #9: Optimize)
+        _config_cache = merged
+        return merged
+    except ValueError as e:
+        # Config validation failed - show error but use defaults
+        print(f"⚠️  Invalid reindex config: {e}", file=sys.stderr)
+        print(f"   Using defaults instead", file=sys.stderr)
+        # Cache defaults
+        _config_cache = defaults
+        return defaults
     except Exception:
         # Graceful degradation: Use defaults
+        _config_cache = defaults
         return defaults
+
+
+def _validate_config(config: Dict[str, Any]) -> None:
+    """Validate reindex configuration types (Fix #6: Config validation)
+
+    Raises:
+        ValueError: If config contains invalid types
+    """
+    # Validate cooldown_seconds (must be positive integer)
+    cooldown = config.get('cooldown_seconds')
+    if not isinstance(cooldown, int) or cooldown <= 0:
+        raise ValueError(f"cooldown_seconds must be positive integer, got: {cooldown}")
+
+    # Validate file_include_patterns (must be list of strings)
+    include = config.get('file_include_patterns')
+    if not isinstance(include, list) or not all(isinstance(p, str) for p in include):
+        raise ValueError(f"file_include_patterns must be list of strings")
+
+    # Validate file_exclude_dirs (must be list of strings)
+    exclude_dirs = config.get('file_exclude_dirs')
+    if not isinstance(exclude_dirs, list) or not all(isinstance(d, str) for d in exclude_dirs):
+        raise ValueError(f"file_exclude_dirs must be list of strings")
+
+    # Validate file_exclude_patterns (must be list of strings)
+    exclude_patterns = config.get('file_exclude_patterns')
+    if not isinstance(exclude_patterns, list) or not all(isinstance(p, str) for p in exclude_patterns):
+        raise ValueError(f"file_exclude_patterns must be list of strings")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -470,35 +527,45 @@ def should_reindex_after_cooldown(project_path: Path, cooldown_seconds: Optional
 # SECTION 6: FILE FILTERING (PRECISE + CONFIGURABLE)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def should_reindex_after_write(file_path: str) -> bool:
+def should_reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) -> bool:
     """Check if reindex should run after Write operation
 
-    File Filtering Logic (Layered + Precise):
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    1. Include patterns (*.py, *.md, etc.) - configurable
+    File Filtering Logic (4-Layer Filter):
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    1. Include patterns (*.py, *.md, *.json, etc.) - configurable
        - Must match at least one include pattern
-       - Examples: *.py, *.ts, *.md, *.json
+       - Typical: Code, docs, config files
 
-    2. Exclude directories (dist/, build/, etc.) - configurable
-       - SPECIAL CASE: logs/state/* always INCLUDED (override exclude)
-       - Bug fix: Previous version excluded ALL of logs/
-       - Critical: State files are important configs (must be indexed)
+    2. Exclude directories (dist/, build/, node_modules/, etc.) - configurable
+       - Simple directory check (no special cases)
+       - Note: 'logs' NOT in default excludes
+       - Why: Pattern-based exclusion handles log files (see Layer 3)
 
-    3. Exclude patterns (*_transcript.txt, *.log) - configurable
+    3. Exclude patterns (*_transcript.txt, *.log, etc.) - configurable
        - Filename-based exclusions
-       - Examples: *_transcript.txt, *_tool_calls.jsonl, *.log
+       - Handles: Session transcripts, tool call logs, temp files
+       - Example: logs/session_*_transcript.txt → excluded by pattern
 
     4. Cooldown check (prevents rapid reindex spam)
        - Uses get_last_reindex_time() (any reindex type)
        - Default: 300 seconds (5 minutes)
+       - Override: Pass cooldown_seconds parameter
+
+    How logs/ Directory is Handled:
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    - Directory-level: 'logs' NOT excluded (all *.json files checked)
+    - Pattern-level: *_transcript.txt, *_tool_calls.jsonl → excluded
+    - Result: logs/state/*.json indexed ✓, session logs excluded ✓
 
     Configuration:
     - Loaded from .claude/config.json (semantic_search.reindex)
     - Sensible defaults (works out of box)
     - Advanced users can tune per-project
+    - Note: User config REPLACES defaults (not merged) - see Fix #7
 
     Args:
         file_path: Absolute path to file that was written
+        cooldown_seconds: Optional cooldown override (None = use config)
 
     Returns:
         True if should reindex, False if should skip
@@ -512,51 +579,20 @@ def should_reindex_after_write(file_path: str) -> bool:
         if not any(file_path_obj.match(pattern) for pattern in include_patterns):
             return False  # Extension not in include list
 
-        # Layer 2: Exclude directories (BUT check special cases FIRST)
+        # Layer 2: Exclude directories (simple check - Fix #2: Removed unnecessary complexity)
         exclude_dirs = config['file_exclude_dirs']
-        logs_state_include = config['logs_state_include']
-
-        if logs_state_include:
-            # Special case: logs/state/* always included (important configs)
-            # Check if path contains BOTH 'logs' and 'state' components
-            parts = file_path_obj.parts
-            if 'logs' in parts and 'state' in parts:
-                # Check if 'state' comes after 'logs' (is a subdirectory)
-                try:
-                    logs_idx = parts.index('logs')
-                    state_idx = parts.index('state')
-                    if state_idx > logs_idx:
-                        # This IS logs/state/* → INCLUDE (skip exclude check)
-                        pass  # Don't return False, continue to layer 3
-                    else:
-                        # 'state' exists but not under 'logs' → Normal exclude check
-                        for part in parts:
-                            if part in exclude_dirs:
-                                return False
-                except ValueError:
-                    # One of the parts not found (shouldn't happen, but defensive)
-                    for part in parts:
-                        if part in exclude_dirs:
-                            return False
-            else:
-                # Not logs/state/* → Normal exclude check
-                for part in parts:
-                    if part in exclude_dirs:
-                        return False  # In excluded directory
-        else:
-            # logs_state_include disabled → Normal exclude check for all
-            for part in parts:
-                if part in exclude_dirs:
-                    return False  # In excluded directory
+        for part in file_path_obj.parts:
+            if part in exclude_dirs:
+                return False  # In excluded directory
 
         # Layer 3: Exclude patterns (filename match)
         exclude_patterns = config['file_exclude_patterns']
         if any(file_path_obj.match(pattern) for pattern in exclude_patterns):
             return False  # Matches exclude pattern
 
-        # Layer 4: Cooldown check
+        # Layer 4: Cooldown check (Fix #1, #5: Use parameter if provided)
         project_path = get_project_root()
-        cooldown = config['cooldown_seconds']
+        cooldown = cooldown_seconds if cooldown_seconds is not None else config['cooldown_seconds']
 
         if not should_reindex_after_cooldown(project_path, cooldown):
             return False  # Cooldown still active
@@ -633,8 +669,9 @@ def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) 
 
     File Filtering:
     - Include: Code (*.py, *.ts), Docs (*.md), Config (*.json)
-    - Exclude: Logs (*_transcript.txt), Build (dist/), Dependencies (node_modules/)
-    - Special: logs/state/* always included (important configs)
+    - Exclude directories: dist/, build/, node_modules/
+    - Exclude patterns: *_transcript.txt, *_tool_calls.jsonl, *.log
+    - How logs/ works: Directory NOT excluded, pattern-based filtering for transcripts
 
     Cooldown:
     - Default: 300 seconds (5 minutes)
@@ -653,8 +690,8 @@ def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) 
         if not read_prerequisites_state():
             return
 
-        # Step 2: Check if file should trigger reindex (includes cooldown check)
-        if not should_reindex_after_write(file_path):
+        # Step 2: Check if file should trigger reindex (Fix #1: Pass cooldown parameter)
+        if not should_reindex_after_write(file_path, cooldown_seconds):
             return
 
         # Step 3: Check if index exists
