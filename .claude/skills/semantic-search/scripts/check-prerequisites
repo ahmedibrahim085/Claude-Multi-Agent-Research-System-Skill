@@ -300,7 +300,7 @@ fi
 print_section "7. Agent Definitions"
 
 SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-AGENTS_DIR="$(cd "$SKILL_DIR/../../../agents" && pwd)"
+AGENTS_DIR="$(cd "$SKILL_DIR/../../agents" && pwd)"
 
 # Check 7.1: semantic-search-reader agent
 if [[ -f "$AGENTS_DIR/semantic-search-reader.md" ]]; then
@@ -342,8 +342,11 @@ fi
 # Summary
 # ============================================================================
 
+# Temporarily disable exit-on-error to capture exit code and update state
+set +e
 print_summary
 EXIT_CODE=$?
+set -e
 
 # ============================================================================
 # Update Global State File
