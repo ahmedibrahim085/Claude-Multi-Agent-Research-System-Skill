@@ -634,11 +634,40 @@ def build_planning_enforcement_message(triggers: dict) -> str:
 """.strip()
 
 
-def build_semantic_search_enforcement_message(triggers: dict) -> str:
-    """Build enforcement message for semantic-search skill"""
-    matched_keywords = triggers.get('keywords', [])
-    matched_patterns = triggers.get('patterns', [])
+def detect_semantic_search_operation(matched_keywords: list, matched_patterns: list) -> str:
+    """Detect if this is a SEARCH or INDEX operation based on matched keywords/patterns
 
+    Returns:
+        'index' for index management operations (index, reindex, check index, etc.)
+        'search' for content search operations (find, search, where is, etc.)
+    """
+    # Index-related keywords - if any of these match, it's an INDEX operation
+    index_keywords = {
+        'index', 'reindex', 're-index', 'update index', 'refresh index',
+        'rebuild index', 'recreate index', 'create index', 'build index',
+        'incremental index', 'incremental reindex', 'full index', 'full reindex',
+        'check index', 'index status', 'verify index', 'list projects',
+        'indexed projects', 'what projects', 'show projects'
+    }
+
+    # Check if any matched keywords are index-related
+    for keyword in matched_keywords:
+        if keyword.lower() in index_keywords:
+            return 'index'
+
+    # Check if patterns contain index-related terms
+    index_pattern_terms = ['index', 'reindex', 'projects']
+    for pattern in matched_patterns:
+        pattern_lower = pattern.lower() if isinstance(pattern, str) else str(pattern).lower()
+        if any(term in pattern_lower for term in index_pattern_terms):
+            return 'index'
+
+    # Default to search operation
+    return 'search'
+
+
+def build_search_enforcement_message(matched_keywords: list, matched_patterns: list) -> str:
+    """Build enforcement message for semantic-search SEARCH operations"""
     keywords_str = ', '.join(f'"{k}"' for k in matched_keywords[:5])
     if len(matched_keywords) > 5:
         keywords_str += f' (+{len(matched_keywords) - 5} more)'
@@ -692,6 +721,86 @@ def build_semantic_search_enforcement_message(triggers: dict) -> str:
 
 ---
 """.strip()
+
+
+def build_index_enforcement_message(matched_keywords: list, matched_patterns: list) -> str:
+    """Build enforcement message for semantic-search INDEX operations"""
+    keywords_str = ', '.join(f'"{k}"' for k in matched_keywords[:5])
+    if len(matched_keywords) > 5:
+        keywords_str += f' (+{len(matched_keywords) - 5} more)'
+
+    patterns_str = f'{len(matched_patterns)} intent pattern(s)' if matched_patterns else 'none'
+
+    return f"""
+🔧 SEMANTIC INDEX MANAGEMENT ENFORCEMENT ACTIVATED (Performance)
+
+**Detected**: Index management keywords in your prompt
+**Matched Keywords**: {keywords_str}
+**Matched Patterns**: {patterns_str}
+
+**Required Skill**: semantic-search (indexer agent)
+
+**CRITICAL REMINDER - INCREMENTAL INDEXING**:
+❌ DO NOT use full reindex unless necessary (wastes time re-processing unchanged files)
+✅ MUST use incremental-reindex FIRST (smart Merkle tree change detection)
+
+**Why Incremental-Reindex is Better**:
+- Traditional full reindex: ~186 seconds (re-embeds all files)
+- Incremental reindex: ~3 seconds (only changed files, 59x faster)
+- **Performance: 59x speedup for typical updates**
+- **Proper vector removal**: IndexIDMap2 wrapper (fixes "list index out of range" bug)
+- **Smart detection**: Merkle tree identifies new/modified/deleted files automatically
+
+**When to Use Which**:
+1. **incremental-reindex (RECOMMENDED - Default)**:
+   - Regular updates after code changes
+   - Detects and processes only changed files
+   - Fast (sub-5 second updates for <100 changed files)
+   - Proper vector removal via IndexIDMap2
+
+2. **Full reindex (ONLY IF)**:
+   - First-time indexing (no existing index)
+   - Major refactoring (100+ files changed)
+   - Index corruption/debugging
+
+**Correct Workflow**:
+1. INVOKE - Activate semantic-search skill
+2. AGENT - semantic-search-indexer spawned automatically
+3. OPERATION - incremental-reindex (recommended), or index --full if needed
+4. RESULT - Fast update with change statistics
+
+**Examples**:
+✅ CORRECT: "update the semantic index" → incremental-reindex → 3s, 68 changed files
+✅ CORRECT: "reindex after my changes" → incremental-reindex → detects modified files
+❌ WRONG: "full reindex" for 10 changed files → wastes 180+ seconds
+
+**Agent Decision Logic**:
+- User says "update"/"reindex"/"refresh" → incremental-reindex (smart)
+- User says "full"/"rebuild"/"from scratch" → index --full (as requested)
+- User says "check"/"status"/"verify" → status operation
+
+**Enforcement Level**: MEDIUM (recommend incremental, respect user preference for full)
+
+📖 **Implementation details**: docs/status/INCREMENTAL-REINDEX-COMPLETE.md
+📖 **Test validation**: docs/testing/incremental-reindex-agent-test.md
+
+---
+""".strip()
+
+
+def build_semantic_search_enforcement_message(triggers: dict) -> str:
+    """Build enforcement message for semantic-search skill - routes to SEARCH or INDEX message"""
+    matched_keywords = triggers.get('keywords', [])
+    matched_patterns = triggers.get('patterns', [])
+
+    # Detect operation type
+    operation = detect_semantic_search_operation(matched_keywords, matched_patterns)
+
+    # Route to appropriate message builder
+    if operation == 'index':
+        return build_index_enforcement_message(matched_keywords, matched_patterns)
+    else:
+        return build_search_enforcement_message(matched_keywords, matched_patterns)
 
 
 def main():

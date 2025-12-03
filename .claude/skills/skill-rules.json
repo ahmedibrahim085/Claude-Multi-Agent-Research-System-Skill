@@ -291,7 +291,27 @@
           "troubleshooting guides",
           "find ADR",
           "find guide",
-          "locate guide"
+          "locate guide",
+          "index",
+          "reindex",
+          "re-index",
+          "update index",
+          "refresh index",
+          "rebuild index",
+          "recreate index",
+          "create index",
+          "build index",
+          "incremental index",
+          "incremental reindex",
+          "full index",
+          "full reindex",
+          "check index",
+          "index status",
+          "verify index",
+          "list projects",
+          "indexed projects",
+          "what projects",
+          "show projects"
         ],
         "intentPatterns": [
           "how (does|is|do)\\s+.*(work|implemented|handled|done|processed|managed|structured|organized)",
@@ -312,7 +332,15 @@
           "what\\s+(code|implementation|logic)\\s+(does|handles|manages|processes).*",
           "(find|search|locate|show)\\s+.*(documentation|docs|guide|guides|README|ADR|markdown).*",
           "(find|search|locate|show)\\s+.*(config|configuration|settings|environment|setup).*",
-          "(deployment|setup|installation|troubleshooting)\\s+(documentation|guide|docs|instructions)"
+          "(deployment|setup|installation|troubleshooting)\\s+(documentation|guide|docs|instructions)",
+          "(update|refresh|rebuild|recreate)\\s+(the\\s+)?(semantic\\s+)?(search\\s+)?index",
+          "(do|perform|run|execute)\\s+(an?\\s+)?(incremental\\s+|full\\s+)?(re)?index(ing)?",
+          "(create|build|setup|initialize)\\s+(the\\s+)?(semantic\\s+)?(search\\s+)?index",
+          "index\\s+(this|the|my)\\s+(project|codebase|directory|repository|repo|code)",
+          "(check|verify|show|display)\\s+(the\\s+)?index\\s+(status|stats|statistics|info)?",
+          "(incremental|smart|fast)\\s+(re)?index(ing)?",
+          "(full|complete|entire|whole)\\s+(re)?index(ing)?",
+          "(list|show|display)\\s+(all\\s+)?(indexed\\s+)?projects"
         ]
       },
       "fileTriggers": {
