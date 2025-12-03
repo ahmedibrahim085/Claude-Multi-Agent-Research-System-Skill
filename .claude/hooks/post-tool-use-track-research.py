@@ -22,6 +22,7 @@ try:
     import state_manager
     import session_logger
     import config_loader
+    import reindex_manager
 except ImportError as e:
     print(f"Failed to import utilities: {e}", file=sys.stderr)
     sys.exit(0)
@@ -223,6 +224,14 @@ is logged for analysis and process improvement.
 
         state_manager.save_state(state)
         sys.exit(0)
+
+    # Auto-reindex after Write operations (with 5-minute cooldown)
+    if tool_name == 'Write':
+        file_path = tool_input.get('file_path')
+        if file_path:
+            # Call reindex_manager with 5-minute (300s) cooldown
+            # File filtering logic handled by reindex_manager
+            reindex_manager.reindex_after_write(file_path, cooldown_seconds=300)
 
     # Exit successfully
     sys.exit(0)

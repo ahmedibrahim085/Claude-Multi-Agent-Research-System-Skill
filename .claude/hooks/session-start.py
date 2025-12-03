@@ -33,6 +33,7 @@ try:
     import state_manager
     import session_logger
     import config_loader
+    import reindex_manager
 except ImportError as e:
     print(f"⚠️  Failed to import utilities: {e}", file=sys.stderr)
     print("   Run 'python3 setup.py --repair' to fix", file=sys.stderr)
@@ -251,170 +252,7 @@ Full session details available at: `logs/state/research-workflow-state.json`
 """.strip()
 
 
-def read_prerequisites_state() -> bool:
-    """Read semantic-search prerequisites state (fast - just file read)
-
-    Returns:
-        True if prerequisites ready, False otherwise
-    """
-    try:
-        project_root = get_project_root()
-        state_file = project_root / 'logs' / 'state' / 'semantic-search-prerequisites.json'
-
-        if not state_file.exists():
-            return False
-
-        with open(state_file, 'r') as f:
-            state = json.load(f)
-
-        return state.get('SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY', False)
-    except Exception:
-        return False
-
-
-def get_project_storage_dir(project_path: Path) -> Path:
-    """Get project-specific storage directory (matches Python implementation)"""
-    storage_dir = Path.home() / '.claude_code_search'
-    project_name = project_path.name
-    project_hash = hashlib.md5(str(project_path).encode()).hexdigest()[:8]
-    return storage_dir / "projects" / f"{project_name}_{project_hash}"
-
-
-def check_index_exists(project_path: Path) -> bool:
-    """Check if semantic search index exists for project"""
-    try:
-        index_dir = get_project_storage_dir(project_path) / "index"
-        return (index_dir / "code.index").exists()
-    except Exception:
-        return False
-
-
-def get_index_state_file(project_path: Path) -> Path:
-    """Get index state file path"""
-    return get_project_storage_dir(project_path) / "index_state.json"
-
-
-def get_last_full_index_time(project_path: Path) -> datetime:
-    """Get timestamp of last full index
-
-    Returns:
-        datetime of last full index, or None if never indexed
-    """
-    try:
-        state_file = get_index_state_file(project_path)
-
-        if not state_file.exists():
-            return None
-
-        with open(state_file, 'r') as f:
-            state = json.load(f)
-
-        last_full = state.get('last_full_index')
-        if last_full:
-            return datetime.fromisoformat(last_full)
-
-        return None
-    except Exception:
-        return None
-
-
-def run_incremental_reindex_sync(project_path: Path) -> bool:
-    """Run incremental reindex synchronously (simple, fast, visible errors)
-
-    This runs within the hook's 60-second timeout.
-    Typical duration: ~5 seconds for incremental updates.
-
-    Args:
-        project_path: Path to project
-
-    Returns:
-        True if successful, False if failed
-    """
-    try:
-        project_root = get_project_root()
-        script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'incremental-reindex'
-
-        # Run synchronously with timeout (leave 10s buffer from 60s limit)
-        result = subprocess.run(
-            [str(script), str(project_path)],
-            timeout=50,
-            capture_output=True,
-            text=True
-        )
-
-        if result.returncode == 0:
-            return True
-        else:
-            # Show error (not suppressed!)
-            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-            print(f"⚠️  Index update failed: {error_msg[:300]}\n", file=sys.stderr)
-            return False
-
-    except subprocess.TimeoutExpired:
-        print(f"⚠️  Index update timed out (will retry next session)\n", file=sys.stderr)
-        return False
-    except Exception as e:
-        print(f"⚠️  Index update error: {e}\n", file=sys.stderr)
-        return False
-
-
-def auto_reindex_on_session_start(input_data: dict):
-    """Auto-reindex with simple synchronous execution
-
-    Simple Business Logic:
-    1. Prerequisites FALSE → Skip (manual setup not done yet)
-    2. Trigger is 'clear' or 'compact' → Skip (no code changes)
-    3. Trigger is 'startup' or 'resume' + no index → Skip with message (manual setup required)
-    4. Trigger is 'startup' or 'resume' + index exists → Run incremental synchronously (~5s)
-
-    Design:
-    - Synchronous execution (no background processes, no Bug #1481)
-    - Fast: ~5 seconds typical for incremental updates
-    - Visible errors: Output not suppressed
-    - Within timeout: 50s limit, well under 60s hook timeout
-    - Simple: No lock files, no daemon, no complexity
-
-    Args:
-        input_data: Hook input containing trigger source
-    """
-    try:
-        # Step 1: Check prerequisites (fast - just read state file)
-        if not read_prerequisites_state():
-            # Prerequisites not ready → skip indexing (manual setup not done)
-            return
-
-        # Step 2: Check trigger source
-        source = input_data.get('source', 'unknown')
-
-        if source in ['clear', 'compact']:
-            # No code changes → skip indexing
-            return
-
-        # Step 3: Only auto-index on startup/resume
-        if source not in ['startup', 'resume']:
-            return
-
-        # Step 4: Check if index exists (require manual first-time setup)
-        project_path = get_project_root()
-
-        if not check_index_exists(project_path):
-            # No index yet → user needs to run manual setup
-            print("ℹ️  Semantic search not yet indexed")
-            print("   Run: .claude/skills/semantic-search/scripts/index <project_path> --full")
-            print("   (First-time setup: ~3 minutes)\n")
-            return
-
-        # Step 5: Run incremental reindex synchronously (~5 seconds)
-        print("🔄 Updating semantic search index...")
-        success = run_incremental_reindex_sync(project_path)
-
-        if success:
-            print("✅ Semantic search index updated\n")
-        # Errors already printed by run_incremental_reindex_sync
-
-    except Exception as e:
-        # Don't fail hook if auto-indexing fails
-        print(f"⚠️  Auto-indexing error: {e}\n", file=sys.stderr)
+# NOTE: Reindex functions moved to .claude/utils/reindex_manager.py for reuse across hooks
 
 
 def main():
@@ -455,7 +293,8 @@ def main():
         print(f"⚠️  Skill crash recovery failed: {e}", file=sys.stderr)
 
     # Step 3: Auto-reindex semantic search (if prerequisites met)
-    auto_reindex_on_session_start(input_data)
+    source = input_data.get('source', 'unknown')
+    reindex_manager.reindex_on_session_start(source)
 
     # Step 4: Check for active research session
     resumption_context = check_research_session()
