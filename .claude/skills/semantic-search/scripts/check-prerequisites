@@ -181,17 +181,17 @@ fi
 # Section 3: MCP Server Code
 print_section "3. MCP Server Code"
 
-# Check 3.1: Main server file
-SERVER_FILE="$MCP_DIR/src/claude_context_local/server.py"
-if [[ -f "$SERVER_FILE" ]]; then
-    print_check "PASS" "MCP server code exists" "$SERVER_FILE"
+# Check 3.1: CodeSearchServer module (what scripts actually import)
+CODE_SEARCH_FILE="$MCP_DIR/mcp_server/code_search_server.py"
+if [[ -f "$CODE_SEARCH_FILE" ]]; then
+    print_check "PASS" "CodeSearchServer module exists" "$CODE_SEARCH_FILE"
 else
-    print_check "FAIL" "MCP server code not found" "Expected: $SERVER_FILE"
+    print_check "FAIL" "CodeSearchServer module not found" "Expected: $CODE_SEARCH_FILE"
 fi
 
 # Check 3.2: CodeSearchServer class
-if [[ -f "$SERVER_FILE" ]]; then
-    if grep -q "class CodeSearchServer" "$SERVER_FILE" 2>/dev/null; then
+if [[ -f "$CODE_SEARCH_FILE" ]]; then
+    if grep -q "class CodeSearchServer" "$CODE_SEARCH_FILE" 2>/dev/null; then
         print_check "PASS" "CodeSearchServer class found" "Core indexing/search class"
     else
         print_check "WARN" "CodeSearchServer class not found" "May be in different location"
@@ -327,7 +327,7 @@ else
 fi
 
 # Check 8.2: skill-rules.json has semantic-search
-RULES_FILE="$(cd "$SKILL_DIR/../.." && pwd)/skill-rules.json"
+RULES_FILE="$(cd "$SKILL_DIR/.." && pwd)/skill-rules.json"
 if [[ -f "$RULES_FILE" ]]; then
     if grep -q '"semantic-search"' "$RULES_FILE" 2>/dev/null; then
         print_check "PASS" "skill-rules.json configured" "Trigger rules defined"
