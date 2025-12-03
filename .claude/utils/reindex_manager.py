@@ -779,7 +779,7 @@ def auto_reindex_on_session_start(input_data: dict) -> None:
 
 
 def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) -> None:
-    """Auto-reindex after Write operation (hook wrapper for post-tool-use)
+    """Auto-reindex after file modification operations (Write/Edit/NotebookEdit)
 
     Business Logic:
     ━━━━━━━━━━━━━━━━
@@ -800,7 +800,7 @@ def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) 
     - Prevents spam when multiple files modified rapidly
 
     Args:
-        file_path: Absolute path to file that was written
+        file_path: Absolute path to file that was written, modified, or edited
         cooldown_seconds: Optional cooldown override (None = use config)
 
     Returns:
