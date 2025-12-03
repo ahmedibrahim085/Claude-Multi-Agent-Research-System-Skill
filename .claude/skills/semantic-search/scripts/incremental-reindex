@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Incremental Reindex - Orchestrator with IndexIDMap2 fix
+#
+# This script provides true incremental indexing by using FAISS IndexIDMap2
+# to support proper vector removal. It extracts working code from MCP and
+# adds the fix to prevent metadata/FAISS desynchronization.
+#
+# Usage:
+#   incremental-reindex PROJECT_PATH [--full] [--max-age MINUTES] [--check-only]
+#
+# Examples:
+#   incremental-reindex .                    # Incremental if >60min old
+#   incremental-reindex . --full             # Force full reindex
+#   incremental-reindex . --max-age 30       # Reindex if >30min old
+#   incremental-reindex . --check-only       # Only check, don't reindex
+
+VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
+export PYTHONPATH="$HOME/.local/share/claude-context-local"
+
+# Get script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Run Python implementation
+"$VENV_PYTHON" "$SCRIPT_DIR/incremental_reindex.py" "$@"

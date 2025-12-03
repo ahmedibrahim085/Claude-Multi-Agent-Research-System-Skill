@@ -24,7 +24,7 @@ This skill provides bash scripts that orchestrate the claude-context-local MCP s
 
 This skill uses a **2-agent architecture** for token optimization:
 - **semantic-search-reader**: Handles READ operations (search, find-similar, list-projects)
-- **semantic-search-indexer**: Handles WRITE operations (index, status)
+- **semantic-search-indexer**: Handles WRITE operations (index, incremental-reindex, status)
 
 ### Decision Logic: Which Agent to Spawn?
 
@@ -33,7 +33,8 @@ This skill uses a **2-agent architecture** for token optimization:
 | "find X", "search for Y", "where is Z" | **search** | semantic-search-reader |
 | "find similar to...", "similar chunks" | **find-similar** | semantic-search-reader |
 | "what projects", "list indexed", "show projects" | **list-projects** | semantic-search-reader |
-| "index this", "create index", "reindex" | **index** | semantic-search-indexer |
+| "index this", "create index", "full reindex" | **index** | semantic-search-indexer |
+| "incremental reindex", "auto reindex", "update index" | **incremental-reindex** | semantic-search-indexer |
 | "check index", "index status", "is it indexed" | **status** | semantic-search-indexer |
 
 ### Agent Spawn Examples
@@ -69,7 +70,24 @@ Execute the indexing operation using scripts/index and return interpreted result
 )
 ```
 
-**Example 3: Find Similar** (semantic-search-reader)
+**Example 3: Incremental Reindex Operation** (semantic-search-indexer)
+```python
+Task(
+    subagent_type="semantic-search-indexer",
+    description="Incremental reindex with change detection",
+    prompt="""You are the semantic-search-indexer agent.
+
+Operation: incremental-reindex
+Directory: /path/to/project
+Max Age: 60  # minutes
+
+Execute smart incremental reindexing using scripts/incremental-reindex.
+This will detect changed files using Merkle tree and only re-embed what changed.
+Return statistics showing files added/removed/modified and total chunks."""
+)
+```
+
+**Example 4: Find Similar** (semantic-search-reader)
 ```python
 Task(
     subagent_type="semantic-search-reader",
@@ -85,7 +103,7 @@ Execute the find-similar operation using scripts/find-similar and return interpr
 )
 ```
 
-**Example 4: Status Check** (semantic-search-indexer)
+**Example 5: Status Check** (semantic-search-indexer)
 ```python
 Task(
     subagent_type="semantic-search-indexer",
@@ -205,7 +223,49 @@ scripts/index /path/to/project --project-name my-project --full
 
 **Output**: JSON with indexing statistics (files added/modified/removed, chunks indexed, time taken).
 
-### Operation 2: List Indexed Projects
+### Operation 2: Incremental Reindex (RECOMMENDED)
+
+**When to use**: Smart automatic reindexing with proper incremental support
+
+**What it does**: Uses Merkle tree change detection to identify modified files, then re-embeds only changed content. Properly handles vector removal using IndexIDMap2 fix, preventing the "list index out of range" bug that occurs with standard incremental indexing.
+
+```bash
+# Auto-detect changes and reindex if >60min old (default)
+scripts/incremental-reindex /path/to/project
+
+# Custom age threshold (reindex if >30min old)
+scripts/incremental-reindex /path/to/project --max-age 30
+
+# Force full reindex regardless of age
+scripts/incremental-reindex /path/to/project --full
+
+# Check if reindex needed without executing
+scripts/incremental-reindex /path/to/project --check-only
+```
+
+**Output**: JSON with detailed statistics:
+```json
+{
+  "success": true,
+  "incremental": true,
+  "files_added": 3,
+  "files_removed": 1,
+  "files_modified": 5,
+  "chunks_added": 127,
+  "chunks_removed": 89,
+  "total_chunks": 2045,
+  "time_taken": 12.34
+}
+```
+
+**Key Benefits**:
+- ✅ **Fast**: Only re-processes changed files (not entire codebase)
+- ✅ **Smart**: Merkle tree detects exactly what changed
+- ✅ **Fixed**: Uses IndexIDMap2 to properly remove vectors
+- ✅ **Safe**: No metadata/FAISS desynchronization
+- ✅ **Automatic**: Can be triggered by hooks based on age threshold
+
+### Operation 3: List Indexed Projects
 
 **When to use**: See all projects that have been indexed
 
@@ -215,7 +275,7 @@ scripts/list-projects
 
 **Output**: JSON with array of projects including paths, hashes, creation dates, and index statistics.
 
-### Operation 3: Check Index Status
+### Operation 4: Check Index Status
 
 **When to use**: Verify index exists and inspect statistics for a project
 
@@ -225,7 +285,7 @@ scripts/status --project /path/to/project
 
 **Output**: JSON with index statistics (chunk count, embedding dimension, files indexed, top folders, chunk types).
 
-### Operation 4: Search by Natural Language Query
+### Operation 5: Search by Natural Language Query
 
 **When to use**: Find content by describing what it does or contains
 
@@ -242,7 +302,7 @@ scripts/search --query "database queries" --k 5
 
 **Output**: JSON with ranked results including file paths, line numbers, kind, similarity scores, chunk IDs, and snippets.
 
-### Operation 5: Find Similar Content Chunks
+### Operation 6: Find Similar Content Chunks
 
 **When to use**: Discover content semantically similar to a reference chunk
 
@@ -392,8 +452,18 @@ This pattern avoids code duplication while maintaining the benefits of thin wrap
 
 ## ⚠️ Known Issues
 
-**Auto-Reindexing Bug**: The MCP server has a bug in incremental auto-reindexing (triggered when index is >5 minutes old). This can cause "list index out of range" errors during search. Workaround: Run `scripts/index --full` before searching after long intervals.
+**Index Compatibility**: The `scripts/search` and `scripts/find-similar` operations use a different index format than `scripts/incremental-reindex`.
+
+- If you use `scripts/incremental-reindex` to create/update your index, the search scripts may not find it
+- This is because `incremental-reindex` uses a custom IndexIDMap2-based storage format
+- Current limitation: Use `scripts/index` for creating indices that `scripts/search` can use
+- Future enhancement: Update search scripts to support both index formats
+
+**Workaround**: Use `scripts/index /path/to/project --full` for creating searchable indices, or implement IndexIDMap2 support in search scripts.
 
 ---
 
-**Next Steps**: Start by indexing your project with `scripts/index /path/to/project --full`, then explore with semantic search queries.
+**Next Steps**:
+- For creating searchable indices: `scripts/index /path/to/project --full`
+- For local incremental updates (testing): `scripts/incremental-reindex /path/to/project`
+- Then explore with semantic search queries using `scripts/search`

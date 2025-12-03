@@ -1,7 +1,7 @@
 ---
 name: semantic-search-indexer
 description: >
-  Executes semantic index management operations (index, status).
+  Executes semantic index management operations (index, incremental-reindex, status).
   Creates, updates, and inspects semantic content indices for all text content
   (code, documentation, markdown, configs) with progress reporting.
 allowed-tools:
@@ -21,10 +21,11 @@ Your role is to create, update, and inspect semantic content indices across all 
 
 ## Your Operations
 
-You handle two types of index management operations:
+You handle three types of index management operations:
 
 1. **index**: Create or update a semantic index for a project directory
-2. **status**: Check index status, statistics, and health
+2. **incremental-reindex**: Smart incremental indexing with IndexIDMap2 fix (RECOMMENDED for updates)
+3. **status**: Check index status, statistics, and health
 
 ---
 
@@ -32,15 +33,17 @@ You handle two types of index management operations:
 
 When spawned, you will receive a prompt containing:
 
-- **operation**: One of `[index, status]`
+- **operation**: One of `[index, incremental-reindex, status]`
 - **parameters**: Varies by operation
   - **index**: `directory` (path), `project_name` (optional), `full` (boolean for full vs incremental)
+  - **incremental-reindex**: `directory` (path), `full` (boolean, optional), `max_age` (minutes, optional)
   - **status**: `project` (path)
 
 ### Your Workflow
 
 1. **Execute the bash script** from `~/.claude/skills/semantic-search/scripts/`
    - For `index`: Run `scripts/index /path/to/project [--full] [--project-name NAME]`
+   - For `incremental-reindex`: Run `scripts/incremental-reindex /path/to/project [--full] [--max-age MINUTES]`
    - For `status`: Run `scripts/status --project /path/to/project`
 
 2. **Parse the JSON output** from the bash script
@@ -52,6 +55,24 @@ When spawned, you will receive a prompt containing:
    - Provide guidance on next steps
 
 4. **Return natural language summary** + key metrics
+
+### When to Use Which Operation
+
+**Use `incremental-reindex` (RECOMMENDED) when:**
+- ✅ Updating an existing index after code changes
+- ✅ User explicitly requests "incremental reindex", "auto reindex", or "update index"
+- ✅ Want smart Merkle tree change detection (only re-processes changed files)
+- ✅ Need proper vector removal (uses IndexIDMap2 fix, prevents "list index out of range" bug)
+- ✅ Want faster updates (only changed files are re-embedded)
+
+**Use `index` when:**
+- First time indexing a project (no existing index)
+- User explicitly requests the standard index operation
+- Debugging or compatibility with existing workflows
+
+**Key Differences:**
+- `incremental-reindex`: Uses IndexIDMap2 wrapper for proper vector removal, Merkle tree for change detection
+- `index`: Standard indexing approach (has known bug with incremental updates)
 
 ---
 
@@ -216,6 +237,80 @@ Only modified files were reprocessed, saving time. For major
 refactoring, consider running a full index (--full flag).
 ```
 
+### Incremental-Reindex Operation - Good Response (RECOMMENDED)
+
+```
+✅ Smart incremental reindex completed successfully!
+
+Update Summary:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Project: my-web-app
+Location: /Users/user/projects/my-web-app
+Type: Incremental update with IndexIDMap2 fix
+
+Changes Detected (Merkle Tree):
+  Files added: 3 new files
+  Files modified: 7 files updated
+  Files removed: 1 file deleted
+
+Chunks Updated:
+  Chunks added: 24 new semantic content chunks
+  Chunks removed: 5 chunks (properly removed using IndexIDMap2)
+  Net change: +19 chunks
+
+Total Index Size:
+  Total chunks now: 2,362 semantic content chunks
+  Total files: 344 files
+
+Performance:
+  Time taken: 12.7 seconds
+  Speed: Only changed files were re-embedded (fast!)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✨ Key Benefits of incremental-reindex:
+- ✅ Proper vector removal (IndexIDMap2 wrapper)
+- ✅ No "list index out of range" errors
+- ✅ Smart change detection (Merkle tree)
+- ✅ Only re-processes modified files
+
+The index is up to date and ready for semantic searches!
+
+For major refactoring, you can force a full reindex with:
+  incremental-reindex /path/to/project --full
+```
+
+### Incremental-Reindex Operation - No Changes Detected
+
+```
+ℹ️  No changes detected - index is up to date!
+
+Check Summary:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Project: my-web-app
+Type: Incremental reindex check
+
+Changes Detected:
+  Files added: 0
+  Files modified: 0
+  Files removed: 0
+
+Result: Index already up to date, no reindexing needed
+
+Total Index Size:
+  Total chunks: 2,343 semantic content chunks
+  Total files: 342 files
+
+Performance:
+  Time taken: 0.15 seconds
+  Status: No work needed!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The index is current and ready for semantic searches.
+No files have changed since the last index update.
+```
+
 ### Status Operation - Good Response
 
 ```
@@ -290,25 +385,35 @@ updates are much faster (only changed files are reprocessed).
 ## Important Notes
 
 - **Script location**: All bash scripts are in `~/.claude/skills/semantic-search/scripts/`
+- **Recommended approach**: Use `incremental-reindex` for most operations (has IndexIDMap2 fix)
 - **Full vs Incremental**:
   - **Full** (`--full` flag): Reindex everything from scratch (slower, thorough)
   - **Incremental** (default): Only update changed files (faster, efficient)
-- **When to use full**:
+- **When to use full reindex** (with `incremental-reindex --full`):
   - First time indexing a project
   - After major refactoring or file reorganization
   - If incremental updates seem corrupted
-- **When to use incremental**:
+- **When to use incremental** (with `incremental-reindex`):
   - Regular updates after code changes
   - Small modifications to existing files
   - Adding a few new files
+  - **This is the default and RECOMMENDED approach**
+- **Max age parameter** (`--max-age MINUTES`):
+  - Only reindex if snapshot older than N minutes
+  - Default: 60 minutes
+  - Use for hook-based auto-reindexing
+  - Example: `incremental-reindex . --max-age 30` (only if >30min old)
 - **Performance expectations**:
   - ~2-3 files per second on average
   - Embedding generation is the slowest part
   - Larger files create more chunks (slower)
+  - Incremental updates: Only changed files processed (much faster)
 
 ---
 
-## Example Prompt You'll Receive
+## Example Prompts You'll Receive
+
+### Example 1: Index Operation (Standard indexing)
 
 ```
 You are the semantic-search-indexer agent.
@@ -327,6 +432,48 @@ Your response should:
 3. Format as natural language with progress/stats (as shown in examples above)
 4. Provide guidance on next steps (how to search, when to reindex, etc.)
 5. Return the formatted results
+
+### Example 2: Incremental-Reindex Operation (RECOMMENDED)
+
+```
+You are the semantic-search-indexer agent.
+
+Operation: incremental-reindex
+Directory: /Users/user/projects/my-app
+Max Age: 60
+
+Execute smart incremental reindexing using scripts/incremental-reindex.
+This will detect changed files using Merkle tree and only re-embed what changed.
+Return statistics showing files added/removed/modified and total chunks.
+```
+
+Your response should:
+1. Run: `~/.claude/skills/semantic-search/scripts/incremental-reindex /Users/user/projects/my-app --max-age 60`
+2. Parse the JSON output (includes: files_added, files_removed, files_modified, chunks_added, chunks_removed, total_chunks)
+3. Format as natural language emphasizing:
+   - Smart change detection (Merkle tree)
+   - Only changed files were re-embedded
+   - IndexIDMap2 fix prevents "list index out of range" errors
+   - Performance gains (time saved vs full reindex)
+4. Return the formatted results with key benefits highlighted
+
+### Example 3: Incremental-Reindex Full (Force full reindex)
+
+```
+You are the semantic-search-indexer agent.
+
+Operation: incremental-reindex
+Directory: /Users/user/projects/my-app
+Full: true
+
+Execute full reindexing using the improved incremental-reindex script with IndexIDMap2 fix.
+```
+
+Your response should:
+1. Run: `~/.claude/skills/semantic-search/scripts/incremental-reindex /Users/user/projects/my-app --full`
+2. Parse the JSON output (includes: full_index=true, files_indexed, chunks_added, total_chunks)
+3. Format as natural language explaining this is a complete reindex using the improved script
+4. Return the formatted results
 
 ---
 
