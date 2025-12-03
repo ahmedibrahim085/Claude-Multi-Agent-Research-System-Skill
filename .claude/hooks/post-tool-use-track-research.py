@@ -95,16 +95,16 @@ def main():
                 print(f"Failed to track skill invocation: {e}", file=sys.stderr)
 
     # Early exit for non-file-modification operations
-    # Auto-reindex triggers: Write (new files), Edit (modifications), NotebookEdit (notebooks)
-    if tool_name not in ['Write', 'Edit', 'NotebookEdit']:
+    # Auto-reindex triggers: Write (new files), Edit (modifications)
+    if tool_name not in ['Write', 'Edit']:
         sys.exit(0)
 
-    # Handle both file_path (Write/Edit) and notebook_path (NotebookEdit)
-    file_path = tool_input.get('file_path') or tool_input.get('notebook_path')
+    # Get file path from Write/Edit operations
+    file_path = tool_input.get('file_path')
     if not file_path:
         sys.exit(0)
 
-    # Auto-reindex after file modification operations (Write/Edit/NotebookEdit)
+    # Auto-reindex after file modification operations (Write/Edit)
     # Cooldown and file filtering handled by reindex_manager (respects user config)
     reindex_manager.reindex_after_write(file_path)
 

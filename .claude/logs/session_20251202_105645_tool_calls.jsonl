@@ -1,0 +1,1 @@
+{"ts": "2025-12-02T10:56:45.567935", "agent": "ORCHESTRATOR", "tool": "Bash", "input": {"command": "pwd && ls -d .*claude* 2>/dev/null || echo \"No .claude directories found\"", "description": "Check current directory and .claude existence"}, "success": true, "output_size": null, "duration_ms": null}

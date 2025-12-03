@@ -1,0 +1,1 @@
+{"ts": "2025-12-02T11:47:03.351721", "agent": "ORCHESTRATOR", "tool": "Read", "input": {"file_path": "/Users/ahmedmaged/ai_storage/projects/Claude-Multi-Agent-Research-System-Skill/docs/workflows/semantic-search-hierarchy.md", "offset": 80}, "success": true, "output_size": null, "duration_ms": null}

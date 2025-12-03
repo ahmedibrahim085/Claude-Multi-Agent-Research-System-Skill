@@ -58,7 +58,6 @@ def get_reindex_config(force_reload: bool = False) -> Dict[str, Any]:
 
         file_include_patterns: Extensions to index
             - Code: *.py, *.ts, *.js, *.tsx, *.jsx, *.go, *.rs, *.java, *.c, *.cpp, etc.
-            - Notebooks: *.ipynb
             - Docs: *.md, *.txt, *.rst, *.adoc, *.org
             - Config: *.json, *.yaml, *.yml, *.toml, *.ini, *.xml, etc.
 
@@ -99,8 +98,6 @@ def get_reindex_config(force_reload: bool = False) -> Dict[str, Any]:
             '*.py', '*.ts', '*.js', '*.tsx', '*.jsx', '*.go', '*.rs', '*.java',
             '*.c', '*.cpp', '*.h', '*.hpp', '*.cs', '*.rb', '*.php', '*.swift',
             '*.kt', '*.scala', '*.r', '*.m', '*.sh', '*.bash', '*.zsh',
-            # Notebooks
-            '*.ipynb',
             # Documentation
             '*.md', '*.txt', '*.rst', '*.adoc', '*.org',
             # Config files

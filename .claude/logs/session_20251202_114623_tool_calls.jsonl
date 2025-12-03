@@ -1,0 +1,1 @@
+{"ts": "2025-12-02T11:46:23.045154", "agent": "ORCHESTRATOR", "tool": "Bash", "input": {"command": "grep -c \":\" docs/workflows/planning-workflow.md | head -1", "description": "Quick check of planning workflow structure"}, "success": true, "output_size": null, "duration_ms": null}

@@ -1,0 +1,14 @@
+Research Agent Session Log
+Session ID: session_20251202_105705
+Started: 2025-12-02T10:57:05.175730
+================================================================================
+
+
+[10:57:05] ORCHESTRATOR → Bash ✅
+  Input: {
+  "command": "pwd && git rev-parse --show-toplevel",
+  "description": "Check current dir vs git root"
+}
+  Output: Success
+  Duration: Nonems
+────────────────────────────────────────────────────────────────────────────────
