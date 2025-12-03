@@ -99,7 +99,11 @@ def main():
     if not file_path:
         sys.exit(0)
 
-    # Skip if no active research session
+    # Auto-reindex after ALL Write operations (research or not)
+    # Uses 5-minute cooldown to prevent spam, file filtering handled by reindex_manager
+    reindex_manager.reindex_after_write(file_path, cooldown_seconds=300)
+
+    # Skip research-specific tracking if no active research session
     if not state.get('currentResearch'):
         sys.exit(0)
 
@@ -225,15 +229,7 @@ is logged for analysis and process improvement.
         state_manager.save_state(state)
         sys.exit(0)
 
-    # Auto-reindex after Write operations (with 5-minute cooldown)
-    if tool_name == 'Write':
-        file_path = tool_input.get('file_path')
-        if file_path:
-            # Call reindex_manager with 5-minute (300s) cooldown
-            # File filtering logic handled by reindex_manager
-            reindex_manager.reindex_after_write(file_path, cooldown_seconds=300)
-
-    # Exit successfully
+    # Exit successfully (reindex already called at line 104)
     sys.exit(0)
 
 
