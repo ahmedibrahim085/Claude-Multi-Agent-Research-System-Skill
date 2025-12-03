@@ -293,8 +293,7 @@ def main():
         print(f"⚠️  Skill crash recovery failed: {e}", file=sys.stderr)
 
     # Step 3: Auto-reindex semantic search (if prerequisites met)
-    source = input_data.get('source', 'unknown')
-    reindex_manager.reindex_on_session_start(source)
+    reindex_manager.auto_reindex_on_session_start(input_data)
 
     # Step 4: Check for active research session
     resumption_context = check_research_session()
