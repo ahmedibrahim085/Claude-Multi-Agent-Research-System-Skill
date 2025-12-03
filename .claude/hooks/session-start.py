@@ -318,143 +318,61 @@ def get_last_full_index_time(project_path: Path) -> datetime:
         return None
 
 
-def determine_index_type(project_path: Path) -> str:
-    """Determine whether to do full or incremental index
+def run_incremental_reindex_sync(project_path: Path) -> bool:
+    """Run incremental reindex synchronously (simple, fast, visible errors)
 
-    Logic:
-    1. No index + (never full indexed OR last full >60min) → full
-    2. No index + last full <60min → incremental
-    3. Index exists → incremental
-
-    Returns:
-        "full" or "incremental"
-    """
-    index_exists = check_index_exists(project_path)
-    last_full_index = get_last_full_index_time(project_path)
-
-    if not index_exists:
-        # Never indexed or corrupted
-        if last_full_index:
-            # Check if last full index was < 60 minutes ago
-            time_since_full = (datetime.now(timezone.utc) - last_full_index.replace(tzinfo=timezone.utc)).total_seconds()
-            if time_since_full < 3600:  # 60 minutes
-                # Recent full index → use incremental
-                return "incremental"
-
-        # No recent full index → do full
-        return "full"
-
-    # Index exists → always incremental
-    return "incremental"
-
-
-def check_indexing_in_progress(project_path: Path) -> bool:
-    """Check if indexing already in progress for this project
-
-    Uses PID-based lock file to detect concurrent indexing processes.
-    Automatically removes stale locks from dead processes.
-
-    Returns:
-        True if indexing in progress (should skip), False otherwise
-    """
-    try:
-        storage_dir = get_project_storage_dir(project_path)
-        lock_file = storage_dir / "indexing.lock"
-
-        if not lock_file.exists():
-            return False
-
-        # Check if process still alive
-        try:
-            pid = int(lock_file.read_text().strip())
-            os.kill(pid, 0)  # Check process exists (doesn't actually kill)
-            # Process alive - indexing in progress
-            return True
-        except (ProcessLookupError, ValueError, OSError):
-            # Process dead or invalid PID - remove stale lock
-            try:
-                lock_file.unlink()
-            except:
-                pass
-            return False
-    except Exception:
-        # On error, assume not in progress (graceful)
-        return False
-
-
-def create_indexing_lock(project_path: Path) -> Path:
-    """Create lock file with current process PID
-
-    Returns:
-        Path to lock file (for reference only, cleanup handled by scripts)
-    """
-    try:
-        storage_dir = get_project_storage_dir(project_path)
-        lock_file = storage_dir / "indexing.lock"
-        lock_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Write PID of background process (will be spawned immediately after)
-        # Note: We write our PID here, scripts will overwrite with their own PID
-        lock_file.write_text(str(os.getpid()))
-        return lock_file
-    except Exception as e:
-        print(f"⚠️  Failed to create indexing lock: {e}", file=sys.stderr)
-        return None
-
-
-def spawn_background_index(project_path: Path, index_type: str):
-    """Spawn background indexing process (non-blocking)
+    This runs within the hook's 60-second timeout.
+    Typical duration: ~5 seconds for incremental updates.
 
     Args:
         project_path: Path to project
-        index_type: "full" or "incremental"
+
+    Returns:
+        True if successful, False if failed
     """
     try:
-        # Check for concurrent indexing (skip if already in progress)
-        if check_indexing_in_progress(project_path):
-            print(f"ℹ️  Semantic index already being updated in background")
-            print(f"   Skipping duplicate indexing operation\n")
-            return
-
-        # Create lock file (will be overwritten by script with its own PID)
-        create_indexing_lock(project_path)
-
         project_root = get_project_root()
+        script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'incremental-reindex'
 
-        if index_type == "full":
-            script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'index'
-            args = [str(script), str(project_path), '--full']
-            print(f"🔄 Starting full semantic index in background")
-            print(f"   This is the first index for this project (may take several minutes)")
-        else:
-            script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'incremental-reindex'
-            args = [str(script), str(project_path)]
-            print(f"🔄 Starting smart reindex in background")
-            print(f"   Smart change detection will determine scope automatically")
-
-        # Spawn detached background process
-        subprocess.Popen(
-            args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True
+        # Run synchronously with timeout (leave 10s buffer from 60s limit)
+        result = subprocess.run(
+            [str(script), str(project_path)],
+            timeout=50,
+            capture_output=True,
+            text=True
         )
-        print(f"   Index will be ready shortly. Semantic search available after completion.\n")
 
+        if result.returncode == 0:
+            return True
+        else:
+            # Show error (not suppressed!)
+            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            print(f"⚠️  Index update failed: {error_msg[:300]}\n", file=sys.stderr)
+            return False
+
+    except subprocess.TimeoutExpired:
+        print(f"⚠️  Index update timed out (will retry next session)\n", file=sys.stderr)
+        return False
     except Exception as e:
-        # Don't fail hook if indexing fails
-        print(f"⚠️  Failed to start background indexing: {e}", file=sys.stderr)
+        print(f"⚠️  Index update error: {e}\n", file=sys.stderr)
+        return False
 
 
 def auto_reindex_on_session_start(input_data: dict):
-    """Auto-reindex based on trigger type and index state
+    """Auto-reindex with simple synchronous execution
 
-    Business Logic:
-    1. Prerequisites FALSE → Do nothing
-    2. Trigger is 'clear' or 'compact' → Do nothing (no code changes)
-    3. Trigger is 'startup' or 'resume' + never indexed → Full index
-    4. Trigger is 'startup' or 'resume' + indexed before → Incremental index
-    5. Last full index < 60 min ago → Force incremental (even if normally would do full)
+    Simple Business Logic:
+    1. Prerequisites FALSE → Skip (manual setup not done yet)
+    2. Trigger is 'clear' or 'compact' → Skip (no code changes)
+    3. Trigger is 'startup' or 'resume' + no index → Skip with message (manual setup required)
+    4. Trigger is 'startup' or 'resume' + index exists → Run incremental synchronously (~5s)
+
+    Design:
+    - Synchronous execution (no background processes, no Bug #1481)
+    - Fast: ~5 seconds typical for incremental updates
+    - Visible errors: Output not suppressed
+    - Within timeout: 50s limit, well under 60s hook timeout
+    - Simple: No lock files, no daemon, no complexity
 
     Args:
         input_data: Hook input containing trigger source
@@ -462,7 +380,7 @@ def auto_reindex_on_session_start(input_data: dict):
     try:
         # Step 1: Check prerequisites (fast - just read state file)
         if not read_prerequisites_state():
-            # Prerequisites not ready → skip indexing
+            # Prerequisites not ready → skip indexing (manual setup not done)
             return
 
         # Step 2: Check trigger source
@@ -476,16 +394,27 @@ def auto_reindex_on_session_start(input_data: dict):
         if source not in ['startup', 'resume']:
             return
 
-        # Step 4: Determine index type based on state
+        # Step 4: Check if index exists (require manual first-time setup)
         project_path = get_project_root()
-        index_type = determine_index_type(project_path)
 
-        # Step 5: Spawn background indexing (non-blocking)
-        spawn_background_index(project_path, index_type)
+        if not check_index_exists(project_path):
+            # No index yet → user needs to run manual setup
+            print("ℹ️  Semantic search not yet indexed")
+            print("   Run: .claude/skills/semantic-search/scripts/index <project_path> --full")
+            print("   (First-time setup: ~3 minutes)\n")
+            return
+
+        # Step 5: Run incremental reindex synchronously (~5 seconds)
+        print("🔄 Updating semantic search index...")
+        success = run_incremental_reindex_sync(project_path)
+
+        if success:
+            print("✅ Semantic search index updated\n")
+        # Errors already printed by run_incremental_reindex_sync
 
     except Exception as e:
         # Don't fail hook if auto-indexing fails
-        print(f"⚠️  Auto-indexing failed: {e}", file=sys.stderr)
+        print(f"⚠️  Auto-indexing error: {e}\n", file=sys.stderr)
 
 
 def main():
