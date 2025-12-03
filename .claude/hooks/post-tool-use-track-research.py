@@ -43,31 +43,33 @@ def main():
     if not tool_name:
         sys.exit(0)
 
-    # Load current state
+    # Load current state (FIX: Issue #2 - Don't exit on failure, reindex doesn't need state)
+    state = None
     try:
         state = state_manager.load_state()
     except Exception as e:
         print(f"Failed to load state: {e}", file=sys.stderr)
-        sys.exit(0)
+        # Don't exit - reindex will still run, only research tracking skipped
 
-    # Log ALL tool calls to session logs (transcript.txt and tool_calls.jsonl)
-    try:
-        session_id = session_logger.get_session_id()
-        session_logger.log_tool_call(
-            session_id,
-            tool_name,
-            tool_input,
-            tool_output,
-            state
-        )
-    except Exception as e:
-        print(f"Failed to log tool call: {e}", file=sys.stderr)
-        # Continue execution even if logging fails
+    # Log ALL tool calls to session logs (only if state loaded successfully)
+    if state:
+        try:
+            session_id = session_logger.get_session_id()
+            session_logger.log_tool_call(
+                session_id,
+                tool_name,
+                tool_input,
+                tool_output,
+                state
+            )
+        except Exception as e:
+            print(f"Failed to log tool call: {e}", file=sys.stderr)
+            # Continue execution even if logging fails
 
     # ═══════════════════════════════════════════════════════════════════════════
     # SKILL INVOCATION TRACKING (Non-Destructive Extension)
     # ═══════════════════════════════════════════════════════════════════════════
-    if tool_name == 'Skill':
+    if state and tool_name == 'Skill':
         skill_name = tool_input.get('skill')
         if skill_name:
             try:
@@ -99,12 +101,12 @@ def main():
     if not file_path:
         sys.exit(0)
 
-    # Auto-reindex after ALL Write operations (research or not)
-    # Uses 5-minute cooldown to prevent spam, file filtering handled by reindex_manager
-    reindex_manager.reindex_after_write(file_path, cooldown_seconds=300)
+    # Auto-reindex after ALL Write operations (FIX: Issue #3 - Use config cooldown, not hardcoded)
+    # Cooldown and file filtering handled by reindex_manager (respects user config)
+    reindex_manager.reindex_after_write(file_path)
 
-    # Skip research-specific tracking if no active research session
-    if not state.get('currentResearch'):
+    # Skip research-specific tracking if no state loaded or no active research session
+    if not state or not state.get('currentResearch'):
         sys.exit(0)
 
     sessions = state.get('sessions', [])

@@ -21,6 +21,7 @@ import hashlib
 import json
 import sys
 import os
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
@@ -383,6 +384,89 @@ def get_last_reindex_time(project_path: Path) -> Optional[datetime]:
 # SECTION 4: REINDEX EXECUTION
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _acquire_reindex_lock(project_path: Path) -> bool:
+    """Try to acquire reindex lock using atomic claim file.
+
+    Concurrency Control (FIX: Issue #1 - Prevents index corruption):
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Uses atomic file creation (os.O_CREAT | os.O_EXCL) to prevent concurrent
+    reindex operations that could corrupt the FAISS index.
+
+    Context:
+    - Original design (commit 9dcd3c2): Removed locking, assumed no concurrency
+    - Assumption valid for session-start only (sequential execution)
+    - Post-tool-use reindex broke assumption (parallel Write operations possible)
+    - This fix restores concurrency safety with minimal complexity
+
+    Why atomic claim file instead of fcntl.flock:
+    - Simpler (no cross-platform considerations)
+    - Stale lock detection (check file age)
+    - PID tracking for debugging
+    - Follows Unix philosophy (everything is a file)
+
+    Stale lock handling:
+    - If claim file exists and is > 60s old, it's stale (process crashed)
+    - Remove stale claim and try again
+    - Timeout of 60s chosen because: reindex timeout is 50s, + 10s buffer
+
+    Race conditions handled:
+    - Check-then-remove stale: If two processes both see stale and remove,
+      only one will succeed at creating new claim (os.O_EXCL is atomic)
+    - File removed between check and create: FileNotFoundError on stat,
+      caught and treated as "already removed by another process"
+
+    Args:
+        project_path: Path to project
+
+    Returns:
+        True if lock acquired, False if another process is reindexing
+    """
+    claim_file = get_project_storage_dir(project_path) / '.reindex_claim'
+
+    # Check for existing claim (stale or active)
+    if claim_file.exists():
+        try:
+            # Check age
+            age = time.time() - claim_file.stat().st_mtime
+            if age > 60:
+                # Stale claim (process crashed or timed out)
+                try:
+                    claim_file.unlink()
+                except FileNotFoundError:
+                    pass  # Another process removed it
+            else:
+                # Recent claim, active reindex in progress
+                return False
+        except FileNotFoundError:
+            # File removed between exists() and stat() - continue to create
+            pass
+
+    # Try to create claim file atomically
+    try:
+        claim_data = f"{os.getpid()}:{time.time():.3f}"
+        fd = os.open(str(claim_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        os.write(fd, claim_data.encode())
+        os.close(fd)
+        return True  # Lock acquired
+    except FileExistsError:
+        # Another process created the file between our check and create
+        return False
+
+
+def _release_reindex_lock(project_path: Path) -> None:
+    """Release reindex lock by removing claim file.
+
+    Args:
+        project_path: Path to project
+    """
+    claim_file = get_project_storage_dir(project_path) / '.reindex_claim'
+    try:
+        claim_file.unlink()
+    except FileNotFoundError:
+        # Already removed (concurrent process or cleanup)
+        pass
+
+
 def run_incremental_reindex_sync(project_path: Path) -> bool:
     """Run incremental reindex synchronously (simple, fast, visible errors)
 
@@ -403,10 +487,12 @@ def run_incremental_reindex_sync(project_path: Path) -> bool:
       * IndexFlatIP bug went undetected for hours
       * Current: User sees errors immediately, can take action
 
-    - No lock files: Simplified from previous over-engineering
-      * Previous: PID-based lock files, stale lock cleanup, concurrency logic
-      * Current: Simple synchronous execution (no concurrency possible)
-      * Trade-off: Can't prevent concurrent manual reindex, but acceptable
+    - Atomic claim file locking (FIX: Issue #1 - Restored for post-tool-use)
+      * Original: Had lock files, removed in commit 9dcd3c2 (no concurrency)
+      * That assumption broke with post-tool-use reindex (parallel Writes possible)
+      * Current: Lightweight atomic claim file prevents concurrent reindex
+      * Stale lock detection: 60s timeout (reindex timeout 50s + 10s buffer)
+      * Trade-off: Simple locking, handles 99.9% of cases, minimal complexity
 
     Performance:
     - Typical: ~2-5 seconds (Merkle tree detects changed files)
@@ -429,21 +515,31 @@ def run_incremental_reindex_sync(project_path: Path) -> bool:
             print(f"   Skill may not be installed correctly", file=sys.stderr)
             return False
 
-        # Run synchronously with timeout (leave 10s buffer from 60s limit)
-        result = subprocess.run(
-            [str(script), str(project_path)],
-            timeout=50,
-            capture_output=True,
-            text=True
-        )
-
-        if result.returncode == 0:
+        # Acquire lock to prevent concurrent reindex (FIX: Issue #1)
+        if not _acquire_reindex_lock(project_path):
+            # Another process is reindexing, skip silently
+            # Return True because reindex IS happening (just not by us)
             return True
-        else:
-            # Show error (not suppressed!)
-            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-            print(f"⚠️  Index update failed: {error_msg[:300]}", file=sys.stderr)
-            return False
+
+        try:
+            # Run synchronously with timeout (leave 10s buffer from 60s limit)
+            result = subprocess.run(
+                [str(script), str(project_path)],
+                timeout=50,
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode == 0:
+                return True
+            else:
+                # Show error (not suppressed!)
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                print(f"⚠️  Index update failed: {error_msg[:300]}", file=sys.stderr)
+                return False
+        finally:
+            # Always release lock, even if reindex failed
+            _release_reindex_lock(project_path)
 
     except subprocess.TimeoutExpired:
         print(f"⚠️  Index update timed out (>50s) - will retry next session", file=sys.stderr)
