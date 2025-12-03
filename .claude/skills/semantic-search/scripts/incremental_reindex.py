@@ -216,6 +216,38 @@ class FixedIncrementalIndexer:
 
         return self.change_detector.quick_check(self.project_path)
 
+    def _record_index_timestamp(self, is_full_index: bool):
+        """Record timestamp after successful index operation"""
+        try:
+            from datetime import datetime, timezone
+            import hashlib
+
+            storage_dir = Path.home() / '.claude_code_search'
+            project_path_obj = Path(self.project_path).resolve()
+            project_hash = hashlib.md5(str(project_path_obj).encode()).hexdigest()[:8]
+            project_dir = storage_dir / 'projects' / f'{self.project_name}_{project_hash}'
+            state_file = project_dir / 'index_state.json'
+
+            # Read existing state if it exists
+            state = {}
+            if state_file.exists():
+                with open(state_file, 'r') as f:
+                    state = json.load(f)
+
+            # Update timestamps
+            timestamp = datetime.now(timezone.utc).isoformat()
+            if is_full_index:
+                state['last_full_index'] = timestamp
+            state['last_incremental_index'] = timestamp
+            state['project_path'] = str(project_path_obj)
+
+            # Write state
+            with open(state_file, 'w') as f:
+                json.dump(state, f, indent=2)
+        except Exception as e:
+            # Don't fail indexing if state recording fails
+            print(f"Warning: Failed to record index timestamp: {e}", file=sys.stderr)
+
     def incremental_index(self, force_full: bool = False):
         """Perform incremental indexing with proper removal support"""
         start_time = time.time()
@@ -250,6 +282,9 @@ class FixedIncrementalIndexer:
 
             # Save index
             self.indexer.save_index()
+
+            # Record timestamp
+            self._record_index_timestamp(is_full_index=False)
 
             return {
                 'success': True,
@@ -321,6 +356,9 @@ class FixedIncrementalIndexer:
 
             # Save index
             self.indexer.save_index()
+
+            # Record timestamp
+            self._record_index_timestamp(is_full_index=True)
 
             return {
                 'success': True,

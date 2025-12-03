@@ -21,8 +21,10 @@ Enhancement: Auto-setup, research context restoration, quality gate status
 import json
 import shutil
 import sys
+import subprocess
+import hashlib
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
@@ -249,6 +251,180 @@ Full session details available at: `logs/state/research-workflow-state.json`
 """.strip()
 
 
+def read_prerequisites_state() -> bool:
+    """Read semantic-search prerequisites state (fast - just file read)
+
+    Returns:
+        True if prerequisites ready, False otherwise
+    """
+    try:
+        project_root = get_project_root()
+        state_file = project_root / 'logs' / 'state' / 'semantic-search-prerequisites.json'
+
+        if not state_file.exists():
+            return False
+
+        with open(state_file, 'r') as f:
+            state = json.load(f)
+
+        return state.get('SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY', False)
+    except Exception:
+        return False
+
+
+def get_project_storage_dir(project_path: Path) -> Path:
+    """Get project-specific storage directory (matches Python implementation)"""
+    storage_dir = Path.home() / '.claude_code_search'
+    project_name = project_path.name
+    project_hash = hashlib.md5(str(project_path).encode()).hexdigest()[:8]
+    return storage_dir / "projects" / f"{project_name}_{project_hash}"
+
+
+def check_index_exists(project_path: Path) -> bool:
+    """Check if semantic search index exists for project"""
+    try:
+        index_dir = get_project_storage_dir(project_path) / "index"
+        return (index_dir / "code.index").exists()
+    except Exception:
+        return False
+
+
+def get_index_state_file(project_path: Path) -> Path:
+    """Get index state file path"""
+    return get_project_storage_dir(project_path) / "index_state.json"
+
+
+def get_last_full_index_time(project_path: Path) -> datetime:
+    """Get timestamp of last full index
+
+    Returns:
+        datetime of last full index, or None if never indexed
+    """
+    try:
+        state_file = get_index_state_file(project_path)
+
+        if not state_file.exists():
+            return None
+
+        with open(state_file, 'r') as f:
+            state = json.load(f)
+
+        last_full = state.get('last_full_index')
+        if last_full:
+            return datetime.fromisoformat(last_full)
+
+        return None
+    except Exception:
+        return None
+
+
+def determine_index_type(project_path: Path) -> str:
+    """Determine whether to do full or incremental index
+
+    Logic:
+    1. No index + (never full indexed OR last full >60min) → full
+    2. No index + last full <60min → incremental
+    3. Index exists → incremental
+
+    Returns:
+        "full" or "incremental"
+    """
+    index_exists = check_index_exists(project_path)
+    last_full_index = get_last_full_index_time(project_path)
+
+    if not index_exists:
+        # Never indexed or corrupted
+        if last_full_index:
+            # Check if last full index was < 60 minutes ago
+            time_since_full = (datetime.now(timezone.utc) - last_full_index.replace(tzinfo=timezone.utc)).total_seconds()
+            if time_since_full < 3600:  # 60 minutes
+                # Recent full index → use incremental
+                return "incremental"
+
+        # No recent full index → do full
+        return "full"
+
+    # Index exists → always incremental
+    return "incremental"
+
+
+def spawn_background_index(project_path: Path, index_type: str):
+    """Spawn background indexing process (non-blocking)
+
+    Args:
+        project_path: Path to project
+        index_type: "full" or "incremental"
+    """
+    try:
+        project_root = get_project_root()
+
+        if index_type == "full":
+            script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'index'
+            args = [str(script), str(project_path), '--full']
+            print(f"🔄 Starting full semantic index in background (~3 min)")
+            print(f"   This is the first index for this project")
+        else:
+            script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'incremental-reindex'
+            args = [str(script), str(project_path)]
+            print(f"🔄 Starting incremental reindex in background (~5 sec)")
+            print(f"   Detecting and indexing changed files only")
+
+        # Spawn detached background process
+        subprocess.Popen(
+            args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+        print(f"   Index will be ready shortly. Semantic search available after completion.\n")
+
+    except Exception as e:
+        # Don't fail hook if indexing fails
+        print(f"⚠️  Failed to start background indexing: {e}", file=sys.stderr)
+
+
+def auto_reindex_on_session_start(input_data: dict):
+    """Auto-reindex based on trigger type and index state
+
+    Business Logic:
+    1. Prerequisites FALSE → Do nothing
+    2. Trigger is 'clear' or 'compact' → Do nothing (no code changes)
+    3. Trigger is 'startup' or 'resume' + never indexed → Full index
+    4. Trigger is 'startup' or 'resume' + indexed before → Incremental index
+    5. Last full index < 60 min ago → Force incremental (even if normally would do full)
+
+    Args:
+        input_data: Hook input containing trigger source
+    """
+    try:
+        # Step 1: Check prerequisites (fast - just read state file)
+        if not read_prerequisites_state():
+            # Prerequisites not ready → skip indexing
+            return
+
+        # Step 2: Check trigger source
+        source = input_data.get('source', 'unknown')
+
+        if source in ['clear', 'compact']:
+            # No code changes → skip indexing
+            return
+
+        # Step 3: Only auto-index on startup/resume
+        if source not in ['startup', 'resume']:
+            return
+
+        # Step 4: Determine index type based on state
+        project_path = get_project_root()
+        index_type = determine_index_type(project_path)
+
+        # Step 5: Spawn background indexing (non-blocking)
+        spawn_background_index(project_path, index_type)
+
+    except Exception as e:
+        # Don't fail hook if auto-indexing fails
+        print(f"⚠️  Auto-indexing failed: {e}", file=sys.stderr)
+
+
 def main():
     # Read hook input from stdin
     try:
@@ -286,7 +462,10 @@ def main():
         # Don't fail entire hook if crash recovery fails
         print(f"⚠️  Skill crash recovery failed: {e}", file=sys.stderr)
 
-    # Step 3: Check for active research session
+    # Step 3: Auto-reindex semantic search (if prerequisites met)
+    auto_reindex_on_session_start(input_data)
+
+    # Step 4: Check for active research session
     resumption_context = check_research_session()
 
     if resumption_context:
