@@ -12,17 +12,17 @@ The session-start hook now implements smart auto-reindexing based on trigger typ
 
 ## Business Logic Summary
 
-| Prerequisites | Trigger | Index State | Action |
-|--------------|---------|-------------|--------|
-| FALSE | any | any | **Skip** (graceful degradation) |
-| TRUE | clear | any | **Skip** (no code changes) |
-| TRUE | compact | any | **Skip** (no code changes) |
-| TRUE | startup | never indexed | **Full index** (~3 min, background) |
-| TRUE | startup | indexed before | **Incremental** (~5 sec, background) |
-| TRUE | startup | last full <60min | **Incremental** (cooldown active) |
-| TRUE | resume | never indexed | **Full index** (~3 min, background) |
-| TRUE | resume | indexed before | **Incremental** (~5 sec, background) |
-| TRUE | resume | last full <60min | **Incremental** (cooldown active) |
+| Prerequisites | Trigger | Index State | Action | Note |
+|--------------|---------|-------------|--------|------|
+| FALSE | any | any | **Skip** (graceful degradation) | |
+| TRUE | clear | any | **Skip** (no code changes) | |
+| TRUE | compact | any | **Skip** (no code changes) | |
+| TRUE | startup | never indexed | **Full index** (background) | ~3 min |
+| TRUE | startup | indexed before | **Smart reindex** (background) | Fast if Merkle exists |
+| TRUE | startup | last full <60min | **Smart reindex** (cooldown active) | Fast if Merkle exists, full if Merkle missing |
+| TRUE | resume | never indexed | **Full index** (background) | ~3 min |
+| TRUE | resume | indexed before | **Smart reindex** (background) | Fast if Merkle exists |
+| TRUE | resume | last full <60min | **Smart reindex** (cooldown active) | Fast if Merkle exists, full if Merkle missing |
 
 ---
 
@@ -228,6 +228,8 @@ The session-start hook now implements smart auto-reindexing based on trigger typ
 
 ### Why 60 Minutes?
 
+**Note**: The cooldown prevents CHOOSING full index when the index directory is deleted, but cannot prevent full index when the Merkle snapshot is also missing (Merkle snapshot is stored INSIDE the index directory at `index/merkle_snapshot.json`). If the entire index directory is deleted, the Merkle snapshot is deleted with it, and the incremental-reindex script will fall back to a full reindex regardless of cooldown status.
+
 **Problem**: User workflow patterns can cause rapid full reindex spam:
 ```
 10:00 - First startup → Full index (3 min)
@@ -237,13 +239,13 @@ The session-start hook now implements smart auto-reindexing based on trigger typ
 10:12 - Reopen IDE → Would do full index again (waste)
 ```
 
-**Solution**: Cooldown period prevents this:
+**Solution**: Cooldown period prevents this (when index directory still exists):
 ```
-10:00 - First startup → Full index (3 min)
+10:00 - First startup → Full index (~3 min)
 10:05 - Close IDE, fix typo
-10:07 - Reopen IDE → Incremental (5 sec, cooldown active)
+10:07 - Reopen IDE → Smart reindex (fast with Merkle, cooldown active)
 10:10 - Close IDE, test change
-10:12 - Reopen IDE → Incremental (5 sec, cooldown active)
+10:12 - Reopen IDE → Smart reindex (fast with Merkle, cooldown active)
 11:05 - Restart after major refactor → Index exists, incremental anyway
 ```
 
@@ -261,9 +263,11 @@ The session-start hook now implements smart auto-reindexing based on trigger typ
 
 **Scenario C: Index Deleted, Recent Full**
 - 10:00 - Full index completes
-- 10:20 - Index directory deleted manually
+- 10:20 - Index directory deleted manually (including Merkle snapshot)
 - 10:25 - Restart (25 min later, <60 min)
-- **Result**: Incremental (cooldown, rebuilds from Merkle)
+- **Result**: Full index (~3 min, not incremental)
+- **Reason**: Merkle snapshot deleted with index directory, cannot use incremental
+- **Note**: Cooldown logic determines index_type="incremental" but script falls back to full when Merkle missing
 
 **Scenario D: Index Deleted, Old Full**
 - 10:00 - Full index completes
