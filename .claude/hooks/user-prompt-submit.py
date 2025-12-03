@@ -142,6 +142,48 @@ def load_skill_rules() -> dict:
         return {}
 
 
+def check_semantic_search_prerequisites() -> bool:
+    """
+    Check if semantic-search skill prerequisites are ready.
+
+    Reads SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY from state file.
+
+    Returns:
+        True if prerequisites are ready (enable semantic-search enforcement)
+        False if prerequisites not ready (fallback to Grep/Glob/Read)
+
+    Default behavior (backward compatible):
+        - If state file doesn't exist: return True (lazy initialization)
+        - If state file read fails: return True (graceful degradation)
+        - If value is explicitly false: return False (prerequisites not met)
+    """
+    try:
+        project_root = get_project_root()
+        state_file = project_root / 'logs' / 'state' / 'semantic-search-prerequisites.json'
+
+        # If state file doesn't exist, assume prerequisites ready (backward compat)
+        if not state_file.exists():
+            return True
+
+        # Read state file
+        with open(state_file, 'r') as f:
+            state = json.load(f)
+
+        # Get SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY value
+        ready = state.get('SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY', True)
+
+        if DEBUG:
+            print(f"DEBUG: Semantic-search prerequisites: {ready}", file=sys.stderr)
+
+        return ready
+
+    except Exception as e:
+        # On any error, default to True (graceful degradation)
+        if DEBUG:
+            print(f"DEBUG: Failed to check prerequisites, defaulting to True: {e}", file=sys.stderr)
+        return True
+
+
 # =============================================================================
 # HELPER FUNCTIONS FOR COMPOUND DETECTION
 # =============================================================================
@@ -820,6 +862,13 @@ def main():
     if not skill_rules:
         sys.exit(0)
 
+    # Check semantic-search prerequisites BEFORE processing triggers
+    # If prerequisites not ready, skip semantic-search enforcement (fallback to Grep/Glob)
+    semantic_prerequisites_ready = check_semantic_search_prerequisites()
+
+    if DEBUG:
+        print(f"DEBUG: Semantic-search prerequisites ready: {semantic_prerequisites_ready}", file=sys.stderr)
+
     # NEW: Use analyze_request for smart compound detection
     analysis = analyze_request(user_prompt, skill_rules)
 
@@ -831,11 +880,25 @@ def main():
 
     # Check semantic-search independently (orthogonal to research/planning)
     # Must check BEFORE early exit to allow semantic-only prompts
-    semantic_signal = get_signal_strength(
-        user_prompt,
-        skill_rules['skills'].get('semantic-search', {}),
-        skill_type=None
-    )
+    # CONDITIONAL: Only check if prerequisites are ready, otherwise skip enforcement
+    if semantic_prerequisites_ready:
+        semantic_signal = get_signal_strength(
+            user_prompt,
+            skill_rules['skills'].get('semantic-search', {}),
+            skill_type=None
+        )
+    else:
+        # Prerequisites not ready - skip enforcement, allow Claude to use Grep/Glob/Read
+        # Set to "none" strength so all enforcement messages are skipped
+        semantic_signal = {
+            'strength': 'none',
+            'keywords': [],
+            'patterns': [],
+            'is_action': False,
+            'negated': False
+        }
+        if DEBUG:
+            print("DEBUG: Skipping semantic-search enforcement (prerequisites not ready)", file=sys.stderr)
 
     # EARLY EXIT PROTECTION: If no skills matched, exit immediately (performance)
     if action == 'none' and semantic_signal['strength'] == 'none':
