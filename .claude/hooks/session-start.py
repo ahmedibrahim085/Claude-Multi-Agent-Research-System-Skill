@@ -348,6 +348,60 @@ def determine_index_type(project_path: Path) -> str:
     return "incremental"
 
 
+def check_indexing_in_progress(project_path: Path) -> bool:
+    """Check if indexing already in progress for this project
+
+    Uses PID-based lock file to detect concurrent indexing processes.
+    Automatically removes stale locks from dead processes.
+
+    Returns:
+        True if indexing in progress (should skip), False otherwise
+    """
+    try:
+        storage_dir = get_project_storage_dir(project_path)
+        lock_file = storage_dir / "indexing.lock"
+
+        if not lock_file.exists():
+            return False
+
+        # Check if process still alive
+        try:
+            pid = int(lock_file.read_text().strip())
+            os.kill(pid, 0)  # Check process exists (doesn't actually kill)
+            # Process alive - indexing in progress
+            return True
+        except (ProcessLookupError, ValueError, OSError):
+            # Process dead or invalid PID - remove stale lock
+            try:
+                lock_file.unlink()
+            except:
+                pass
+            return False
+    except Exception:
+        # On error, assume not in progress (graceful)
+        return False
+
+
+def create_indexing_lock(project_path: Path) -> Path:
+    """Create lock file with current process PID
+
+    Returns:
+        Path to lock file (for reference only, cleanup handled by scripts)
+    """
+    try:
+        storage_dir = get_project_storage_dir(project_path)
+        lock_file = storage_dir / "indexing.lock"
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write PID of background process (will be spawned immediately after)
+        # Note: We write our PID here, scripts will overwrite with their own PID
+        lock_file.write_text(str(os.getpid()))
+        return lock_file
+    except Exception as e:
+        print(f"⚠️  Failed to create indexing lock: {e}", file=sys.stderr)
+        return None
+
+
 def spawn_background_index(project_path: Path, index_type: str):
     """Spawn background indexing process (non-blocking)
 
@@ -356,6 +410,15 @@ def spawn_background_index(project_path: Path, index_type: str):
         index_type: "full" or "incremental"
     """
     try:
+        # Check for concurrent indexing (skip if already in progress)
+        if check_indexing_in_progress(project_path):
+            print(f"ℹ️  Semantic index already being updated in background")
+            print(f"   Skipping duplicate indexing operation\n")
+            return
+
+        # Create lock file (will be overwritten by script with its own PID)
+        create_indexing_lock(project_path)
+
         project_root = get_project_root()
 
         if index_type == "full":
