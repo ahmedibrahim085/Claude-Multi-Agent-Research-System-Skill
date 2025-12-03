@@ -361,13 +361,13 @@ def spawn_background_index(project_path: Path, index_type: str):
         if index_type == "full":
             script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'index'
             args = [str(script), str(project_path), '--full']
-            print(f"🔄 Starting full semantic index in background (~3 min)")
-            print(f"   This is the first index for this project")
+            print(f"🔄 Starting full semantic index in background")
+            print(f"   This is the first index for this project (may take several minutes)")
         else:
             script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'incremental-reindex'
             args = [str(script), str(project_path)]
-            print(f"🔄 Starting incremental reindex in background (~5 sec)")
-            print(f"   Detecting and indexing changed files only")
+            print(f"🔄 Starting smart reindex in background")
+            print(f"   Smart change detection will determine scope automatically")
 
         # Spawn detached background process
         subprocess.Popen(
