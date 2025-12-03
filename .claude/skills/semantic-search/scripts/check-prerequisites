@@ -1,0 +1,417 @@
+#!/usr/bin/env bash
+#
+# Semantic Search Prerequisites Checker
+#
+# Validates all requirements for semantic-search skill functionality:
+# - MCP server installation
+# - Python venv and packages
+# - Executable scripts
+# - Index status
+# - Model availability
+#
+# Usage: ./check-prerequisites [--project /path/to/project]
+#
+# Exit codes:
+#   0 - All prerequisites met
+#   1 - Missing prerequisites (details in output)
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Counters
+CHECKS_PASSED=0
+CHECKS_FAILED=0
+CHECKS_WARNING=0
+TOTAL_CHECKS=0
+
+# Project path (optional)
+PROJECT_PATH="${1:-$(pwd)}"
+if [[ "$PROJECT_PATH" == "--project" ]]; then
+    PROJECT_PATH="${2:-$(pwd)}"
+fi
+
+# Output functions
+print_header() {
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Semantic Search Prerequisites Checker${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+}
+
+print_check() {
+    local status="$1"
+    local message="$2"
+    local details="${3:-}"
+
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+
+    if [[ "$status" == "PASS" ]]; then
+        echo -e "${GREEN}✓${NC} $message"
+        CHECKS_PASSED=$((CHECKS_PASSED + 1))
+        [[ -n "$details" ]] && echo "  └─ $details"
+    elif [[ "$status" == "FAIL" ]]; then
+        echo -e "${RED}✗${NC} $message"
+        CHECKS_FAILED=$((CHECKS_FAILED + 1))
+        [[ -n "$details" ]] && echo "  └─ $details"
+    elif [[ "$status" == "WARN" ]]; then
+        echo -e "${YELLOW}⚠${NC} $message"
+        CHECKS_WARNING=$((CHECKS_WARNING + 1))
+        [[ -n "$details" ]] && echo "  └─ $details"
+    fi
+}
+
+print_section() {
+    echo ""
+    echo -e "${BLUE}## $1${NC}"
+    echo ""
+}
+
+print_summary() {
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Summary${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Total Checks: $TOTAL_CHECKS"
+    echo -e "${GREEN}Passed: $CHECKS_PASSED${NC}"
+    [[ $CHECKS_WARNING -gt 0 ]] && echo -e "${YELLOW}Warnings: $CHECKS_WARNING${NC}"
+    [[ $CHECKS_FAILED -gt 0 ]] && echo -e "${RED}Failed: $CHECKS_FAILED${NC}"
+    echo ""
+
+    if [[ $CHECKS_FAILED -eq 0 ]]; then
+        echo -e "${GREEN}✓ All critical prerequisites met!${NC}"
+        [[ $CHECKS_WARNING -gt 0 ]] && echo -e "${YELLOW}  Note: Some warnings present (non-critical)${NC}"
+        return 0
+    else
+        echo -e "${RED}✗ Prerequisites missing - see failures above${NC}"
+        echo ""
+        echo "Installation guide:"
+        echo "  curl -fsSL https://raw.githubusercontent.com/FarhanAliRaza/claude-context-local/main/scripts/install.sh | bash"
+        return 1
+    fi
+}
+
+# ============================================================================
+# Prerequisite Checks
+# ============================================================================
+
+print_header
+
+# Section 1: MCP Server Installation
+print_section "1. MCP Server Installation (claude-context-local)"
+
+# Check 1.1: Installation directory exists
+MCP_DIR=""
+if [[ "$(uname)" == "Darwin" ]] || [[ "$(uname)" == "Linux" ]]; then
+    MCP_DIR="$HOME/.local/share/claude-context-local"
+else
+    MCP_DIR="$LOCALAPPDATA/claude-context-local"
+fi
+
+if [[ -d "$MCP_DIR" ]]; then
+    print_check "PASS" "MCP server directory exists" "$MCP_DIR"
+else
+    print_check "FAIL" "MCP server directory not found" "Expected: $MCP_DIR"
+fi
+
+# Check 1.2: Venv exists
+VENV_DIR="$MCP_DIR/.venv"
+if [[ -d "$VENV_DIR" ]]; then
+    print_check "PASS" "Python virtual environment exists" "$VENV_DIR"
+else
+    print_check "FAIL" "Python virtual environment not found" "Expected: $VENV_DIR"
+fi
+
+# Check 1.3: Python interpreter exists
+VENV_PYTHON="$VENV_DIR/bin/python"
+if [[ ! -f "$VENV_PYTHON" ]]; then
+    VENV_PYTHON="$VENV_DIR/Scripts/python.exe"  # Windows
+fi
+
+if [[ -x "$VENV_PYTHON" ]]; then
+    PYTHON_VERSION=$("$VENV_PYTHON" --version 2>&1 | awk '{print $2}')
+    print_check "PASS" "Python interpreter available" "Version: $PYTHON_VERSION"
+else
+    print_check "FAIL" "Python interpreter not found" "Expected: $VENV_PYTHON"
+fi
+
+# Section 2: Python Dependencies
+print_section "2. Python Dependencies"
+
+if [[ -x "$VENV_PYTHON" ]]; then
+    # Check 2.1: sentence-transformers
+    if "$VENV_PYTHON" -c "import sentence_transformers" 2>/dev/null; then
+        VERSION=$("$VENV_PYTHON" -c "import sentence_transformers; print(sentence_transformers.__version__)" 2>/dev/null || echo "unknown")
+        print_check "PASS" "sentence-transformers installed" "Version: $VERSION"
+    else
+        print_check "FAIL" "sentence-transformers not installed" "Required for embeddings"
+    fi
+
+    # Check 2.2: faiss
+    if "$VENV_PYTHON" -c "import faiss" 2>/dev/null; then
+        print_check "PASS" "faiss installed" "Required for vector search"
+    else
+        print_check "FAIL" "faiss not installed" "Required for vector search"
+    fi
+
+    # Check 2.3: sqlite3
+    if "$VENV_PYTHON" -c "import sqlite3" 2>/dev/null; then
+        print_check "PASS" "sqlite3 available" "Required for metadata storage"
+    else
+        print_check "FAIL" "sqlite3 not available" "Should be in Python stdlib"
+    fi
+
+    # Check 2.4: numpy
+    if "$VENV_PYTHON" -c "import numpy" 2>/dev/null; then
+        VERSION=$("$VENV_PYTHON" -c "import numpy; print(numpy.__version__)" 2>/dev/null || echo "unknown")
+        print_check "PASS" "numpy installed" "Version: $VERSION"
+    else
+        print_check "FAIL" "numpy not installed" "Required for array operations"
+    fi
+else
+    print_check "FAIL" "Cannot check dependencies" "Python interpreter not available"
+fi
+
+# Section 3: MCP Server Code
+print_section "3. MCP Server Code"
+
+# Check 3.1: Main server file
+SERVER_FILE="$MCP_DIR/src/claude_context_local/server.py"
+if [[ -f "$SERVER_FILE" ]]; then
+    print_check "PASS" "MCP server code exists" "$SERVER_FILE"
+else
+    print_check "FAIL" "MCP server code not found" "Expected: $SERVER_FILE"
+fi
+
+# Check 3.2: CodeSearchServer class
+if [[ -f "$SERVER_FILE" ]]; then
+    if grep -q "class CodeSearchServer" "$SERVER_FILE" 2>/dev/null; then
+        print_check "PASS" "CodeSearchServer class found" "Core indexing/search class"
+    else
+        print_check "WARN" "CodeSearchServer class not found" "May be in different location"
+    fi
+fi
+
+# Section 4: Skill Scripts
+print_section "4. Skill Scripts"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Check 4.1: index script
+if [[ -x "$SCRIPT_DIR/index" ]]; then
+    print_check "PASS" "index script executable" "$SCRIPT_DIR/index"
+else
+    print_check "FAIL" "index script not executable" "Run: chmod +x $SCRIPT_DIR/index"
+fi
+
+# Check 4.2: incremental-reindex script
+if [[ -x "$SCRIPT_DIR/incremental-reindex" ]]; then
+    print_check "PASS" "incremental-reindex script executable" "$SCRIPT_DIR/incremental-reindex"
+else
+    print_check "WARN" "incremental-reindex script not executable" "Optional: chmod +x $SCRIPT_DIR/incremental-reindex"
+fi
+
+# Check 4.3: search script
+if [[ -x "$SCRIPT_DIR/search" ]]; then
+    print_check "PASS" "search script executable" "$SCRIPT_DIR/search"
+else
+    print_check "FAIL" "search script not executable" "Run: chmod +x $SCRIPT_DIR/search"
+fi
+
+# Check 4.4: find-similar script
+if [[ -x "$SCRIPT_DIR/find-similar" ]]; then
+    print_check "PASS" "find-similar script executable" "$SCRIPT_DIR/find-similar"
+else
+    print_check "WARN" "find-similar script not executable" "Optional: chmod +x $SCRIPT_DIR/find-similar"
+fi
+
+# Check 4.5: status script
+if [[ -x "$SCRIPT_DIR/status" ]]; then
+    print_check "PASS" "status script executable" "$SCRIPT_DIR/status"
+else
+    print_check "WARN" "status script not executable" "Optional: chmod +x $SCRIPT_DIR/status"
+fi
+
+# Check 4.6: list-projects script
+if [[ -x "$SCRIPT_DIR/list-projects" ]]; then
+    print_check "PASS" "list-projects script executable" "$SCRIPT_DIR/list-projects"
+else
+    print_check "WARN" "list-projects script not executable" "Optional: chmod +x $SCRIPT_DIR/list-projects"
+fi
+
+# Section 5: Embedding Model
+print_section "5. Embedding Model"
+
+MODEL_DIR="$HOME/.claude_code_search/models/models--google--embeddinggemma-300m"
+if [[ -d "$MODEL_DIR" ]]; then
+    # Check if model files exist
+    if [[ -f "$MODEL_DIR/config.json" ]] || [[ -f "$MODEL_DIR/snapshots/"*"/config.json" ]]; then
+        MODEL_SIZE=$(du -sh "$MODEL_DIR" 2>/dev/null | awk '{print $1}')
+        print_check "PASS" "Embedding model downloaded" "google/embeddinggemma-300m ($MODEL_SIZE)"
+    else
+        print_check "WARN" "Model directory exists but incomplete" "May need re-download"
+    fi
+else
+    print_check "WARN" "Embedding model not downloaded" "Will download on first use (~1.2GB, 10-30 min)"
+fi
+
+# Section 6: Index Status (for specified project)
+print_section "6. Index Status (Project: $(basename "$PROJECT_PATH"))"
+
+# Calculate project hash
+PROJECT_NAME=$(basename "$PROJECT_PATH")
+PROJECT_HASH=$(echo -n "$PROJECT_PATH" | shasum -a 256 | cut -c1-8)
+INDEX_DIR="$HOME/.claude_code_search/projects/${PROJECT_NAME}_${PROJECT_HASH}"
+
+if [[ -d "$INDEX_DIR" ]]; then
+    # Check 6.1: Index files exist
+    if [[ -f "$INDEX_DIR/index/code.index" ]]; then
+        INDEX_SIZE=$(du -sh "$INDEX_DIR" 2>/dev/null | awk '{print $1}')
+        print_check "PASS" "Project index exists" "$INDEX_DIR ($INDEX_SIZE)"
+
+        # Check 6.2: Metadata database
+        if [[ -f "$INDEX_DIR/index/metadata.db" ]]; then
+            print_check "PASS" "Metadata database exists" "SQLite database"
+        else
+            print_check "WARN" "Metadata database missing" "May indicate incomplete index"
+        fi
+
+        # Check 6.3: Stats file
+        if [[ -f "$INDEX_DIR/index/stats.json" ]]; then
+            CHUNK_COUNT=$(grep -o '"total_chunks":[0-9]*' "$INDEX_DIR/index/stats.json" 2>/dev/null | cut -d: -f2 || echo "unknown")
+            print_check "PASS" "Index statistics available" "$CHUNK_COUNT chunks indexed"
+        else
+            print_check "WARN" "Statistics file missing" "Non-critical"
+        fi
+    else
+        print_check "WARN" "No index found for this project" "Run: scripts/index $PROJECT_PATH --full"
+    fi
+else
+    print_check "WARN" "No index found for this project" "Run: scripts/index $PROJECT_PATH --full"
+fi
+
+# Section 7: Agents
+print_section "7. Agent Definitions"
+
+SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+AGENTS_DIR="$(cd "$SKILL_DIR/../../../agents" && pwd)"
+
+# Check 7.1: semantic-search-reader agent
+if [[ -f "$AGENTS_DIR/semantic-search-reader.md" ]]; then
+    print_check "PASS" "semantic-search-reader agent exists" "READ operations"
+else
+    print_check "FAIL" "semantic-search-reader agent missing" "Expected: $AGENTS_DIR/semantic-search-reader.md"
+fi
+
+# Check 7.2: semantic-search-indexer agent
+if [[ -f "$AGENTS_DIR/semantic-search-indexer.md" ]]; then
+    print_check "PASS" "semantic-search-indexer agent exists" "WRITE operations"
+else
+    print_check "FAIL" "semantic-search-indexer agent missing" "Expected: $AGENTS_DIR/semantic-search-indexer.md"
+fi
+
+# Section 8: Skill Configuration
+print_section "8. Skill Configuration"
+
+# Check 8.1: SKILL.md exists
+if [[ -f "$SKILL_DIR/SKILL.md" ]]; then
+    print_check "PASS" "SKILL.md exists" "Skill definition"
+else
+    print_check "FAIL" "SKILL.md missing" "Expected: $SKILL_DIR/SKILL.md"
+fi
+
+# Check 8.2: skill-rules.json has semantic-search
+RULES_FILE="$(cd "$SKILL_DIR/../.." && pwd)/skill-rules.json"
+if [[ -f "$RULES_FILE" ]]; then
+    if grep -q '"semantic-search"' "$RULES_FILE" 2>/dev/null; then
+        print_check "PASS" "skill-rules.json configured" "Trigger rules defined"
+    else
+        print_check "WARN" "semantic-search not in skill-rules.json" "May affect auto-detection"
+    fi
+else
+    print_check "WARN" "skill-rules.json not found" "Expected: $RULES_FILE"
+fi
+
+# ============================================================================
+# Summary
+# ============================================================================
+
+print_summary
+EXIT_CODE=$?
+
+# ============================================================================
+# Update Global State File
+# ============================================================================
+
+# Determine project root (go up from scripts/ -> semantic-search/ -> skills/ -> .claude/)
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../../" && pwd)"
+STATE_FILE="$PROJECT_ROOT/logs/state/semantic-search-prerequisites.json"
+
+# Ensure state directory exists
+mkdir -p "$(dirname "$STATE_FILE")"
+
+# Read existing state to check for manual override
+MANUAL_OVERRIDE=false
+if [[ -f "$STATE_FILE" ]]; then
+    MANUAL_OVERRIDE=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(str(data.get('manual_override', False)).lower())" 2>/dev/null || echo "false")
+fi
+
+# Only update if no manual override
+if [[ "$MANUAL_OVERRIDE" != "true" ]]; then
+    # Determine SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY based on critical checks
+    # Critical = zero failures (warnings are OK)
+    PREREQUISITES_READY="false"
+    if [[ $CHECKS_FAILED -eq 0 ]]; then
+        PREREQUISITES_READY="true"
+    fi
+
+    # Write state file with current timestamp
+    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    cat > "$STATE_FILE" << EOF
+{
+  "SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY": $PREREQUISITES_READY,
+  "last_checked": "$TIMESTAMP",
+  "last_check_details": {
+    "total_checks": $TOTAL_CHECKS,
+    "passed": $CHECKS_PASSED,
+    "failed": $CHECKS_FAILED,
+    "warnings": $CHECKS_WARNING
+  },
+  "manual_override": false,
+  "notes": "This file tracks semantic-search skill prerequisites status. Set manual_override to true and SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY to true/false to prevent auto-updates. Run scripts/check-prerequisites to auto-update."
+}
+EOF
+
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Global State Updated${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    if [[ "$PREREQUISITES_READY" == "true" ]]; then
+        echo -e "${GREEN}SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY = TRUE${NC}"
+    else
+        echo -e "${RED}SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY = FALSE${NC}"
+    fi
+    echo "State file: $STATE_FILE"
+    echo ""
+else
+    echo ""
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}  Manual Override Active${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Global state file has manual_override=true"
+    echo "State file NOT updated (preserving manual setting)"
+    echo "To allow auto-updates, edit: $STATE_FILE"
+    echo "Set: \"manual_override\": false"
+    echo ""
+fi
+
+exit $EXIT_CODE

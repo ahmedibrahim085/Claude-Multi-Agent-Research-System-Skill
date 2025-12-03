@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+#
+# Manually Set Semantic Search Prerequisites Status
+#
+# This script allows manual override of the SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY
+# global variable without running the full prerequisites check.
+#
+# Usage:
+#   ./set-prerequisites-ready true   # Mark as ready
+#   ./set-prerequisites-ready false  # Mark as not ready
+#   ./set-prerequisites-ready reset  # Reset to auto-update mode
+
+set -euo pipefail
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Validate argument
+if [[ $# -ne 1 ]]; then
+    echo "Usage: $0 <true|false|reset>"
+    echo ""
+    echo "Examples:"
+    echo "  $0 true   # Manually set prerequisites as ready"
+    echo "  $0 false  # Manually set prerequisites as not ready"
+    echo "  $0 reset  # Reset to auto-update mode (run check-prerequisites)"
+    exit 1
+fi
+
+VALUE="$1"
+
+# Validate value
+if [[ "$VALUE" != "true" ]] && [[ "$VALUE" != "false" ]] && [[ "$VALUE" != "reset" ]]; then
+    echo -e "${RED}Error: Value must be 'true', 'false', or 'reset'${NC}"
+    exit 1
+fi
+
+# Determine project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../../" && pwd)"
+STATE_FILE="$PROJECT_ROOT/logs/state/semantic-search-prerequisites.json"
+
+# Ensure state directory exists
+mkdir -p "$(dirname "$STATE_FILE")"
+
+# Get current timestamp
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+if [[ "$VALUE" == "reset" ]]; then
+    # Reset mode: Remove manual override and run check
+    echo -e "${BLUE}Resetting to auto-update mode...${NC}"
+    echo ""
+
+    cat > "$STATE_FILE" << EOF
+{
+  "SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY": false,
+  "last_checked": "$TIMESTAMP",
+  "last_check_details": {
+    "total_checks": 0,
+    "passed": 0,
+    "failed": 0,
+    "warnings": 0
+  },
+  "manual_override": false,
+  "notes": "This file tracks semantic-search skill prerequisites status. Set manual_override to true and SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY to true/false to prevent auto-updates. Run scripts/check-prerequisites to auto-update."
+}
+EOF
+
+    echo -e "${GREEN}✓ Manual override removed${NC}"
+    echo -e "${YELLOW}  Run scripts/check-prerequisites to update status automatically${NC}"
+    echo ""
+    echo "State file: $STATE_FILE"
+
+else
+    # Manual set mode
+    PREREQUISITES_READY="$VALUE"
+
+    # Read existing check details if they exist
+    TOTAL_CHECKS=0
+    PASSED=0
+    FAILED=0
+    WARNINGS=0
+    LAST_CHECKED="null"
+
+    if [[ -f "$STATE_FILE" ]]; then
+        TOTAL_CHECKS=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(data.get('last_check_details', {}).get('total_checks', 0))" 2>/dev/null || echo "0")
+        PASSED=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(data.get('last_check_details', {}).get('passed', 0))" 2>/dev/null || echo "0")
+        FAILED=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(data.get('last_check_details', {}).get('failed', 0))" 2>/dev/null || echo "0")
+        WARNINGS=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(data.get('last_check_details', {}).get('warnings', 0))" 2>/dev/null || echo "0")
+        LAST_CHECKED=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(json.dumps(data.get('last_checked')))" 2>/dev/null || echo "null")
+    fi
+
+    # Write state file with manual override
+    cat > "$STATE_FILE" << EOF
+{
+  "SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY": $PREREQUISITES_READY,
+  "last_checked": $LAST_CHECKED,
+  "last_check_details": {
+    "total_checks": $TOTAL_CHECKS,
+    "passed": $PASSED,
+    "failed": $FAILED,
+    "warnings": $WARNINGS
+  },
+  "manual_override": true,
+  "manual_set_at": "$TIMESTAMP",
+  "notes": "This file tracks semantic-search skill prerequisites status. Set manual_override to true and SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY to true/false to prevent auto-updates. Run scripts/check-prerequisites to auto-update."
+}
+EOF
+
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Manual Override Set${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    if [[ "$PREREQUISITES_READY" == "true" ]]; then
+        echo -e "${GREEN}SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY = TRUE${NC}"
+        echo -e "${GREEN}Status: Prerequisites marked as ready (manual override)${NC}"
+    else
+        echo -e "${RED}SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY = FALSE${NC}"
+        echo -e "${RED}Status: Prerequisites marked as not ready (manual override)${NC}"
+    fi
+    echo ""
+    echo "State file: $STATE_FILE"
+    echo "Manual override active: scripts/check-prerequisites will NOT auto-update"
+    echo ""
+    echo -e "${YELLOW}To restore auto-updates, run: $0 reset${NC}"
+    echo ""
+fi

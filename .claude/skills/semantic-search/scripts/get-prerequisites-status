@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#
+# Get Semantic Search Prerequisites Status
+#
+# Quick script to check the current value of SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY
+# without running the full prerequisites check.
+#
+# Usage: ./get-prerequisites-status
+#
+# Exit codes:
+#   0 - Prerequisites ready (SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY = true)
+#   1 - Prerequisites not ready or state file missing
+
+set -euo pipefail
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Determine project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../../" && pwd)"
+STATE_FILE="$PROJECT_ROOT/logs/state/semantic-search-prerequisites.json"
+
+# Check if state file exists
+if [[ ! -f "$STATE_FILE" ]]; then
+    echo -e "${RED}✗ State file not found${NC}"
+    echo "  Location: $STATE_FILE"
+    echo ""
+    echo "Run scripts/check-prerequisites to create state file"
+    exit 1
+fi
+
+# Read state file
+PREREQUISITES_READY=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(str(data.get('SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY', False)).lower())" 2>/dev/null || echo "false")
+MANUAL_OVERRIDE=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(str(data.get('manual_override', False)).lower())" 2>/dev/null || echo "false")
+LAST_CHECKED=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(data.get('last_checked', 'Never'))" 2>/dev/null || echo "Never")
+TOTAL_CHECKS=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(data.get('last_check_details', {}).get('total_checks', 0))" 2>/dev/null || echo "0")
+PASSED=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(data.get('last_check_details', {}).get('passed', 0))" 2>/dev/null || echo "0")
+FAILED=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(data.get('last_check_details', {}).get('failed', 0))" 2>/dev/null || echo "0")
+WARNINGS=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(data.get('last_check_details', {}).get('warnings', 0))" 2>/dev/null || echo "0")
+
+# Display status
+echo ""
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}  Semantic Search Prerequisites Status${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+if [[ "$PREREQUISITES_READY" == "true" ]]; then
+    echo -e "${GREEN}SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY = TRUE ✓${NC}"
+    echo ""
+    echo "Status: All prerequisites met"
+else
+    echo -e "${RED}SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY = FALSE ✗${NC}"
+    echo ""
+    echo "Status: Prerequisites not met or not checked"
+fi
+
+echo ""
+echo "Last Checked: $LAST_CHECKED"
+
+if [[ "$MANUAL_OVERRIDE" == "true" ]]; then
+    echo -e "Override Mode: ${YELLOW}MANUAL${NC} (state set manually, auto-updates disabled)"
+else
+    echo "Override Mode: AUTO (updated by scripts/check-prerequisites)"
+fi
+
+echo ""
+echo "Last Check Results:"
+echo "  Total checks: $TOTAL_CHECKS"
+echo -e "  ${GREEN}Passed: $PASSED${NC}"
+[[ $WARNINGS -gt 0 ]] && echo -e "  ${YELLOW}Warnings: $WARNINGS${NC}"
+[[ $FAILED -gt 0 ]] && echo -e "  ${RED}Failed: $FAILED${NC}"
+
+echo ""
+echo "State file: $STATE_FILE"
+echo ""
+
+# Exit with appropriate code
+if [[ "$PREREQUISITES_READY" == "true" ]]; then
+    exit 0
+else
+    exit 1
+fi
