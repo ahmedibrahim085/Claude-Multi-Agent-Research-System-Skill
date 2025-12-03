@@ -52,6 +52,7 @@ def main():
         # Don't exit - reindex will still run, only research tracking skipped
 
     # Log ALL tool calls to session logs (only if state loaded successfully)
+    session_id = None  # FIX: Initialize to prevent NameError if get_session_id() fails
     if state:
         try:
             session_id = session_logger.get_session_id()
