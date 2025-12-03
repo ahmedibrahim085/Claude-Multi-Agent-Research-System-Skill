@@ -3,7 +3,7 @@
 **Status**: ✅ Accepted
 **Date**: 2025-12-03
 **Decision Makers**: Architecture Review
-**Impact**: Core auto-reindex implementation (session-start, post-write hooks)
+**Impact**: Core auto-reindex implementation (session-start, post-modification hooks)
 
 ---
 
@@ -12,7 +12,7 @@
 The semantic search skill requires automatic reindexing in two scenarios:
 
 1. **Session Start**: When Claude Code starts, check for file changes and update index
-2. **Post-Write**: After user edits files, update index to reflect changes
+2. **Post-Modification**: After user creates, modifies, or edits files (Write/Edit/NotebookEdit tools), update index to reflect changes
 
 These operations must run in hooks (60-second timeout) and execute frequently (potentially 10+ times per day).
 
@@ -578,15 +578,15 @@ The semantic index is ready! You can now:
 
 ---
 
-### Example 3: Post-Write Auto-Reindex
+### Example 3: Post-Modification Auto-Reindex
 
-**User Action:** Edits and saves `src/main.py`
+**User Action:** Creates, modifies, or edits files (Write/Edit/NotebookEdit tools)
 
 **Implementation:**
 ```python
 # .claude/hooks/post-tool-use-track-research.py
-if tool_name == 'Write':
-    file_path = tool_input.get('file_path')
+if tool_name in ['Write', 'Edit', 'NotebookEdit']:
+    file_path = tool_input.get('file_path') or tool_input.get('notebook_path')
 
     # Direct script approach ✓
     reindex_manager.reindex_after_write(file_path)

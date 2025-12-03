@@ -18,7 +18,7 @@
 
 **Automatic Operations:**
 - Session start reindex
-- Post-file-write reindex
+- Post-file-modification reindex (Write/Edit/NotebookEdit tools)
 - Any hook-based operation
 - Background maintenance
 

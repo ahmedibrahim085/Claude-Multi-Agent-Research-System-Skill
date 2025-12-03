@@ -14,7 +14,7 @@ ADRs document significant architectural decisions, their rationale, alternatives
 **Date**: 2025-12-03
 **Impact**: Core auto-reindex implementation
 
-**Decision**: Use direct bash scripts for automatic reindex operations (session start, post-write hooks) instead of invoking the semantic-search-indexer agent.
+**Decision**: Use direct bash scripts for automatic reindex operations (session start, post-modification hooks) instead of invoking the semantic-search-indexer agent.
 
 **Key Rationale**:
 - **5x faster**: 2.7s vs 14.6s (performance critical for background operations)
@@ -37,7 +37,7 @@ ADRs document significant architectural decisions, their rationale, alternatives
 
 **Use for:**
 - Session start reindex
-- Post-file-write reindex
+- Post-file-modification reindex (Write/Edit/NotebookEdit)
 - Hook-based operations
 - Background maintenance
 - High-frequency tasks (>5/day)
