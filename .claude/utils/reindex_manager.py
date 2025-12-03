@@ -445,25 +445,38 @@ def _acquire_reindex_lock(project_path: Path) -> bool:
     try:
         claim_data = f"{os.getpid()}:{time.time():.3f}"
         fd = os.open(str(claim_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-        os.write(fd, claim_data.encode())
-        os.close(fd)
+        try:
+            os.write(fd, claim_data.encode())
+        finally:
+            os.close(fd)  # FIX: Always close fd, prevents fd leak
         return True  # Lock acquired
     except FileExistsError:
         # Another process created the file between our check and create
         return False
+    except Exception:
+        # Write or close failed - clean up partial claim file (FIX: prevents 60s block)
+        try:
+            claim_file.unlink()
+        except Exception:
+            pass  # Best effort cleanup
+        raise  # Propagate error to caller
 
 
 def _release_reindex_lock(project_path: Path) -> None:
-    """Release reindex lock by removing claim file.
+    """Release reindex lock by removing claim file (best effort, never raises).
+
+    FIX: Catch all exceptions to prevent masking original exceptions from finally block.
+    If cleanup fails (PermissionError, OSError), stale lock detection handles it (60s timeout).
 
     Args:
         project_path: Path to project
     """
-    claim_file = get_project_storage_dir(project_path) / '.reindex_claim'
     try:
+        claim_file = get_project_storage_dir(project_path) / '.reindex_claim'
         claim_file.unlink()
-    except FileNotFoundError:
-        # Already removed (concurrent process or cleanup)
+    except Exception:  # FIX: Catch ALL exceptions, not just FileNotFoundError
+        # Best effort cleanup - don't propagate exceptions from cleanup code
+        # Stale lock detection will remove leaked locks after 60s
         pass
 
 
