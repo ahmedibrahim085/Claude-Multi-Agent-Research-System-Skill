@@ -250,8 +250,8 @@ print_section "5. Embedding Model"
 
 MODEL_DIR="$HOME/.claude_code_search/models/models--google--embeddinggemma-300m"
 if [[ -d "$MODEL_DIR" ]]; then
-    # Check if model files exist
-    if [[ -f "$MODEL_DIR/config.json" ]] || [[ -f "$MODEL_DIR/snapshots/"*"/config.json" ]]; then
+    # Check if model files exist in snapshots directory
+    if [[ -d "$MODEL_DIR/snapshots" ]] && find "$MODEL_DIR/snapshots" -name "config_sentence_transformers.json" -o -name "model.safetensors" 2>/dev/null | grep -q .; then
         MODEL_SIZE=$(du -sh "$MODEL_DIR" 2>/dev/null | awk '{print $1}')
         print_check "PASS" "Embedding model downloaded" "google/embeddinggemma-300m ($MODEL_SIZE)"
     else
@@ -264,9 +264,14 @@ fi
 # Section 6: Index Status (for specified project)
 print_section "6. Index Status (Project: $(basename "$PROJECT_PATH"))"
 
-# Calculate project hash
+# Calculate project hash using MD5 (matches Python implementation in code_search_server.py)
 PROJECT_NAME=$(basename "$PROJECT_PATH")
-PROJECT_HASH=$(echo -n "$PROJECT_PATH" | shasum -a 256 | cut -c1-8)
+# Use md5 command (macOS) or md5sum (Linux)
+if command -v md5 &> /dev/null; then
+    PROJECT_HASH=$(echo -n "$PROJECT_PATH" | md5 | cut -c1-8)
+else
+    PROJECT_HASH=$(echo -n "$PROJECT_PATH" | md5sum | cut -c1-8)
+fi
 INDEX_DIR="$HOME/.claude_code_search/projects/${PROJECT_NAME}_${PROJECT_HASH}"
 
 if [[ -d "$INDEX_DIR" ]]; then
