@@ -2,13 +2,13 @@
 
 **Orchestrated multi-agent research with architectural enforcement, parallel execution, and comprehensive audit trails.**
 
-[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill/releases)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 ---
 
-## 🎉 v2.3.x: Tri-Skill Orchestration Platform
+## 🎉 v3.0.0: Production-Grade Auto-Reindex + Tracing
 
 A **tri-skill platform** with smart routing, auto-indexing, and compound request detection:
 
@@ -19,7 +19,9 @@ A **tri-skill platform** with smart routing, auto-indexing, and compound request
 | **semantic-search** | Natural language content search (code, docs, configs) | semantic-search-reader, semantic-search-indexer |
 
 **Key Features**:
-- **Auto-Reindex on Session Start** - Smart change detection with 60-min cooldown
+- **Auto-Reindex on File Changes** - Triggers on Write/Edit with 5-min cooldown (42x faster incremental)
+- **Auto-Reindex on Session Start** - Smart change detection when Claude Code starts
+- **Comprehensive Decision Tracing** - Full visibility into reindex decisions (skip reasons, timing, errors)
 - **Smart Compound Detection** - When prompts trigger multiple skills, asks for clarification
 - **200+ Trigger Keywords** - Automatic skill routing via hook (3 skills)
 - **Quality Gates** - 85% threshold with max 3 iterations

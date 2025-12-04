@@ -37,7 +37,7 @@ ADRs document significant architectural decisions, their rationale, alternatives
 
 **Use for:**
 - Session start reindex
-- Post-file-modification reindex (Write/Edit/NotebookEdit)
+- Post-file-modification reindex (Write/Edit)
 - Hook-based operations
 - Background maintenance
 - High-frequency tasks (>5/day)
