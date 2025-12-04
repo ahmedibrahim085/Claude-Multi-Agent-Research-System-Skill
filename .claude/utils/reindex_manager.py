@@ -648,7 +648,7 @@ def should_reindex_after_cooldown(project_path: Path, cooldown_seconds: Optional
 # SECTION 6: FILE FILTERING (PRECISE + CONFIGURABLE)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def should_reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) -> bool:
+def should_reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) -> tuple[bool, str, dict]:
     """Check if reindex should run after Write operation
 
     File Filtering Logic (4-Layer Filter):
@@ -689,7 +689,10 @@ def should_reindex_after_write(file_path: str, cooldown_seconds: Optional[int] =
         cooldown_seconds: Optional cooldown override (None = use config)
 
     Returns:
-        True if should reindex, False if should skip
+        Tuple of (should_reindex: bool, reason: str, details: dict)
+        - should_reindex: True if should reindex, False if should skip
+        - reason: Human-readable skip/run reason
+        - details: Additional context (pattern, cooldown time, etc.)
     """
     config = get_reindex_config()
     file_path_obj = Path(file_path)
@@ -698,32 +701,58 @@ def should_reindex_after_write(file_path: str, cooldown_seconds: Optional[int] =
         # Layer 1: Include patterns (extension match)
         include_patterns = config['file_include_patterns']
         if not any(file_path_obj.match(pattern) for pattern in include_patterns):
-            return False  # Extension not in include list
+            return (False, "not_indexable_pattern", {
+                "file": file_path_obj.name,
+                "extension": file_path_obj.suffix,
+                "include_patterns": include_patterns
+            })
 
         # Layer 2: Exclude directories (simple check - Fix #2: Removed unnecessary complexity)
         exclude_dirs = config['file_exclude_dirs']
         for part in file_path_obj.parts:
             if part in exclude_dirs:
-                return False  # In excluded directory
+                return (False, "excluded_directory", {
+                    "file": file_path_obj.name,
+                    "directory": part,
+                    "exclude_dirs": exclude_dirs
+                })
 
         # Layer 3: Exclude patterns (filename match)
         exclude_patterns = config['file_exclude_patterns']
-        if any(file_path_obj.match(pattern) for pattern in exclude_patterns):
-            return False  # Matches exclude pattern
+        for pattern in exclude_patterns:
+            if file_path_obj.match(pattern):
+                return (False, "excluded_pattern", {
+                    "file": file_path_obj.name,
+                    "pattern": pattern,
+                    "exclude_patterns": exclude_patterns
+                })
 
         # Layer 4: Cooldown check (Fix #1, #5: Use parameter if provided)
         project_path = get_project_root()
         cooldown = cooldown_seconds if cooldown_seconds is not None else config['cooldown_seconds']
 
         if not should_reindex_after_cooldown(project_path, cooldown):
-            return False  # Cooldown still active
+            last_reindex = get_last_reindex_time(project_path)
+            elapsed = 0
+            if last_reindex:
+                now = datetime.now(timezone.utc)
+                if last_reindex.tzinfo is None:
+                    last_reindex = last_reindex.replace(tzinfo=timezone.utc)
+                elapsed = (now - last_reindex).total_seconds()
+
+            return (False, "cooldown_active", {
+                "file": file_path_obj.name,
+                "cooldown_seconds": cooldown,
+                "elapsed_seconds": int(elapsed),
+                "remaining_seconds": int(cooldown - elapsed)
+            })
 
         # All checks passed → Reindex
-        return True
+        return (True, "should_reindex", {"file": file_path_obj.name})
 
-    except Exception:
+    except Exception as e:
         # If anything fails, skip reindex (graceful degradation)
-        return False
+        return (False, "error", {"file": file_path_obj.name, "error": str(e)})
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -778,7 +807,7 @@ def auto_reindex_on_session_start(input_data: dict) -> None:
     _reindex_on_session_start_core(source)
 
 
-def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) -> None:
+def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) -> dict:
     """Auto-reindex after file modification operations (Write/Edit/NotebookEdit)
 
     Business Logic:
@@ -804,38 +833,90 @@ def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) 
         cooldown_seconds: Optional cooldown override (None = use config)
 
     Returns:
-        None (prints messages directly, never raises)
+        dict: Decision data with keys:
+            - decision: "skip" or "run"
+            - reason: Human-readable reason code
+            - details: Additional context (varies by reason)
+            - timestamp: ISO timestamp of decision
     """
+    file_name = Path(file_path).name
+    timestamp = datetime.now(timezone.utc).isoformat()
+
     try:
         # Step 1: Check prerequisites
         if not read_prerequisites_state():
-            return
+            return {
+                "decision": "skip",
+                "reason": "prerequisites_not_ready",
+                "details": {
+                    "file": file_name,
+                    "state_file": "logs/state/semantic-search-prerequisites.json"
+                },
+                "timestamp": timestamp
+            }
 
         # Step 2: Check if file should trigger reindex (Fix #1: Pass cooldown parameter)
-        if not should_reindex_after_write(file_path, cooldown_seconds):
-            return
+        should_reindex, reason, details = should_reindex_after_write(file_path, cooldown_seconds)
+        if not should_reindex:
+            return {
+                "decision": "skip",
+                "reason": reason,
+                "details": details,
+                "timestamp": timestamp
+            }
 
         # Step 3: Check if index exists
         project_path = get_project_root()
         if not check_index_exists(project_path):
-            return
+            storage_dir = get_project_storage_dir(project_path)
+            return {
+                "decision": "skip",
+                "reason": "index_not_found",
+                "details": {
+                    "file": file_name,
+                    "expected_index": str(storage_dir / "index" / "code.index")
+                },
+                "timestamp": timestamp
+            }
 
         # Step 4: Run incremental reindex synchronously (~5 seconds)
-        file_name = Path(file_path).name
         print(f"🔄 Updating semantic search index (file modified: {file_name})...")
         result = run_incremental_reindex_sync(project_path)
 
         # FIX: Issue #15 - Handle None (skipped), True (success), False (failed)
         if result is True:
             print("✅ Semantic search index updated\n")
+            return {
+                "decision": "run",
+                "reason": "reindex_success",
+                "details": {"file": file_name},
+                "timestamp": timestamp
+            }
         elif result is None:
-            # Skipped (another process is reindexing) - no message needed
-            pass
-        # If False: Errors already printed by run_incremental_reindex_sync
+            # Skipped (another process is reindexing)
+            return {
+                "decision": "skip",
+                "reason": "concurrent_reindex",
+                "details": {"file": file_name},
+                "timestamp": timestamp
+            }
+        else:  # False
+            return {
+                "decision": "run",
+                "reason": "reindex_failed",
+                "details": {"file": file_name},
+                "timestamp": timestamp
+            }
 
     except Exception as e:
         # Don't fail hook if auto-indexing fails
         print(f"⚠️  Auto-indexing error: {e}\n", file=sys.stderr)
+        return {
+            "decision": "skip",
+            "reason": "exception",
+            "details": {"file": file_name, "error": str(e)},
+            "timestamp": timestamp
+        }
 
 
 # ═══════════════════════════════════════════════════════════════════════════

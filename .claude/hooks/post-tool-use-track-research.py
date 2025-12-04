@@ -106,7 +106,14 @@ def main():
 
     # Auto-reindex after file modification operations (Write/Edit)
     # Cooldown and file filtering handled by reindex_manager (respects user config)
-    reindex_manager.reindex_after_write(file_path)
+    decision_data = reindex_manager.reindex_after_write(file_path)
+
+    # Log auto-reindex decision to session transcript (tracing for debugging)
+    if session_id and decision_data:
+        try:
+            session_logger.log_auto_reindex_decision(session_id, decision_data)
+        except Exception as e:
+            print(f"Failed to log auto-reindex decision: {e}", file=sys.stderr)
 
     # Skip research-specific tracking if no state loaded or no active research session
     if not state or not state.get('currentResearch'):

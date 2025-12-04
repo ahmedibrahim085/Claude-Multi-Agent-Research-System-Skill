@@ -293,6 +293,69 @@ def log_tool_call(
     log_to_jsonl(session_id, log_data)
 
 
+def log_auto_reindex_decision(session_id: str, decision_data: Dict[str, Any]) -> None:
+    """Log auto-reindex decision to transcript (tracing for debugging)
+
+    Logs all reindex decisions (skip or run) with detailed reasons.
+    This provides full visibility into auto-reindex behavior for debugging.
+
+    Args:
+        session_id: Session identifier
+        decision_data: Decision data from reindex_manager.reindex_after_write()
+            - decision: "skip" or "run"
+            - reason: Reason code
+            - details: Additional context
+            - timestamp: ISO timestamp
+    """
+    transcript_path = get_transcript_path(session_id)
+
+    # Format timestamp
+    timestamp = datetime.fromisoformat(decision_data['timestamp'])
+    time_str = timestamp.strftime('%H:%M:%S')
+
+    # Format decision
+    decision = decision_data['decision'].upper()
+    reason = decision_data['reason']
+    details = decision_data['details']
+    file_name = details.get('file', 'unknown')
+
+    # Format human-readable message based on reason
+    if reason == "prerequisites_not_ready":
+        message = f"Prerequisites not met ({details.get('state_file', 'N/A')})"
+    elif reason == "not_indexable_pattern":
+        ext = details.get('extension', 'N/A')
+        message = f"File not indexable (extension {ext} not in include patterns)"
+    elif reason == "excluded_directory":
+        directory = details.get('directory', 'N/A')
+        message = f"File in excluded directory ({directory}/)"
+    elif reason == "excluded_pattern":
+        pattern = details.get('pattern', 'N/A')
+        message = f"File matches exclude pattern ({pattern})"
+    elif reason == "cooldown_active":
+        remaining = details.get('remaining_seconds', 0)
+        cooldown = details.get('cooldown_seconds', 0)
+        message = f"Cooldown active ({remaining}s remaining of {cooldown}s)"
+    elif reason == "index_not_found":
+        message = "Index not found (run manual index first)"
+    elif reason == "concurrent_reindex":
+        message = "Another process is reindexing"
+    elif reason == "reindex_success":
+        message = "Incremental reindex completed successfully"
+    elif reason == "reindex_failed":
+        message = "Reindex failed (see error above)"
+    elif reason == "exception":
+        error = details.get('error', 'unknown')
+        message = f"Exception: {error}"
+    else:
+        message = f"Reason: {reason}"
+
+    # Format log entry
+    entry = f"[{time_str}] AUTO-REINDEX → {decision}: {file_name} - {message}\n"
+
+    with transcript_path.open('a', encoding='utf-8') as f:
+        f.write(entry)
+
+
 def get_session_id() -> str:
     """Get session ID from various sources"""
 
