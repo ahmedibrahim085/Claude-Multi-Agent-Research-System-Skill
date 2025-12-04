@@ -96,7 +96,7 @@ Semantic search reduces exploration overhead by **90%+ (~5,000-10,000 tokens per
 - Global installation: `~/.local/share/claude-context-local` (macOS/Linux) or `%LOCALAPPDATA%\claude-context-local` (Windows)
 - Index created using `scripts/index` command (or auto-created by SessionStart hook)
 
-**Auto-Reindex (v3.0.0)**:
+**Auto-Reindex (v2.4.0)**:
 - **Session-start trigger**: Reindexes on startup/resume (smart change detection, 60-min cooldown)
 - **Post-modification trigger**: Reindexes after Write/Edit operations (5-min cooldown)
 - **Incremental reindex**: ~5 seconds (42x faster than full reindex)

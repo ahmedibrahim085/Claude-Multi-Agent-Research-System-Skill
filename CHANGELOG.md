@@ -7,13 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [3.0.0] - 2025-12-04
+## [2.4.0] - 2025-12-04
 
-### 🎉 Major Release: Production-Grade Auto-Reindex + Comprehensive Tracing
+### ✨ Feature Release: Production-Grade Auto-Reindex + Comprehensive Tracing
 
 **96 commits across 7 development phases** (Nov 28 - Dec 4, 2025)
 
-This major release transforms the semantic search skill from basic functionality to a production-grade system with comprehensive auto-indexing, decision tracing, and architectural refinements.
+This feature release transforms the semantic search skill from basic functionality to a production-grade system with comprehensive auto-indexing, decision tracing, and architectural refinements. All changes are backward compatible with no breaking changes.
 
 ---
 
@@ -191,9 +191,9 @@ This major release transforms the semantic search skill from basic functionality
 
 ### 📋 Migration Guide
 
-#### From v2.3.0 to v3.0.0
+#### From v2.3.0 to v2.4.0
 
-**No breaking changes** - This is a feature release with backward compatibility.
+**No breaking changes** - This is a feature release with backward compatibility following semantic versioning (MINOR bump for new features).
 
 **What's New:**
 1. Auto-reindex now triggers on Write/Edit operations (automatic)
