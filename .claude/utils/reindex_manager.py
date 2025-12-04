@@ -572,7 +572,7 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
 
     except FileNotFoundError as e:
         print(f"⚠️  File not found: {e}", file=sys.stderr)
-        print(f"   Run manual setup: scripts/index --full {project_path}", file=sys.stderr)
+        print(f"   Run manual setup: scripts/incremental-reindex --full {project_path}", file=sys.stderr)
         return False
 
     except Exception as e:
@@ -971,7 +971,7 @@ def _reindex_on_session_start_core(trigger: str) -> None:
         if not check_index_exists(project_path):
             # No index yet → user needs to run manual setup
             print("ℹ️  Semantic search not yet indexed")
-            print("   Run: .claude/skills/semantic-search/scripts/index <project_path> --full")
+            print("   Run: .claude/skills/semantic-search/scripts/incremental-reindex <project_path> --full")
             print("   (First-time setup: ~3 minutes)\n")
             return
 

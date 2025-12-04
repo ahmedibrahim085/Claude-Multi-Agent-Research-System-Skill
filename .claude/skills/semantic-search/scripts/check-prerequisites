@@ -295,10 +295,10 @@ if [[ -d "$INDEX_DIR" ]]; then
             print_check "WARN" "Statistics file missing" "Non-critical"
         fi
     else
-        print_check "WARN" "No index found for this project" "Run: scripts/index $PROJECT_PATH --full"
+        print_check "WARN" "No index found for this project" "Run: scripts/incremental-reindex $PROJECT_PATH --full"
     fi
 else
-    print_check "WARN" "No index found for this project" "Run: scripts/index $PROJECT_PATH --full"
+    print_check "WARN" "No index found for this project" "Run: scripts/incremental-reindex $PROJECT_PATH --full"
 fi
 
 # Section 7: Agents

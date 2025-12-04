@@ -457,10 +457,10 @@ SAVINGS: 7,400 tokens (92% reduction)
 
 **Required**:
 - Global installation: `~/.local/share/claude-context-local` (macOS/Linux) or `%LOCALAPPDATA%\claude-context-local` (Windows)
-- Index created using `scripts/index` command
+- Index created using `scripts/incremental-reindex` command
 
 **If index missing**:
-- Use `scripts/index /path/to/project --full` to create index
+- Use `scripts/incremental-reindex /path/to/project --full` to create index
 - Or inform user to create index first
 - Fallback to Grep/Glob for keyword-based search
 
@@ -468,7 +468,7 @@ SAVINGS: 7,400 tokens (92% reduction)
 
 **Create/Update Index**:
 ```bash
-~/.claude/skills/semantic-search/scripts/index /path/to/project --full
+~/.claude/skills/semantic-search/scripts/incremental-reindex /path/to/project --full
 ```
 
 **List Indexed Projects**:
@@ -700,7 +700,7 @@ curl -fsSL https://raw.githubusercontent.com/FarhanAliRaza/claude-context-local/
 **Index Management**:
 ```bash
 # Create/update index
-~/.claude/skills/semantic-search/scripts/index /path/to/project --full
+~/.claude/skills/semantic-search/scripts/incremental-reindex /path/to/project --full
 
 # Check status
 ~/.claude/skills/semantic-search/scripts/status --project /path/to/project

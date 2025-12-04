@@ -66,7 +66,7 @@ Operation: index
 Directory: /path/to/project
 Full: true
 
-Execute the indexing operation using scripts/index and return interpreted results with statistics."""
+Execute the indexing operation using scripts/incremental-reindex and return interpreted results with statistics."""
 )
 ```
 
@@ -295,7 +295,7 @@ Window 3: Opens → No lock → Proceeds normally
 
 **Index State**: `~/.claude_code_search/projects/{project}_{hash}/index_state.json`
 - **Purpose**: Tracks indexing timestamps for 60-minute cooldown logic
-- **Updated by**: `scripts/index` (after full index), `scripts/incremental-reindex` (after any index)
+- **Updated by**: `scripts/incremental-reindex` (after full index), `scripts/incremental-reindex` (after any index)
 - **Read by**: SessionStart hook (determine index type)
 - **Content**:
   ```json
@@ -331,7 +331,7 @@ You can still manually trigger indexing operations:
 
 ```bash
 # Force full reindex (ignores cooldown, always does full)
-scripts/index /path/to/project --full
+scripts/incremental-reindex /path/to/project --full
 
 # Smart incremental (respects age threshold, default 60min)
 scripts/incremental-reindex /path/to/project
@@ -370,7 +370,7 @@ scripts/incremental-reindex /path/to/project --check-only
 **Index not updating after changes?**
 - Check last index time: `scripts/status --project /path/to/project`
 - Trigger manual reindex: `scripts/incremental-reindex /path/to/project`
-- Force full reindex: `scripts/index /path/to/project --full`
+- Force full reindex: `scripts/incremental-reindex /path/to/project --full`
 
 **Concurrent indexing message?**
 - Another window already indexing (wait for completion)
@@ -385,13 +385,13 @@ scripts/incremental-reindex /path/to/project --check-only
 
 ```bash
 # Full index (recommended on first run or after major changes)
-scripts/index /path/to/project --full
+scripts/incremental-reindex /path/to/project --full
 
 # Incremental index (faster, only processes changed files)
-scripts/index /path/to/project
+scripts/incremental-reindex /path/to/project
 
 # Custom project name
-scripts/index /path/to/project --project-name my-project --full
+scripts/incremental-reindex /path/to/project --project-name my-project --full
 ```
 
 **Output**: JSON with indexing statistics (files added/modified/removed, chunks indexed, time taken).
@@ -519,7 +519,7 @@ All scripts output standardized JSON:
 
 **Step 1: Index the Project (One-Time Setup)**
 ```bash
-scripts/index /path/to/project --full
+scripts/incremental-reindex /path/to/project --full
 ```
 
 **Step 2: Verify Index Status**
@@ -543,10 +543,10 @@ scripts/find-similar --chunk-id "src/auth/oauth.py:34-56:function:oauth_login" -
 **Step 5: Reindex After Changes**
 ```bash
 # Incremental reindex (fast, only changed files)
-scripts/index /path/to/project
+scripts/incremental-reindex /path/to/project
 
 # Full reindex (after major refactoring)
-scripts/index /path/to/project --full
+scripts/incremental-reindex /path/to/project --full
 ```
 
 **Step 6: Narrow with Traditional Tools**
@@ -629,14 +629,14 @@ This pattern avoids code duplication while maintaining the benefits of thin wrap
 
 - If you use `scripts/incremental-reindex` to create/update your index, the search scripts may not find it
 - This is because `incremental-reindex` uses a custom IndexIDMap2-based storage format
-- Current limitation: Use `scripts/index` for creating indices that `scripts/search` can use
+- Current limitation: Use `scripts/incremental-reindex` for creating indices that `scripts/search` can use
 - Future enhancement: Update search scripts to support both index formats
 
-**Workaround**: Use `scripts/index /path/to/project --full` for creating searchable indices, or implement IndexIDMap2 support in search scripts.
+**Workaround**: Use `scripts/incremental-reindex /path/to/project --full` for creating searchable indices, or implement IndexIDMap2 support in search scripts.
 
 ---
 
 **Next Steps**:
-- For creating searchable indices: `scripts/index /path/to/project --full`
+- For creating searchable indices: `scripts/incremental-reindex /path/to/project --full`
 - For local incremental updates (testing): `scripts/incremental-reindex /path/to/project`
 - Then explore with semantic search queries using `scripts/search`

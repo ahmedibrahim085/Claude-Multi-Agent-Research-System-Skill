@@ -427,7 +427,7 @@ Execute the indexing operation and return interpreted results with statistics.
 ```
 
 Your response should:
-1. Run: `~/.claude/skills/semantic-search/scripts/index /Users/user/projects/my-app --full --project-name my-app`
+1. Run: `~/.claude/skills/semantic-search/scripts/incremental-reindex /Users/user/projects/my-app --full --project-name my-app`
 2. Parse the JSON output
 3. Format as natural language with progress/stats (as shown in examples above)
 4. Provide guidance on next steps (how to search, when to reindex, etc.)

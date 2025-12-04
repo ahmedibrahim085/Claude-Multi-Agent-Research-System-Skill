@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ⚠️  DEPRECATED: This script creates BUGGY IndexFlatIP indexes
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Problem:
+#   This script wraps MCP's native CodeSearchServer.index_directory()
+#   which creates IndexFlatIP indexes WITHOUT IndexIDMap2 wrapper.
+#
+# Result:
+#   - Incremental reindex FAILS: "add_with_ids not implemented"
+#   - Index corruption during updates
+#   - All auto-reindex attempts fail
+#
+# Solution:
+#   Use the FIXED script instead:
+#
+#     scripts/incremental-reindex /path/to/project --full
+#
+# Documentation:
+#   See docs/architecture/MCP-DEPENDENCY-STRATEGY.md
+#
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "⚠️  DEPRECATED: This script creates BUGGY IndexFlatIP indexes"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "Problem:"
+echo "  • Creates IndexFlatIP without IndexIDMap2 wrapper"
+echo "  • Incremental reindex fails: 'add_with_ids not implemented'"
+echo "  • All auto-reindex attempts will fail"
+echo ""
+echo "Solution:"
+echo "  Use the FIXED script instead:"
+echo ""
+echo "    cd \$(dirname \$0)"
+echo "    bash incremental-reindex \"$1\" --full"
+echo ""
+echo "Documentation:"
+echo "  • docs/architecture/MCP-DEPENDENCY-STRATEGY.md"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+exit 1
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ORIGINAL CODE BELOW (PRESERVED FOR REFERENCE)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Orchestrator for indexing - calls CodeSearchServer.index_directory()
+
+VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
+export PYTHONPATH="$HOME/.local/share/claude-context-local"
+
+cd "$HOME/.local/share/claude-context-local"
+
+"$VENV_PYTHON" -c "
+import sys
+from mcp_server.code_search_server import CodeSearchServer
+
+# Parse arguments
+directory = None
+project_name = None
+incremental = True
+
+i = 1
+while i < len(sys.argv):
+    if sys.argv[i] in ['-h', '--help']:
+        print('Usage: index DIRECTORY [--project-name NAME] [--full]')
+        print('')
+        print('Arguments:')
+        print('  DIRECTORY          Directory to index')
+        print('  --project-name     Project name (default: directory basename)')
+        print('  --full             Do full reindex (default: incremental)')
+        sys.exit(0)
+    elif sys.argv[i] == '--project-name':
+        project_name = sys.argv[i+1]
+        i += 2
+    elif sys.argv[i] == '--full':
+        incremental = False
+        i += 1
+    elif not directory:
+        directory = sys.argv[i]
+        i += 1
+    else:
+        i += 1
+
+if not directory:
+    print('Error: DIRECTORY argument required', file=sys.stderr)
+    print('Usage: index DIRECTORY [--project-name NAME] [--full]', file=sys.stderr)
+    sys.exit(1)
+
+server = CodeSearchServer()
+result = server.index_directory(directory, project_name=project_name, incremental=incremental)
+print(result)
+
+# Record timestamp if full index succeeded
+if not incremental:
+    import json
+    from datetime import datetime, timezone
+    from pathlib import Path
+    import hashlib
+
+    try:
+        result_data = json.loads(result)
+        if 'error' not in result_data:
+            # Full index succeeded - record timestamp
+            storage_dir = Path.home() / '.claude_code_search'
+            project_path_obj = Path(directory).resolve()
+            project_name_final = project_name or project_path_obj.name
+            project_hash = hashlib.md5(str(project_path_obj).encode()).hexdigest()[:8]
+            project_dir = storage_dir / 'projects' / f'{project_name_final}_{project_hash}'
+            state_file = project_dir / 'index_state.json'
+
+            # Read existing state if it exists
+            state = {}
+            if state_file.exists():
+                with open(state_file, 'r') as f:
+                    state = json.load(f)
+
+            # Update last_full_index timestamp
+            state['last_full_index'] = datetime.now(timezone.utc).isoformat()
+            state['project_path'] = str(project_path_obj)
+
+            # Write state
+            with open(state_file, 'w') as f:
+                json.dump(state, f, indent=2)
+    except:
+        pass  # Don't fail if state recording fails
+" "$@"
