@@ -59,7 +59,7 @@ Checks against known TRUE and FALSE compound patterns:
 
 ### When You See "COMPOUND REQUEST DETECTED"
 
-This system message means BOTH keywords are detected as ACTION verbs.
+This message from the user-prompt-submit hook means BOTH keywords are detected as ACTION verbs.
 
 **YOU MUST:**
 1. Use AskUserQuestion tool with the standard options
@@ -98,9 +98,14 @@ This system message means BOTH keywords are detected as ACTION verbs.
 | **Plan only** | Invoke planning skill, deliver specs, done |
 | **Both sequentially** | Invoke research skill, deliver report, immediately invoke planning skill (no wait), deliver specs |
 
-### IMPORTANT: "Research → Plan" Limitation
+### IMPORTANT: "Research → Plan" Design
 
-When user selects "Research → Plan", Claude Code **cannot automatically chain** the skills.
+When user selects "Research → Plan", skills run sequentially with manual continuation by design.
+
+**Why this design:**
+- Skills run in separate agent contexts (research skill → planning skill)
+- No automatic data passing between skill contexts
+- User retains control over the workflow transition
 
 **What actually happens:**
 1. Research skill completes and produces report

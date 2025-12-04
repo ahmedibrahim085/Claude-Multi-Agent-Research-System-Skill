@@ -20,9 +20,9 @@ This workflow documents the mandatory orchestration pattern for planning tasks, 
 - **Planning Phases**: "roadmap", "project plan", "implementation plan", "development plan", "rollout plan", "migration plan", "deployment plan"
 - **Conversational**: "what should we build", "how should we structure", "what's the best approach", "help me plan", "need to design", "want to architect", "thinking about building", "considering implementing", "what are the requirements for", "what features should", "how do we implement", "what's the architecture", "need specs for", "create a plan for", "design a system for", "outline the approach", "ready for development", "before we start coding", "what do we need", "how should this work"
 
-**MANDATORY Workflow**:
-1. **STOP** - Do NOT start manual planning with TodoWrite or direct file creation
-2. **INVOKE**: Use `/skill spec-workflow-orchestrator` or let it auto-activate
+**MANDATORY Workflow (for non-trivial tasks)**:
+1. **STOP** - Do NOT start manual planning with TodoWrite for complex/multi-file work
+2. **INVOKE**: Skill auto-activates via hook (or use `/skill spec-workflow-orchestrator` explicitly)
 3. **ANALYZE**: Spawn spec-analyst agent for requirements gathering
 4. **ARCHITECT**: Spawn spec-architect agent for system design + ADRs
 5. **PLAN**: Spawn spec-planner agent for task breakdown
@@ -30,7 +30,7 @@ This workflow documents the mandatory orchestration pattern for planning tasks, 
 
 ### Direct Planning vs Skill Orchestration
 
-**Do Manual Planning ONLY for**:
+**Use Manual Planning (TodoWrite) ONLY for**:
 - Trivial tasks (single-file changes, simple fixes)
 - Tasks with 1-2 steps that don't need formal specs
 - Quick experiments or prototypes explicitly marked as throwaway

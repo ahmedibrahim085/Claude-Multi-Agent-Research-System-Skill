@@ -18,7 +18,7 @@ This workflow documents the mandatory orchestration pattern for research tasks, 
 
 **MANDATORY Workflow**:
 1. **STOP** - Do NOT use WebSearch/WebFetch directly for research tasks
-2. **INVOKE**: Use `/skill multi-agent-researcher` or let it auto-activate
+2. **INVOKE**: Skill auto-activates via hook (or use `/skill multi-agent-researcher` explicitly)
 3. **DECOMPOSE**: Break topic into 2-4 focused subtopics
 4. **PARALLEL**: Spawn researcher agents simultaneously (NOT sequentially)
 5. **SYNTHESIZE**: Aggregate findings into comprehensive report
@@ -45,10 +45,10 @@ This workflow documents the mandatory orchestration pattern for research tasks, 
    → I do 15 sequential WebSearch calls myself
 
 ✅ **CORRECT**: User asks "investigate MCP servers for research"
-   → I invoke multi-agent-researcher skill
-   → Skill spawns 3 parallel researchers
+   → Skill auto-activates (multi-agent-researcher)
+   → Orchestrator spawns 3 parallel researchers
    → Each researcher investigates subtopic
-   → I spawn report-writer agent for synthesis
+   → Orchestrator spawns report-writer agent for synthesis
    → Report-writer agent creates final report
 
 ### Self-Check Before Acting
