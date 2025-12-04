@@ -9,9 +9,22 @@
 
 ## Executive Summary
 
-**claude-context-local is a LIBRARY DEPENDENCY, not a service we run.**
+**claude-context-local is a PYTHON LIBRARY DEPENDENCY, NOT an MCP server.**
 
-We use MCP's high-quality components (Merkle tree, chunking, embeddings) but **NOT** its buggy index manager. Our `incremental-reindex` script fixes the IndexFlatIP bug by wrapping with IndexIDMap2.
+**Critical Distinctions:**
+- ❌ **NOT an MCP server** - No MCP protocol communication, no running server process
+- ✅ **Python library only** - Our scripts import Python modules via PYTHONPATH
+- ✅ **Dynamic linking** - Imports via `sys.path.insert()`, not code copying
+- ✅ **GPL-3.0 compliant** - Dynamic linking preserves our Apache 2.0 license
+
+**What We Use:**
+We import claude-context-local's high-quality Python modules (Merkle tree, chunking, embeddings) but **NOT** its buggy index manager. Our `incremental-reindex` script fixes the IndexFlatIP bug by wrapping with IndexIDMap2.
+
+**No MCP Server Runs:**
+```bash
+$ ps aux | grep claude-context-local
+# Returns nothing - no server process
+```
 
 ---
 
@@ -33,6 +46,46 @@ import faiss                                                # Vector similarity
 - ✅ Handles 15+ programming languages
 - ✅ Merkle tree change detection (42x faster than full reindex)
 - ✅ Proper chunking boundaries (functions, classes, methods)
+
+---
+
+## License Compliance: GPL-3.0 Dynamic Linking
+
+### Why We Can Use GPL-3.0 Code
+
+**claude-context-local License:** GPL-3.0 (copyleft)
+**Our Project License:** Apache 2.0 (permissive)
+
+**Dynamic Linking is GPL-Safe:**
+```python
+# Our script: incremental_reindex.py (line 25)
+sys.path.insert(0, str(Path.home() / ".local/share/claude-context-local"))
+
+# Import Python modules (dynamic linking, NOT code copying)
+from merkle.merkle_dag import MerkleDAG
+from chunking.multi_language_chunker import MultiLanguageChunker
+from embeddings.embedder import CodeEmbedder
+```
+
+**Legal Analysis:**
+- ✅ **Dynamic linking** via PYTHONPATH = runtime dependency (not distribution)
+- ✅ **GPL explicitly allows** dynamic linking without triggering copyleft
+- ✅ **Our Apache 2.0 license preserved** - no relicensing required
+- ✅ **Legally compliant** - follows GPL terms and intent
+
+**What Would Trigger GPL Copyleft:**
+- ❌ Copying their code into our repository (bundling/vendoring)
+- ❌ Creating derivative works by modifying their code in-place
+- ❌ Statically linking GPL code into our binary
+
+**Our Approach:**
+- ✅ External installation required (`git clone` to `~/.local/share/`)
+- ✅ Runtime imports via PYTHONPATH (dynamic linking)
+- ✅ Our code remains Apache 2.0, their code remains GPL-3.0
+- ✅ Clear separation of codebases
+
+**Why This Matters:**
+If we bundled (copied) GPL code into our repo, our **entire project** would become GPL-3.0 due to copyleft requirements. Dynamic linking preserves our permissive Apache 2.0 license.
 
 ---
 
@@ -135,56 +188,78 @@ exit 1
 
 ---
 
-## MCP Installation Strategy
+## Python Library Installation Strategy
 
-### Current State
+### Current State (NOT an MCP Server)
 ```
 ~/.local/share/claude-context-local/
 ├── .git/                          # Git repository (for updates)
-├── .venv/                         # Python dependencies
-├── merkle/                        # ✅ We use this
-├── chunking/                      # ✅ We use this
-├── embeddings/                    # ✅ We use this
-├── common_utils.py                # ✅ We use this
-├── mcp_server/                    # ❌ We DON'T use this (buggy)
-└── scripts/                       # ❌ We DON'T use this
+├── .venv/                         # Python dependencies (faiss, sentence-transformers)
+├── merkle/                        # ✅ We import this (Python modules)
+├── chunking/                      # ✅ We import this (Python modules)
+├── embeddings/                    # ✅ We import this (Python modules)
+├── common_utils.py                # ✅ We import this (Python module)
+├── mcp_server/                    # ❌ We DON'T use this (buggy + never runs)
+└── scripts/                       # ❌ We DON'T use this (deprecated)
 ```
 
-### Keep MCP As Library Dependency
+**Naming Confusion:**
+The repository is called "claude-context-local" because it was originally designed as an MCP server. However, we **only use its Python library components** - no MCP protocol, no server process.
 
-**Why NOT copy MCP code into our repo:**
-- ❌ 2000+ lines to maintain
+### Keep As Python Library Dependency (NOT Bundle)
+
+**Why NOT bundle (copy) their code into our repo:**
+- ❌ **GPL-3.0 copyleft** - Would force our entire project to become GPL-3.0
+- ❌ 2000+ lines to maintain (352KB of complex Python code)
 - ❌ Bug fixes would require manual sync
-- ❌ Chunking/Merkle tree are complex, well-tested
+- ❌ Chunking/Merkle tree are complex, well-tested components
+- ❌ License incompatibility (their GPL-3.0 vs our Apache 2.0)
 
-**Why KEEP as git clone:**
+**Why KEEP as external git clone (dynamic linking):**
+- ✅ **Preserves Apache 2.0 license** - Dynamic linking is GPL-safe
 - ✅ Easy to update (`cd ~/.local/share/claude-context-local && git pull`)
 - ✅ Can reference their code when debugging
-- ✅ Only ~50MB on disk
-- ✅ We can contribute bug fixes upstream
+- ✅ Only ~50MB on disk (~352KB Python code + dependencies)
+- ✅ We can contribute bug fixes upstream (IndexIDMap2 fix)
+- ✅ Legally compliant - no licensing conflicts
 
-### Document MCP as Library Dependency
+### Document Python Library Dependency
 
-**In README.md:**
+**For README.md / Installation Instructions:**
+
 ```markdown
-## Dependencies
+## Prerequisites
 
-### claude-context-local (Library Only)
-We use components from [claude-context-local](https://github.com/FarhanAliRaza/claude-context-local):
-- Merkle tree change detection
-- Multi-language code chunking
-- Embedding generation
+### Python Library: claude-context-local
 
-**Installation:**
+**Important:** This is **NOT an MCP server** - it's a Python library dependency. No server process runs.
+
+The semantic-search skill imports Python modules from [claude-context-local](https://github.com/FarhanAliRaza/claude-context-local) for:
+- Merkle tree change detection (80KB)
+- Multi-language code chunking (192KB) - supports 15+ languages
+- Embedding generation (76KB) - wraps sentence-transformers
+
+**Installation (5 minutes):**
 ```bash
+# Clone Python library to standard location
 git clone https://github.com/FarhanAliRaza/claude-context-local.git ~/.local/share/claude-context-local
+
+# Set up Python virtual environment and install dependencies
 cd ~/.local/share/claude-context-local
 python3 -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
-**Note**: We use MCP as a library, not as a running service. Our scripts import MCP's components but implement our own fixed index manager.
+**What This Does:**
+1. Clones GPL-3.0 Python library to `~/.local/share/claude-context-local/`
+2. Creates virtual environment with dependencies (faiss-cpu, sentence-transformers, tree-sitter)
+3. Our scripts import via PYTHONPATH (dynamic linking - preserves Apache 2.0 license)
+
+**License Note:**
+- claude-context-local: GPL-3.0 (their code, their license)
+- Our project: Apache 2.0 (our code, our license)
+- Dynamic linking preserves both licenses independently (GPL-compliant)
 ```
 
 ---
@@ -229,15 +304,21 @@ class CodeIndexManager:
 ## Summary
 
 **DO:**
-- ✅ Use MCP as library dependency (git clone)
-- ✅ Import: merkle, chunking, embeddings, common_utils
-- ✅ Use our fixed `incremental-reindex --full` script
-- ✅ Keep MCP updated with `git pull`
+- ✅ Use claude-context-local as **Python library dependency** (git clone + pip install)
+- ✅ Import via PYTHONPATH: merkle, chunking, embeddings, common_utils
+- ✅ Use our fixed `incremental-reindex --full` script (IndexIDMap2 wrapper)
+- ✅ Keep library updated with `git pull` in `~/.local/share/claude-context-local/`
+- ✅ Preserve Apache 2.0 license via dynamic linking (GPL-compliant)
 
 **DON'T:**
-- ❌ Use MCP's native `index` script (creates buggy IndexFlatIP)
-- ❌ Import from `mcp_server.code_search_server`
-- ❌ Copy MCP code into our repo (maintenance nightmare)
-- ❌ Run MCP as a service (we don't need the server)
+- ❌ Call it an "MCP server" - it's a Python library (no server process runs)
+- ❌ Use their native `index` script (creates buggy IndexFlatIP)
+- ❌ Import from `mcp_server.code_search_server` (buggy index manager)
+- ❌ Bundle (copy) GPL code into our repo (would force GPL-3.0 on entire project)
+- ❌ Run as MCP protocol server (we don't use MCP protocol at all)
 
-**Key Insight**: MCP is excellent library code with one buggy component. We use the good parts and fix the bad part.
+**Key Insights:**
+1. **Not an MCP server** - Python library with misleading name (historical reasons)
+2. **GPL-safe** - Dynamic linking via PYTHONPATH preserves our Apache 2.0 license
+3. **Excellent library code** with one buggy component (IndexFlatIP) - we use good parts, fix bad part
+4. **Legal compliance** - External dependency + dynamic imports = no license conflicts

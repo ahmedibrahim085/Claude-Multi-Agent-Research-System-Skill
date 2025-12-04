@@ -2,7 +2,7 @@
 name: semantic-search
 description: >
   Semantic search using natural language queries to find content by meaning rather than exact text matching.
-  Orchestrates the claude-context-local MCP server's CodeSearchServer class via bash scripts that call Python methods directly.
+  Imports Python modules from claude-context-local library (NOT an MCP server) via bash scripts that import modules directly.
   Use when searching for "how authentication works" or "error handling patterns" where Grep/Glob would require
   guessing exact keywords. Works on any text (code, documentation, markdown, comments, configs). Best for understanding
   unfamiliar codebases, finding similar implementations, or locating functionality across multiple files.
@@ -16,7 +16,7 @@ allowed-tools: Bash, Read, Glob, Grep
 
 **Bash Orchestrators for Semantic Intelligence**
 
-This skill provides bash scripts that orchestrate the claude-context-local MCP server's CodeSearchServer class. Each script calls Python methods directly using the venv Python interpreter, enabling semantic search, indexing, and similarity finding across any text content (code, docs, markdown, configs). Unlike traditional text-based search (Grep) or pattern matching (Glob), semantic search understands the **meaning** of content, finding functionally similar text even when using different wording, variable names, or patterns.
+This skill provides bash scripts that import Python modules from the claude-context-local library (**NOT an MCP server** - no server process runs, just Python imports via PYTHONPATH). Our scripts use the library's venv Python interpreter to import merkle, chunking, and embedding modules, enabling semantic search, indexing, and similarity finding across any text content (code, docs, markdown, configs). Unlike traditional text-based search (Grep) or pattern matching (Glob), semantic search understands the **meaning** of content, finding functionally similar text even when using different wording, variable names, or patterns.
 
 ## 🎬 Orchestration Instructions
 
@@ -182,17 +182,34 @@ Execute the status operation using scripts/status and return interpreted results
 
 ## 📋 Prerequisites
 
-**Required: Global Installation**
+**Required: Python Library Dependency**
 
-This skill wraps the `claude-context-local` MCP server, which must be globally installed:
+> **IMPORTANT:** This is **NOT an MCP server** - it's a Python library dependency. No server process runs. Our scripts import Python modules via PYTHONPATH.
+
+This skill requires the claude-context-local Python library for semantic indexing:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/FarhanAliRaza/claude-context-local/main/scripts/install.sh | bash
+# Clone Python library to standard location (5 minutes)
+git clone https://github.com/FarhanAliRaza/claude-context-local.git ~/.local/share/claude-context-local
+
+# Set up Python virtual environment and install dependencies
+cd ~/.local/share/claude-context-local
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -e .
 ```
 
-Installation location:
+**What this installs:**
+- Merkle tree change detection (80KB)
+- Multi-language code chunking (192KB) - supports 15+ languages
+- Embedding generation (76KB) - wraps sentence-transformers
+- Dependencies: faiss-cpu, sentence-transformers, tree-sitter
+
+**Installation location:**
 - **macOS/Linux**: `~/.local/share/claude-context-local`
 - **Windows**: `%LOCALAPPDATA%\claude-context-local`
+
+**License:** claude-context-local is GPL-3.0. We import via PYTHONPATH (dynamic linking), which preserves our Apache 2.0 license. See `docs/architecture/MCP-DEPENDENCY-STRATEGY.md` for details.
 
 **Index Creation**
 
@@ -595,32 +612,38 @@ For detailed guidance, see the `references/` directory:
 
 ## 🔒 Design Rationale
 
-**Why Bash Orchestrators Instead of Direct MCP Usage?**
+**Why Bash Orchestrators for Python Library Imports?**
 
-1. **Simplicity**: Bash scripts call existing Python code directly - no reimplementation needed
-2. **Reusability**: Uses the same CodeSearchServer class that the MCP server uses
-3. **Auto-venv**: Scripts automatically use the correct venv Python interpreter
-4. **Token Efficiency**: Scripts are compact (~50 lines each) vs full MCP server integration
+> **Clarification:** We use bash scripts to import Python modules, NOT an MCP server. No MCP protocol is used.
+
+1. **Simplicity**: Bash scripts import existing Python modules directly - no reimplementation needed
+2. **Reusability**: Imports merkle, chunking, embeddings modules with our IndexIDMap2 fix
+3. **Auto-venv**: Scripts automatically use claude-context-local's venv Python interpreter
+4. **Token Efficiency**: Scripts are compact (~50 lines each) vs bundling 352KB of Python code
 5. **Composability**: Scripts output JSON, enabling shell pipelines and automation
-6. **Maintainability**: Changes to MCP server's CodeSearchServer are automatically available
+6. **License-safe**: Dynamic linking via PYTHONPATH preserves Apache 2.0 license (GPL-compliant)
 
 **Orchestrator Pattern**
 
 Each bash script:
 1. Sets `VENV_PYTHON` to `~/.local/share/claude-context-local/.venv/bin/python`
-2. Sets `PYTHONPATH` for proper imports
-3. Changes to claude-context-local directory
-4. Calls CodeSearchServer methods via inline Python
+2. Sets `PYTHONPATH` for Python imports: `export PYTHONPATH="~/.local/share/claude-context-local"`
+3. Imports Python modules: `from merkle import ...`, `from chunking import ...`, etc.
+4. Runs our fixed indexing code (IndexIDMap2 wrapper)
 
-This pattern avoids code duplication while maintaining the benefits of thin wrapper scripts.
+**NOT Using MCP Protocol:**
+- ❌ No MCP server process runs (`ps aux | grep claude-context-local` returns nothing)
+- ❌ No MCP protocol communication (stdio/SSE/HTTP)
+- ✅ Pure Python module imports via sys.path.insert() and PYTHONPATH
+- ✅ This preserves Apache 2.0 license (dynamic linking is GPL-safe)
 
 ## 📝 Notes
 
-- Scripts use the venv Python from claude-context-local installation
-- All errors are output from the MCP server's error handling
+- Scripts use the venv Python from claude-context-local library installation
+- All errors are output from Python module imports (no MCP server involved)
 - Chunk IDs are stable only within a single index build (reindexing may change IDs)
 - Index location: `~/.claude_code_search/projects/{project_name}_{hash}/`
-- Uses FAISS IndexFlatIP for semantic similarity search
+- Uses FAISS IndexIDMap2 (our fix) for proper add_with_ids/remove_ids support
 - Embedding model: google/embeddinggemma-300m (768 dimensions)
 
 ## ⚠️ Known Issues

@@ -3,7 +3,7 @@
 # Semantic Search Prerequisites Checker
 #
 # Validates all requirements for semantic-search skill functionality:
-# - MCP server installation
+# - Python library installation (claude-context-local - NOT an MCP server)
 # - Python venv and packages
 # - Executable scripts
 # - Index status
@@ -91,8 +91,12 @@ print_summary() {
     else
         echo -e "${RED}✗ Prerequisites missing - see failures above${NC}"
         echo ""
-        echo "Installation guide:"
-        echo "  curl -fsSL https://raw.githubusercontent.com/FarhanAliRaza/claude-context-local/main/scripts/install.sh | bash"
+        echo "Installation guide (Python library, NOT MCP server):"
+        echo "  git clone https://github.com/FarhanAliRaza/claude-context-local.git ~/.local/share/claude-context-local"
+        echo "  cd ~/.local/share/claude-context-local"
+        echo "  python3 -m venv .venv"
+        echo "  source .venv/bin/activate"
+        echo "  pip install -e ."
         return 1
     fi
 }
@@ -103,25 +107,28 @@ print_summary() {
 
 print_header
 
-# Section 1: MCP Server Installation
-print_section "1. MCP Server Installation (claude-context-local)"
+# Section 1: Python Library Installation
+print_section "1. Python Library Installation (claude-context-local)"
+
+echo "ℹ️  This is NOT an MCP server - Python library only (no server runs)"
+echo ""
 
 # Check 1.1: Installation directory exists
-MCP_DIR=""
+LIB_DIR=""
 if [[ "$(uname)" == "Darwin" ]] || [[ "$(uname)" == "Linux" ]]; then
-    MCP_DIR="$HOME/.local/share/claude-context-local"
+    LIB_DIR="$HOME/.local/share/claude-context-local"
 else
-    MCP_DIR="$LOCALAPPDATA/claude-context-local"
+    LIB_DIR="$LOCALAPPDATA/claude-context-local"
 fi
 
-if [[ -d "$MCP_DIR" ]]; then
-    print_check "PASS" "MCP server directory exists" "$MCP_DIR"
+if [[ -d "$LIB_DIR" ]]; then
+    print_check "PASS" "Python library directory exists" "$LIB_DIR"
 else
-    print_check "FAIL" "MCP server directory not found" "Expected: $MCP_DIR"
+    print_check "FAIL" "Python library directory not found" "Expected: $LIB_DIR"
 fi
 
 # Check 1.2: Venv exists
-VENV_DIR="$MCP_DIR/.venv"
+VENV_DIR="$LIB_DIR/.venv"
 if [[ -d "$VENV_DIR" ]]; then
     print_check "PASS" "Python virtual environment exists" "$VENV_DIR"
 else
@@ -178,24 +185,39 @@ else
     print_check "FAIL" "Cannot check dependencies" "Python interpreter not available"
 fi
 
-# Section 3: MCP Server Code
-print_section "3. MCP Server Code"
+# Section 3: Python Library Modules
+print_section "3. Python Library Modules"
 
-# Check 3.1: CodeSearchServer module (what scripts actually import)
-CODE_SEARCH_FILE="$MCP_DIR/mcp_server/code_search_server.py"
-if [[ -f "$CODE_SEARCH_FILE" ]]; then
-    print_check "PASS" "CodeSearchServer module exists" "$CODE_SEARCH_FILE"
+# Check 3.1: Merkle module (change detection)
+MERKLE_DIR="$LIB_DIR/merkle"
+if [[ -d "$MERKLE_DIR" ]]; then
+    print_check "PASS" "merkle module exists" "Change detection (80KB)"
 else
-    print_check "FAIL" "CodeSearchServer module not found" "Expected: $CODE_SEARCH_FILE"
+    print_check "FAIL" "merkle module not found" "Expected: $MERKLE_DIR"
 fi
 
-# Check 3.2: CodeSearchServer class
-if [[ -f "$CODE_SEARCH_FILE" ]]; then
-    if grep -q "class CodeSearchServer" "$CODE_SEARCH_FILE" 2>/dev/null; then
-        print_check "PASS" "CodeSearchServer class found" "Core indexing/search class"
-    else
-        print_check "WARN" "CodeSearchServer class not found" "May be in different location"
-    fi
+# Check 3.2: Chunking module (code parsing)
+CHUNKING_DIR="$LIB_DIR/chunking"
+if [[ -d "$CHUNKING_DIR" ]]; then
+    print_check "PASS" "chunking module exists" "Multi-language parsing (192KB)"
+else
+    print_check "FAIL" "chunking module not found" "Expected: $CHUNKING_DIR"
+fi
+
+# Check 3.3: Embeddings module (vector generation)
+EMBEDDINGS_DIR="$LIB_DIR/embeddings"
+if [[ -d "$EMBEDDINGS_DIR" ]]; then
+    print_check "PASS" "embeddings module exists" "Vector generation (76KB)"
+else
+    print_check "FAIL" "embeddings module not found" "Expected: $EMBEDDINGS_DIR"
+fi
+
+# Check 3.4: common_utils module
+COMMON_UTILS="$LIB_DIR/common_utils.py"
+if [[ -f "$COMMON_UTILS" ]]; then
+    print_check "PASS" "common_utils module exists" "Storage paths (4KB)"
+else
+    print_check "FAIL" "common_utils module not found" "Expected: $COMMON_UTILS"
 fi
 
 # Section 4: Skill Scripts

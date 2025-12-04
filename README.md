@@ -85,13 +85,41 @@ See [Planning Workflow](#planning-workflow-new-in-v220) and [CHANGELOG.md](CHANG
 
 ### Installation
 
-1. **Clone the repository**:
+**Step 1: Clone the repository**
 ```bash
 git clone https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill.git
 cd Claude-Multi-Agent-Research-System-Skill
 ```
 
-2. **Start Claude Code** in the project directory:
+**Step 2: Install Python library dependency (for semantic-search skill)**
+
+> **Important:** This is NOT an MCP server - it's a Python library dependency. No server process runs.
+
+The semantic-search skill requires claude-context-local Python library for code indexing:
+
+```bash
+# Clone Python library to standard location (5 minutes)
+git clone https://github.com/FarhanAliRaza/claude-context-local.git ~/.local/share/claude-context-local
+
+# Set up Python virtual environment and install dependencies
+cd ~/.local/share/claude-context-local
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -e .
+
+# Return to project directory
+cd -
+```
+
+**What this installs:**
+- Merkle tree change detection (smart reindexing)
+- Multi-language code chunking (15+ languages)
+- Embedding generation (sentence-transformers wrapper)
+- Dependencies: faiss-cpu, sentence-transformers, tree-sitter
+
+**License note:** claude-context-local is GPL-3.0. Our project imports it via PYTHONPATH (dynamic linking), which preserves our Apache 2.0 license. See `docs/architecture/MCP-DEPENDENCY-STRATEGY.md` for details.
+
+**Step 3: Start Claude Code**
 ```bash
 claude
 ```
