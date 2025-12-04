@@ -4,6 +4,26 @@
 VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
 export PYTHONPATH="$HOME/.local/share/claude-context-local"
 
+# CRITICAL FIX: Resolve project path to absolute BEFORE cd
+# This prevents --project . from being resolved relative to claude-context-local
+PROJECT_ARG=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --project)
+            if [[ -n "$2" ]]; then
+                # Resolve to absolute path before cd
+                PROJECT_ARG="--project $(cd "$2" && pwd)"
+                shift 2
+            else
+                shift
+            fi
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
 cd "$HOME/.local/share/claude-context-local"
 
 "$VENV_PYTHON" -c "
@@ -21,4 +41,4 @@ if project_path:
 
 result = server.get_index_status()
 print(result)
-" "$@"
+" $PROJECT_ARG

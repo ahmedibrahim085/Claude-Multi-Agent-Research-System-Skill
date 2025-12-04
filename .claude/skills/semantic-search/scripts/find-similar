@@ -4,6 +4,27 @@
 VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
 export PYTHONPATH="$HOME/.local/share/claude-context-local"
 
+# CRITICAL FIX: Resolve project path to absolute BEFORE cd
+# Rebuild args with absolute project path
+RESOLVED_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --project)
+            if [[ -n "$2" ]]; then
+                # Resolve to absolute path before cd
+                RESOLVED_ARGS+=("--project" "$(cd "$2" && pwd)")
+                shift 2
+            else
+                shift
+            fi
+            ;;
+        *)
+            RESOLVED_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
 cd "$HOME/.local/share/claude-context-local"
 
 "$VENV_PYTHON" -c "
@@ -39,4 +60,4 @@ if project_path:
 
 result = server.find_similar_code(chunk_id, k=k)
 print(result)
-" "$@"
+" "${RESOLVED_ARGS[@]}"
