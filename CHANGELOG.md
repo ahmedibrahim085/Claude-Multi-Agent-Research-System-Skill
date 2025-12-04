@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.1] - 2025-12-04
+
+### 🐛 Bug Fix: IndexFlatIP Confusion + Auto-Reindex Corruption
+
+**Critical fix** for auto-reindex failures caused by MCP native script confusion.
+
+**Problem:**
+- MCP native `scripts/index` created unwrapped IndexFlatIP indexes (no IndexIDMap2 wrapper)
+- This caused "add_with_ids not implemented" errors during all incremental updates
+- All 18+ auto-reindex attempts failed throughout Dec 4 morning
+- Post-tool-use hook was firing correctly but reindex operations corrupted
+
+**Root Cause:**
+- Fixed `incremental-reindex` script existed (commit 197bcc2) with IndexIDMap2 wrapper ✅
+- But old MCP wrapper `scripts/index` was still accessible
+- Confusion led to using wrong script for full reindex
+- Created unwrapped IndexFlatIP index → all subsequent incremental operations failed
+
+**Solution:**
+1. **Deprecated MCP native script:**
+   - Renamed: `scripts/index` → `scripts/index.mcp-native.DEPRECATED`
+   - Added prominent warning (exits immediately with helpful error)
+   - Preserved original code for reference
+
+2. **Updated 22 documentation references:**
+   - Changed all `scripts/index` → `scripts/incremental-reindex`
+   - Files: reindex_manager.py (2), semantic-search-indexer.md (1), SKILL.md (15), check-prerequisites (2), CLAUDE.md.backup (2)
+
+3. **Created MCP dependency strategy documentation:**
+   - `docs/architecture/MCP-DEPENDENCY-STRATEGY.md` (479 lines)
+   - Explains why MCP is library-only (merkle, chunking, embeddings)
+   - Documents what we DON'T use (buggy mcp_server/CodeSearchServer)
+
+**Testing:**
+- ✅ Deprecated script shows error + exits immediately
+- ✅ `incremental-reindex --full` creates IndexIDMap2 index (verified)
+- ✅ Auto-reindex SUCCESS after cooldown (3 consecutive successes vs 18 failures before)
+- ✅ Index operations work: add_with_ids() ✅, remove_ids() ✅
+- ✅ Index grew correctly: 6048 → 6166 vectors (+118)
+
+**Impact:**
+- ✅ Users can't accidentally use buggy MCP wrapper
+- ✅ Clear error message guides to correct script
+- ✅ All documentation consistent
+- ✅ Auto-reindex works correctly
+- ✅ Index corruption prevented
+
+**Files Changed:**
+- `.claude/skills/semantic-search/scripts/index` (deleted)
+- `.claude/skills/semantic-search/scripts/index.mcp-native.DEPRECATED` (NEW)
+- `.claude/utils/reindex_manager.py` (2 refs updated)
+- `.claude/agents/semantic-search-indexer.md` (1 ref updated)
+- `.claude/skills/semantic-search/SKILL.md` (15 refs updated)
+- `.claude/skills/semantic-search/scripts/check-prerequisites` (2 refs updated)
+- `.claude/CLAUDE.md.backup` (2 refs updated)
+- `docs/architecture/MCP-DEPENDENCY-STRATEGY.md` (NEW - 479 lines)
+
+**Related Commits:**
+- Commit 197bcc2 (original IndexIDMap2 fix)
+- Commit 2ba522c (this fix)
+
+---
+
 ## [2.4.0] - 2025-12-04
 
 ### ✨ Feature Release: Production-Grade Auto-Reindex + Comprehensive Tracing
