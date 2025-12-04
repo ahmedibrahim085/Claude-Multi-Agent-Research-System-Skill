@@ -96,12 +96,14 @@ Semantic search reduces exploration overhead by **90%+ (~5,000-10,000 tokens per
 - Global installation: `~/.local/share/claude-context-local` (macOS/Linux) or `%LOCALAPPDATA%\claude-context-local` (Windows)
 - Index created using `scripts/index` command (or auto-created by SessionStart hook)
 
-**Auto-Reindex (v2.3.x)**:
-- SessionStart hook automatically reindexes on startup/resume (smart change detection)
-- 60-minute cooldown prevents rapid full reindex spam
+**Auto-Reindex (v3.0.0)**:
+- **Session-start trigger**: Reindexes on startup/resume (smart change detection, 60-min cooldown)
+- **Post-modification trigger**: Reindexes after Write/Edit operations (5-min cooldown)
+- **Incremental reindex**: ~5 seconds (42x faster than full reindex)
+- **Decision tracing**: All skip reasons logged to session transcript for debugging
 - Prerequisites checked before enforcement (`logs/state/semantic-search-prerequisites.json`)
 - If prerequisites FALSE: Gracefully falls back to Grep/Glob (no errors, no blocking)
-- Background process: Index updates don't block session start (<20ms overhead)
+- Synchronous process: Reindex completes before returning control (2-5s typical, hook overhead <20ms)
 
 **If index missing or prerequisites not ready**:
 - **Check prerequisites**: Run `scripts/check-prerequisites` to validate 23 checks (MCP, model, scripts, etc.)
