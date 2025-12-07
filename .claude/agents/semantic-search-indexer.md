@@ -197,44 +197,8 @@ The semantic index is ready! You can now:
 3. Explore patterns:
    Search for "error handling patterns" or "retry mechanisms"
 
-The index will update incrementally when you run indexing again
-(only changed files will be reprocessed for faster updates).
-```
-
-### Index Operation - Good Response (Incremental)
-
-```
-✅ Incremental index update completed!
-
-Update Summary:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Project: my-web-app
-Type: Incremental update (only changed files)
-
-Changes Detected:
-  Files added: 3 new files
-  Files modified: 7 files updated
-  Files removed: 1 file deleted
-
-Chunks Updated:
-  Chunks added: 24 new semantic content chunks
-  Chunks removed: 5 chunks (deleted file)
-  Net change: +19 chunks
-
-Total Index Size:
-  Total chunks now: 2,362 semantic content chunks
-  Total files: 344 files
-
-Performance:
-  Time taken: 12.7 seconds
-  Speed: Much faster than full index!
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-The index is up to date with your latest changes.
-
-Only modified files were reprocessed, saving time. For major
-refactoring, consider running a full index (--full flag).
+The index will auto-reindex when files change (Merkle tree detects changes,
+then auto-fallback to full reindex ensures no stale data).
 ```
 
 ### Incremental-Reindex Operation - Good Response (RECOMMENDED)
@@ -371,8 +335,8 @@ To create an index:
 
 3. Once complete, you can search using natural language queries
 
-The index only needs to be created once. After that, incremental
-updates are much faster (only changed files are reprocessed).
+The index only needs to be created once. After that, auto-reindex
+detects changes (Merkle tree) and only rebuilds when files actually changed.
 ```
 
 ---

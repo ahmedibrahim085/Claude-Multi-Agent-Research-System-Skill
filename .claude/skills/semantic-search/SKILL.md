@@ -75,9 +75,9 @@ Operation: incremental-reindex
 Directory: /path/to/project
 Max Age: 60  # minutes
 
-Execute smart incremental reindexing using scripts/incremental-reindex.
-This will detect changed files using Merkle tree and only re-embed what changed.
-Return statistics showing files added/removed/modified and total chunks."""
+Execute smart auto-reindexing using scripts/incremental-reindex.
+This will detect changed files using Merkle tree, then auto-fallback to full reindex.
+Return statistics showing total files indexed and total chunks."""
 )
 ```
 
@@ -234,10 +234,10 @@ The semantic-search skill now automatically maintains index freshness via the Se
 
 **Key Benefits**:
 - ✅ **Automatic**: No manual reindexing required after code changes
-- ✅ **Smart**: Uses Merkle tree to detect only changed files
-- ✅ **Fast**: Incremental updates in ~5 seconds vs ~3 minutes full reindex
-- ✅ **Non-blocking**: Background process, session starts immediately (<20ms overhead)
+- ✅ **Smart**: Uses Merkle tree to detect when files changed, then auto-fallback to full reindex
 - ✅ **Efficient**: 60-minute cooldown prevents rapid full reindex spam
+- ✅ **Non-blocking**: Background process, session starts immediately (<20ms overhead)
+- ✅ **Simple**: IndexFlatIP full reindex - proven, reliable (same as MCP)
 
 ### 60-Minute Cooldown Protection
 
@@ -550,10 +550,10 @@ scripts/find-similar --chunk-id "src/auth/oauth.py:34-56:function:oauth_login" -
 
 **Step 5: Reindex After Changes**
 ```bash
-# Incremental reindex (fast, only changed files)
+# Auto-reindex (detects changes via Merkle tree, then full reindex)
 scripts/incremental-reindex /path/to/project
 
-# Full reindex (after major refactoring)
+# Force full reindex (explicit request)
 scripts/incremental-reindex /path/to/project --full
 ```
 
