@@ -167,19 +167,28 @@ index_directory(
 )
 ```
 
-### Strategy 4: Incremental Indexing
+### Strategy 4: Smart Auto-Reindex (IndexFlatIP)
 
-If the MCP server supports incremental indexing, use it:
+The current implementation uses **IndexFlatIP** (same as MCP's `claude-context-local`) with smart auto-reindex:
 
+**How it works**:
+- **Merkle tree** detects when files have changed (fast detection)
+- **Auto-fallback** performs full reindex when changes detected (clears + rebuilds all)
+- **No incremental updates**: IndexFlatIP uses sequential IDs (0, 1, 2...), doesn't support selective vector updates
+
+**Performance**:
 ```bash
-# Initial index: Slow (10-30 minutes for large codebase)
-# Full reindex every time
-
-# Incremental index: Fast (seconds to minutes)
-# Only indexes changed files
+# Full reindex: 3-10 minutes for medium codebase (~6,000 chunks)
+# Change detection: <1 second (Merkle tree)
+# No changes: Skips reindex entirely (instant)
 ```
 
-**Check**: Consult `claude-context-local` documentation for incremental indexing support.
+**Why full reindex**:
+- IndexFlatIP cannot remove individual vectors (sequential IDs)
+- Ensures no stale data or synchronization issues
+- Same proven approach used by MCP (reliable, cross-platform)
+
+**Optimization**: Auto-reindex only rebuilds when files actually changed, saving time compared to unconditional full reindex.
 
 ### Strategy 5: SSD vs HDD
 
