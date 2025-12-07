@@ -1,22 +1,16 @@
 ---
 name: semantic-search
-description: >
-  Semantic search using natural language queries to find content by meaning rather than exact text matching.
-  Imports Python modules from claude-context-local library (NOT an MCP server) via bash scripts that import modules directly.
-  Use when searching for "how authentication works" or "error handling patterns" where Grep/Glob would require
-  guessing exact keywords. Works on any text (code, documentation, markdown, comments, configs). Best for understanding
-  unfamiliar codebases, finding similar implementations, or locating functionality across multiple files.
-  NOT for simple keyword searches (use Grep) or finding files by name (use Glob). Provides indexing, searching,
-  status checking, and similarity finding capabilities.
-  (Full workflow documentation at docs/workflows/semantic-search-hierarchy.md)
+description: Semantic search for finding code by meaning using natural language queries. Orchestrates semantic-search-reader (search/find-similar/list-projects) and semantic-search-indexer (index/reindex/status) agents. Use for understanding unfamiliar codebases, finding similar implementations, or locating functionality by description rather than exact keywords. (project)
 allowed-tools: Bash, Read, Glob, Grep
 ---
 
 # Semantic Search Skill
 
-**Bash Orchestrators for Semantic Intelligence**
+**Orchestrator for Semantic Code Intelligence via Agent Delegation**
 
-This skill provides bash scripts that import Python modules from the claude-context-local library (**NOT an MCP server** - no server process runs, just Python imports via PYTHONPATH). Our scripts use the library's venv Python interpreter to import merkle, chunking, and embedding modules, enabling semantic search, indexing, and similarity finding across any text content (code, docs, markdown, configs). Unlike traditional text-based search (Grep) or pattern matching (Glob), semantic search understands the **meaning** of content, finding functionally similar text even when using different wording, variable names, or patterns.
+This skill orchestrates two specialized agents for semantic search operations. It provides bash scripts that import Python modules from the claude-context-local library (**NOT an MCP server** - no server process runs, just Python imports via PYTHONPATH). Unlike traditional text-based search (Grep) or pattern matching (Glob), semantic search understands the **meaning** of content, finding functionally similar text even when using different wording, variable names, or patterns.
+
+The skill uses the library's venv Python interpreter to import merkle, chunking, and embedding modules, enabling semantic search, indexing, and similarity finding across any text content (code, docs, markdown, configs).
 
 ## 🎬 Orchestration Instructions
 

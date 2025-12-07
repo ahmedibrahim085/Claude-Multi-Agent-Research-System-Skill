@@ -61,6 +61,6 @@ server = CodeSearchServer()
 if project_path:
     server.switch_project(project_path)
 
-result = server.search_code(query, k=k)
+result = server.search_code(query, k=k, auto_reindex=False)
 print(result)
 " "${RESOLVED_ARGS[@]}"
