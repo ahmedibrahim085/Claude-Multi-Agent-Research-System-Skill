@@ -83,6 +83,17 @@ See [Planning Workflow](#planning-workflow-new-in-v220) and [CHANGELOG.md](CHANG
 - **Python 3.8+**
 - **Git**
 
+### Platform Support
+
+✅ **Fully Supported**:
+- **macOS** (Intel + Apple Silicon)
+  - **Apple Silicon**: Tested on M1/M2/M3 chips - semantic search works perfectly with MPS (Metal Performance Shaders) GPU acceleration
+  - Model loads on `mps:0` device for optimal performance
+- **Linux** (x86_64, ARM64)
+- **Windows** (via WSL)
+
+**Index Type**: Uses IndexFlatIP (FAISS) - simple, reliable, cross-platform compatible
+
 ### Installation
 
 **Step 1: Clone the repository**
