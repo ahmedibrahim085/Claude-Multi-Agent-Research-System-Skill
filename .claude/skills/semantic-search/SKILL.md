@@ -409,9 +409,9 @@ scripts/incremental-reindex /path/to/project --project-name my-project --full
 
 ### Operation 2: Incremental Reindex (RECOMMENDED)
 
-**When to use**: Smart automatic reindexing with proper incremental support
+**When to use**: Smart automatic reindexing with auto-fallback to full reindex
 
-**What it does**: Uses Merkle tree change detection to identify modified files, then re-embeds only changed content. Properly handles vector removal using IndexIDMap2 fix, preventing the "list index out of range" bug that occurs with standard incremental indexing.
+**What it does**: Uses Merkle tree change detection to identify when files have changed. **Auto-fallback**: IndexFlatIP doesn't support incremental vector updates, so the script automatically performs a full reindex (clears index and rebuilds from scratch). This is the same approach used by MCP (proven, reliable, works on all platforms including Apple Silicon).
 
 ```bash
 # Auto-detect changes and reindex if >60min old (default)
@@ -431,22 +431,19 @@ scripts/incremental-reindex /path/to/project --check-only
 ```json
 {
   "success": true,
-  "incremental": true,
-  "files_added": 3,
-  "files_removed": 1,
-  "files_modified": 5,
-  "chunks_added": 127,
-  "chunks_removed": 89,
-  "total_chunks": 2045,
-  "time_taken": 12.34
+  "full_index": true,
+  "files_indexed": 205,
+  "chunks_added": 6152,
+  "total_chunks": 6152,
+  "time_taken": 195.46
 }
 ```
 
 **Key Benefits**:
-- ✅ **Fast**: Only re-processes changed files (not entire codebase)
-- ✅ **Smart**: Merkle tree detects exactly what changed
-- ✅ **Fixed**: Uses IndexIDMap2 to properly remove vectors
-- ✅ **Safe**: No metadata/FAISS desynchronization
+- ✅ **Simple**: Uses IndexFlatIP (same as MCP - proven, reliable)
+- ✅ **Compatible**: Works on all platforms including Apple Silicon (mps:0)
+- ✅ **Smart**: Merkle tree detects when files changed (triggers full reindex)
+- ✅ **Safe**: Full reindex guarantees no stale data or desynchronization
 - ✅ **Automatic**: Can be triggered by hooks based on age threshold
 
 ### Operation 3: List Indexed Projects
@@ -611,7 +608,7 @@ For detailed guidance, see the `references/` directory:
 > **Clarification:** We use bash scripts to import Python modules, NOT an MCP server. No MCP protocol is used.
 
 1. **Simplicity**: Bash scripts import existing Python modules directly - no reimplementation needed
-2. **Reusability**: Imports merkle, chunking, embeddings modules with our IndexIDMap2 fix
+2. **Reusability**: Imports merkle, chunking, embeddings modules (same IndexFlatIP as MCP)
 3. **Auto-venv**: Scripts automatically use claude-context-local's venv Python interpreter
 4. **Token Efficiency**: Scripts are compact (~50 lines each) vs bundling 352KB of Python code
 5. **Composability**: Scripts output JSON, enabling shell pipelines and automation
@@ -623,7 +620,7 @@ Each bash script:
 1. Sets `VENV_PYTHON` to `~/.local/share/claude-context-local/.venv/bin/python`
 2. Sets `PYTHONPATH` for Python imports: `export PYTHONPATH="~/.local/share/claude-context-local"`
 3. Imports Python modules: `from merkle import ...`, `from chunking import ...`, etc.
-4. Runs our fixed indexing code (IndexIDMap2 wrapper)
+4. Runs indexing code (IndexFlatIP - same as MCP)
 
 **NOT Using MCP Protocol:**
 - ❌ No MCP server process runs (`ps aux | grep claude-context-local` returns nothing)
@@ -637,19 +634,14 @@ Each bash script:
 - All errors are output from Python module imports (no MCP server involved)
 - Chunk IDs are stable only within a single index build (reindexing may change IDs)
 - Index location: `~/.claude_code_search/projects/{project_name}_{hash}/`
-- Uses FAISS IndexIDMap2 (our fix) for proper add_with_ids/remove_ids support
+- Uses FAISS IndexFlatIP (same as MCP - simple, proven, works on all platforms)
 - Embedding model: google/embeddinggemma-300m (768 dimensions)
 
-## ⚠️ Known Issues
+## ✅ Platform Compatibility
 
-**Index Compatibility**: The `scripts/search` and `scripts/find-similar` operations use a different index format than `scripts/incremental-reindex`.
+**Apple Silicon**: Fully supported! Model loads on MPS (Metal Performance Shaders) with `mps:0` device.
 
-- If you use `scripts/incremental-reindex` to create/update your index, the search scripts may not find it
-- This is because `incremental-reindex` uses a custom IndexIDMap2-based storage format
-- Current limitation: Use `scripts/incremental-reindex` for creating indices that `scripts/search` can use
-- Future enhancement: Update search scripts to support both index formats
-
-**Workaround**: Use `scripts/incremental-reindex /path/to/project --full` for creating searchable indices, or implement IndexIDMap2 support in search scripts.
+**All Platforms**: IndexFlatIP works reliably on macOS (Intel + Apple Silicon), Linux, and Windows (via WSL).
 
 ---
 
