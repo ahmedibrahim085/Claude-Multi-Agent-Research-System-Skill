@@ -363,8 +363,9 @@ scripts/incremental-reindex /path/to/project --check-only
 - Spawn background process: <5ms (detached, non-blocking)
 
 **Background Indexing**:
-- Full index: ~3 minutes (first time or major changes)
-- Incremental: ~5 seconds (typical, with Merkle tree)
+- Full index: ~3-10 minutes (IndexFlatIP auto-fallback, always happens)
+- Change detection: <1 second (Merkle tree)
+- Hook timeout: 50 seconds (will abort if changes detected → manual full reindex required)
 - Hook never blocks: Process detached, survives IDE close
 
 **Cooldown Impact**:

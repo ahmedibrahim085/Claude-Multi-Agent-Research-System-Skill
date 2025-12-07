@@ -53,7 +53,7 @@ def get_reindex_config(force_reload: bool = False) -> Dict[str, Any]:
     Defaults:
         cooldown_seconds: 300 (5 minutes)
             - Prevents rapid reindex spam
-            - Typical incremental: ~5 seconds
+            - IndexFlatIP auto-fallback: Full reindex always happens (3-10 min)
             - User can tune per-project needs
 
         file_include_patterns: Extensions to index
@@ -485,18 +485,20 @@ def _release_reindex_lock(project_path: Path) -> None:
 
 
 def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
-    """Run incremental reindex synchronously (simple, fast, visible errors)
+    """Run auto-reindex synchronously (IndexFlatIP auto-fallback: full reindex only, visible errors)
 
-    Design Rationale (PRESERVED FROM ORIGINAL):
+    Design Rationale:
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     - Synchronous execution: No background processes (avoids Claude Code Bug #1481)
       * Bug #1481: Popen with start_new_session=True still blocks Claude Code
       * Root cause: Claude Code waits for ALL child processes (even detached)
       * Solution: Use subprocess.run() synchronously within 60s timeout
 
-    - 50-second timeout: Leaves 10s buffer from hook's 60s hard limit
-      * Typical incremental: ~5 seconds (well under limit)
-      * Full reindex: ~3 minutes (too long, must be manual)
+    - 50-second timeout: Designed for Merkle tree change DETECTION only
+      * Change detection: <1 second (Merkle tree, well under limit)
+      * Full reindex (IndexFlatIP auto-fallback): 3-10 minutes (FAR EXCEEDS timeout)
+      * Result: Hook WILL timeout if changes detected, full reindex aborted
+      * Workaround: Manual full reindex required after file changes
       * Buffer accounts for: hook overhead, state file I/O, error handling
 
     - Visible errors: capture_output=True (not DEVNULL)
@@ -511,10 +513,11 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
       * Stale lock detection: 60s timeout (reindex timeout 50s + 10s buffer)
       * Trade-off: Simple locking, handles 99.9% of cases, minimal complexity
 
-    Performance:
-    - Typical: ~2-5 seconds (Merkle tree detects changed files)
-    - Worst case: ~50 seconds (timeout, then abort)
-    - Best case: <1 second (no changes detected)
+    Performance (IndexFlatIP auto-fallback behavior):
+    - Change detection: <1 second (Merkle tree)
+    - If changes found: Full reindex triggered (3-10 minutes) → TIMEOUT at 50s
+    - If no changes: Skipped (instant, <1 second)
+    - Timeout: 50 seconds → Aborts incomplete full reindex
 
     Args:
         project_path: Path to project
@@ -771,8 +774,9 @@ def auto_reindex_on_session_start(input_data: dict) -> None:
       * Solution: Use subprocess.run() synchronously within 60s timeout
 
     - 50-second timeout: Leaves 10s buffer from hook's 60s hard limit
-      * Typical incremental: ~5 seconds (well under limit)
-      * Full reindex: ~3 minutes (too long, must be manual)
+      * Change detection: <1 second (Merkle tree, well under limit)
+      * Full reindex (IndexFlatIP auto-fallback): 3-10 minutes (EXCEEDS timeout)
+      * Result: Timeout aborts full reindex if changes detected
       * Buffer accounts for: hook overhead, state file I/O, error handling
 
     - Visible errors: capture_output=True (not DEVNULL)
@@ -815,7 +819,7 @@ def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) 
     1. Prerequisites FALSE → Skip (manual setup not done yet)
     2. File not indexable (logs/transcript, build artifacts) → Skip
     3. Cooldown active → Skip (prevents rapid reindex spam)
-    4. All checks pass → Run incremental (~5s)
+    4. All checks pass → Run auto-reindex (IndexFlatIP auto-fallback: will timeout if changes detected)
 
     File Filtering:
     - Include: Code (*.py, *.ts), Docs (*.md), Config (*.json)
@@ -879,7 +883,7 @@ def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) 
                 "timestamp": timestamp
             }
 
-        # Step 4: Run incremental reindex synchronously (~5 seconds)
+        # Step 4: Run auto-reindex (IndexFlatIP auto-fallback: will timeout if changes detected)
         print(f"🔄 Updating semantic search index (file modified: {file_name})...")
         result = run_incremental_reindex_sync(project_path)
 
@@ -931,7 +935,7 @@ def _reindex_on_session_start_core(trigger: str) -> None:
     1. Prerequisites FALSE → Skip (manual setup not done yet)
     2. Trigger is 'clear' or 'compact' → Skip (no code changes)
     3. Trigger is 'startup' or 'resume' + no index → Skip with message
-    4. Trigger is 'startup' or 'resume' + index exists → Run incremental (~5s)
+    4. Trigger is 'startup' or 'resume' + index exists → Run auto-reindex (IndexFlatIP auto-fallback: will timeout if changes detected)
 
     Trigger Sources:
     - 'startup': Fresh Claude Code launch
@@ -941,8 +945,8 @@ def _reindex_on_session_start_core(trigger: str) -> None:
 
     Why Skip on 'clear'/'compact'?
     - No code changes occurred
-    - Reindex would find no changes (Merkle tree detects this)
-    - Saves ~5 seconds per clear/compact event
+    - Reindex would find no changes (Merkle tree detects this quickly)
+    - Avoids unnecessary change detection overhead
 
     Args:
         trigger: Session start trigger source
@@ -975,7 +979,7 @@ def _reindex_on_session_start_core(trigger: str) -> None:
             print("   (First-time setup: ~3 minutes)\n")
             return
 
-        # Step 5: Run incremental reindex synchronously (~5 seconds)
+        # Step 5: Run auto-reindex (IndexFlatIP auto-fallback: will timeout if changes detected)
         print("🔄 Updating semantic search index...")
         result = run_incremental_reindex_sync(project_path)
 
