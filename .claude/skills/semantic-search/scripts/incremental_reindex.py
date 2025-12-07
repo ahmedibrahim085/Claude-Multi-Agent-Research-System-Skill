@@ -17,6 +17,7 @@ import sys
 import json
 import hashlib
 import os
+import pickle
 from pathlib import Path
 from typing import Dict, List, Optional
 import time
@@ -32,6 +33,7 @@ try:
     from chunking.multi_language_chunker import MultiLanguageChunker
     from embeddings.embedder import CodeEmbedder
     from common_utils import get_storage_dir
+    from sqlitedict import SqliteDict  # COPIED from MCP for metadata storage
     import faiss
     import numpy as np
 except ImportError as e:
@@ -65,6 +67,7 @@ class FixedCodeIndexManager:
         # Metadata storage
         self.metadata_db = {}  # chunk_id -> metadata
         self.id_mapping = {}   # chunk_id -> int64_id
+        self.reverse_id_mapping = {}  # int64_id -> chunk_id (ADAPTED for IndexIDMap2 search)
         self.next_id = 0       # Counter for new IDs
 
         # FAISS index with IndexIDMap2 wrapper (THE FIX)
@@ -76,34 +79,134 @@ class FixedCodeIndexManager:
         self._load_index()
 
     def _load_index(self):
-        """Load existing index from disk"""
+        """
+        Load existing index from disk.
+
+        COPIED from MCP's CodeIndexManager._load_index() (lines 55-71)
+        ADAPTED for IndexIDMap2 by building reverse_id_mapping.
+        """
         index_path = self.index_dir / "code.index"
-        metadata_path = self.index_dir / "metadata.json"
+        metadata_path = self.index_dir / "metadata.db"
 
         if index_path.exists() and metadata_path.exists():
             try:
+                # Load FAISS index (COPIED from MCP line 59)
                 self.index = faiss.read_index(str(index_path))
-                with open(metadata_path) as f:
-                    data = json.load(f)
-                    self.metadata_db = data.get('metadata', {})
-                    self.id_mapping = {k: int(v) for k, v in data.get('id_mapping', {}).items()}
-                    self.next_id = data.get('next_id', 0)
+
+                # Load metadata from SqliteDict (COPIED from MCP pattern lines 48-53)
+                with SqliteDict(str(metadata_path), flag='r') as db:
+                    # Rebuild in-memory structures
+                    self.metadata_db = {}
+                    self.id_mapping = {}
+                    self.reverse_id_mapping = {}
+                    max_id = -1
+
+                    for chunk_id, entry in db.items():
+                        faiss_id = entry['index_id']  # ADAPTED: this is custom FAISS ID, not position
+
+                        # Rebuild metadata_db (keep our internal format for compatibility)
+                        self.metadata_db[chunk_id] = {
+                            'metadata': entry['metadata'],
+                            'chunk_id': chunk_id,
+                            'faiss_id': faiss_id
+                        }
+
+                        # Rebuild id_mapping (chunk_id -> faiss_id)
+                        self.id_mapping[chunk_id] = faiss_id
+
+                        # Build reverse_id_mapping (faiss_id -> chunk_id) - ADAPTED for IndexIDMap2 search
+                        self.reverse_id_mapping[faiss_id] = chunk_id
+
+                        max_id = max(max_id, faiss_id)
+
+                    # Rebuild next_id counter
+                    self.next_id = max_id + 1 if max_id >= 0 else 0
+
             except Exception as e:
                 print(f"Warning: Failed to load existing index: {e}", file=sys.stderr)
 
     def save_index(self):
-        """Save index to disk"""
-        index_path = self.index_dir / "code.index"
-        metadata_path = self.index_dir / "metadata.json"
+        """
+        Save index to disk.
 
+        COPIED from MCP's CodeIndexManager.save_index() (lines 320-342)
+        ADAPTED to write metadata.db with IndexIDMap2's custom IDs.
+        """
+        # Save FAISS index (COPIED from MCP line 327)
+        index_path = self.index_dir / "code.index"
         faiss.write_index(self.index, str(index_path))
 
-        with open(metadata_path, 'w') as f:
-            json.dump({
-                'metadata': self.metadata_db,
-                'id_mapping': self.id_mapping,
-                'next_id': self.next_id
-            }, f)
+        # Save metadata.db using SqliteDict (COPIED pattern from MCP lines 48-53, 122-134)
+        metadata_path = self.index_dir / "metadata.db"
+        with SqliteDict(str(metadata_path), autocommit=False) as db:
+            # Clear existing entries for clean save
+            db.clear()
+
+            # Write each chunk's metadata (ADAPTED: index_id is FAISS custom ID from IndexIDMap2)
+            for chunk_id, entry in self.metadata_db.items():
+                db[chunk_id] = {
+                    'index_id': entry['faiss_id'],  # ADAPTED for IndexIDMap2
+                    'metadata': entry['metadata']
+                }
+
+            db.commit()
+
+        # Save chunk_ids.pkl (COPIED from MCP lines 339-340)
+        # Build ordered list from id_mapping (sorted by FAISS ID)
+        chunk_ids = [chunk_id for chunk_id, _ in sorted(
+            self.id_mapping.items(), key=lambda x: x[1]
+        )]
+        chunk_id_path = self.index_dir / "chunk_ids.pkl"
+        with open(chunk_id_path, 'wb') as f:
+            pickle.dump(chunk_ids, f)
+
+        # Save stats.json (COPIED pattern from MCP _update_stats)
+        self._update_stats()
+
+    def _update_stats(self):
+        """
+        Update index statistics.
+
+        COPIED from MCP's CodeIndexManager._update_stats() (lines 344-391)
+        ADAPTED to work with our IndexIDMap2 metadata structure.
+        """
+        stats = {
+            'total_chunks': len(self.metadata_db),
+            'index_size': self.index.ntotal,
+            'embedding_dimension': self.dimension,
+            'index_type': type(self.index).__name__
+        }
+
+        # Count files (COPIED pattern from MCP lines 359-380)
+        file_counts = {}
+        folder_counts = {}
+        chunk_type_counts = {}
+
+        for chunk_id, entry in self.metadata_db.items():
+            metadata = entry['metadata']
+
+            # Count by file (ADAPTED: use file_path from our metadata)
+            file_path = metadata.get('file_path', metadata.get('relative_path', 'unknown'))
+            file_counts[file_path] = file_counts.get(file_path, 0) + 1
+
+            # Count by folder
+            for folder in metadata.get('folder_structure', []):
+                folder_counts[folder] = folder_counts.get(folder, 0) + 1
+
+            # Count by chunk type
+            chunk_type = metadata.get('type', 'unknown')
+            chunk_type_counts[chunk_type] = chunk_type_counts.get(chunk_type, 0) + 1
+
+        stats.update({
+            'files_indexed': len(file_counts),
+            'top_folders': dict(sorted(folder_counts.items(), key=lambda x: x[1], reverse=True)[:10]),
+            'chunk_types': chunk_type_counts
+        })
+
+        # Save stats.json (COPIED from MCP lines 390-391)
+        stats_path = self.index_dir / "stats.json"
+        with open(stats_path, 'w') as f:
+            json.dump(stats, f, indent=2)
 
     def add_embeddings(self, embedding_results):
         """Add embeddings to index with stable IDs"""
@@ -132,6 +235,9 @@ class FixedCodeIndexManager:
                 'chunk_id': chunk_id,
                 'faiss_id': faiss_id
             }
+
+            # Maintain reverse mapping (ADAPTED for IndexIDMap2 search)
+            self.reverse_id_mapping[faiss_id] = chunk_id
 
         # Add to FAISS
         vectors_array = np.array(vectors, dtype=np.float32)
@@ -168,9 +274,17 @@ class FixedCodeIndexManager:
 
         # Remove from metadata and ID mapping
         for chunk_id in chunks_to_remove:
+            # Remove from metadata
             del self.metadata_db[chunk_id]
+
+            # Remove from id_mapping and reverse_id_mapping
             if chunk_id in self.id_mapping:
+                faiss_id = self.id_mapping[chunk_id]
                 del self.id_mapping[chunk_id]
+
+                # Also remove from reverse mapping (ADAPTED for IndexIDMap2 search)
+                if faiss_id in self.reverse_id_mapping:
+                    del self.reverse_id_mapping[faiss_id]
 
         return len(chunks_to_remove)
 
@@ -180,11 +294,128 @@ class FixedCodeIndexManager:
         self.index = faiss.IndexIDMap2(base_index)
         self.metadata_db = {}
         self.id_mapping = {}
+        self.reverse_id_mapping = {}  # ADAPTED for IndexIDMap2 search
         self.next_id = 0
 
     def get_index_size(self) -> int:
         """Get number of vectors in index"""
         return self.index.ntotal
+
+    def search(
+        self,
+        query_embedding: np.ndarray,
+        k: int = 5,
+        filters: Optional[Dict] = None
+    ) -> List[tuple]:
+        """
+        Search for similar code chunks.
+
+        COPIED from MCP's CodeIndexManager.search() (lines 165-215)
+        ADAPTED to use reverse_id_mapping for IndexIDMap2's custom IDs.
+
+        Args:
+            query_embedding: Query vector (768 dimensions)
+            k: Number of results to return
+            filters: Optional filters (not implemented yet)
+
+        Returns:
+            List of (chunk_id, similarity_score, metadata) tuples
+        """
+        # Check if index is empty (COPIED from MCP line 179)
+        if self.index is None or self.index.ntotal == 0:
+            return []
+
+        # Normalize query embedding (COPIED from MCP lines 186-187)
+        query_embedding = query_embedding.reshape(1, -1)
+        faiss.normalize_L2(query_embedding)
+
+        # Search in FAISS index (COPIED from MCP lines 190-191)
+        search_k = min(k * 3, self.index.ntotal)  # Get more results for potential filtering
+        similarities, indices = self.index.search(query_embedding, search_k)
+
+        results = []
+        for similarity, faiss_id in zip(similarities[0], indices[0]):
+            if faiss_id == -1:  # No more results
+                break
+
+            # ADAPTED: Use reverse_id_mapping for IndexIDMap2 (not chunk_ids array)
+            faiss_id = int(faiss_id)
+            if faiss_id not in self.reverse_id_mapping:
+                continue  # Skip if ID not in mapping
+
+            chunk_id = self.reverse_id_mapping[faiss_id]
+
+            # Get metadata from our structure (ADAPTED)
+            if chunk_id not in self.metadata_db:
+                continue
+
+            metadata = self.metadata_db[chunk_id]['metadata']
+
+            # TODO: Apply filters (skip for now, can add later like MCP's _matches_filters)
+
+            results.append((chunk_id, float(similarity), metadata))
+
+            if len(results) >= k:
+                break
+
+        return results
+
+    def find_similar(
+        self,
+        chunk_id: str,
+        k: int = 5,
+        filters: Optional[Dict] = None
+    ) -> List[tuple]:
+        """
+        Find similar chunks to a given chunk.
+
+        ADAPTED from MCP's pattern using IndexIDMap2's reconstruct capability.
+
+        Args:
+            chunk_id: ID of the chunk to find similar chunks for
+            k: Number of results to return
+            filters: Optional filters
+
+        Returns:
+            List of (chunk_id, similarity_score, metadata) tuples
+        """
+        # Get faiss_id for this chunk
+        if chunk_id not in self.id_mapping:
+            return []
+
+        faiss_id = self.id_mapping[chunk_id]
+
+        # Reconstruct vector from FAISS (IndexIDMap2 supports this)
+        try:
+            vector = self.index.reconstruct(int(faiss_id))
+        except Exception:
+            return []
+
+        # Search with this vector
+        all_results = self.search(vector, k=k+1, filters=filters)  # +1 to account for self
+
+        # Filter out the source chunk itself
+        results = [(cid, score, meta) for cid, score, meta in all_results if cid != chunk_id]
+
+        return results[:k]
+
+    def get_chunk_by_id(self, chunk_id: str) -> Optional[Dict]:
+        """
+        Get metadata for a specific chunk.
+
+        COPIED pattern from MCP's CodeIndexManager.get_chunk_by_id()
+
+        Args:
+            chunk_id: Chunk ID to retrieve
+
+        Returns:
+            Metadata dict or None if not found
+        """
+        if chunk_id not in self.metadata_db:
+            return None
+
+        entry = self.metadata_db[chunk_id]
+        return entry.get('metadata')
 
 
 class FixedIncrementalIndexer:

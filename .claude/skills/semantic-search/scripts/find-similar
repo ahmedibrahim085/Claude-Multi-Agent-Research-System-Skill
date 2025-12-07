@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Orchestrator for find-similar - calls CodeSearchServer.find_similar_code()
+# Find similar chunks using FixedCodeIndexManager with IndexIDMap2 support
 
 VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
 export PYTHONPATH="$HOME/.local/share/claude-context-local"
+
+# Get script directory for importing our module
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # CRITICAL FIX: Resolve project path to absolute BEFORE cd
 # Rebuild args with absolute project path
@@ -27,9 +30,23 @@ done
 
 cd "$HOME/.local/share/claude-context-local"
 
+# Call our find_similar implementation with IndexIDMap2 support
 "$VENV_PYTHON" -c "
+# CRITICAL: Force CPU mode BEFORE any imports to avoid MPS+FAISS segfault
+import os
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
+
 import sys
-from mcp_server.code_search_server import CodeSearchServer
+import json
+sys.path.insert(0, '$SCRIPT_DIR')
+
+# Force PyTorch to CPU before any model loading
+import torch
+torch.set_default_device('cpu')
+
+from incremental_reindex import FixedCodeIndexManager
 
 # Parse arguments
 chunk_id = None
@@ -54,10 +71,42 @@ if not chunk_id:
     print('Usage: find-similar --chunk-id \"chunk_id\" [--k NUM] [--project PATH]', file=sys.stderr)
     sys.exit(1)
 
-server = CodeSearchServer()
-if project_path:
-    server.switch_project(project_path)
+if not project_path:
+    print('Error: --project is required', file=sys.stderr)
+    sys.exit(1)
 
-result = server.find_similar_code(chunk_id, k=k, auto_reindex=False)
-print(result)
+try:
+    # Load index manager with IndexIDMap2 support
+    index_manager = FixedCodeIndexManager(project_path)
+
+    # Find similar chunks (uses reverse_id_mapping for IndexIDMap2)
+    results = index_manager.find_similar(chunk_id, k=k)
+
+    # Format results (compatible with expected output format)
+    formatted_results = []
+    for similar_chunk_id, score, metadata in results:
+        formatted_results.append({
+            'file': metadata.get('file_path') or metadata.get('relative_path', 'unknown'),
+            'lines': f\"{metadata.get('start_line', '?')}-{metadata.get('end_line', '?')}\",
+            'kind': metadata.get('type', 'unknown'),
+            'score': round(score, 2),
+            'chunk_id': similar_chunk_id,
+            'name': metadata.get('name', ''),
+            'snippet': metadata.get('content', '')[:200] if metadata.get('content') else ''
+        })
+
+    output = {
+        'chunk_id': chunk_id,
+        'results': formatted_results
+    }
+
+    print(json.dumps(output, indent=2))
+
+except Exception as e:
+    print(json.dumps({
+        'chunk_id': chunk_id,
+        'results': [],
+        'error': str(e)
+    }, indent=2), file=sys.stderr)
+    sys.exit(1)
 " "${RESOLVED_ARGS[@]}"
