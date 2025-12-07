@@ -61,3 +61,4 @@ docs/design-docs/
 .claude/skills/semantic-search/.benchmarks/
 .claude/skills/semantic-search/.code-search-index/
 .claude/skills/semantic-search/__pycache__/
+.claude/skills/semantic-search/scripts/logs/
