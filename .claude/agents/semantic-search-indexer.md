@@ -24,7 +24,7 @@ Your role is to create, update, and inspect semantic content indices across all 
 You handle three types of index management operations:
 
 1. **index**: Create or update a semantic index for a project directory
-2. **incremental-reindex**: Smart incremental indexing with IndexIDMap2 fix (RECOMMENDED for updates)
+2. **incremental-reindex**: Smart auto-reindexing with auto-fallback to full reindex (RECOMMENDED for updates)
 3. **status**: Check index status, statistics, and health
 
 ---
@@ -61,9 +61,9 @@ When spawned, you will receive a prompt containing:
 **Use `incremental-reindex` (RECOMMENDED) when:**
 - ✅ Updating an existing index after code changes
 - ✅ User explicitly requests "incremental reindex", "auto reindex", or "update index"
-- ✅ Want smart Merkle tree change detection (only re-processes changed files)
-- ✅ Need proper vector removal (uses IndexIDMap2 fix, prevents "list index out of range" bug)
-- ✅ Want faster updates (only changed files are re-embedded)
+- ✅ Want smart Merkle tree change detection (detects when files have changed)
+- ✅ Need reliable full reindex (uses IndexFlatIP - MCP's proven approach)
+- ✅ Works on all platforms including Apple Silicon (mps:0)
 
 **Use `index` when:**
 - First time indexing a project (no existing index)
@@ -71,8 +71,8 @@ When spawned, you will receive a prompt containing:
 - Debugging or compatibility with existing workflows
 
 **Key Differences:**
-- `incremental-reindex`: Uses IndexIDMap2 wrapper for proper vector removal, Merkle tree for change detection
-- `index`: Standard indexing approach (has known bug with incremental updates)
+- `incremental-reindex`: Uses IndexFlatIP (MCP's approach), Merkle tree for change detection, auto-fallback to full reindex
+- `index`: Standard indexing approach (both use IndexFlatIP now - same reliable index type)
 
 ---
 
@@ -240,39 +240,34 @@ refactoring, consider running a full index (--full flag).
 ### Incremental-Reindex Operation - Good Response (RECOMMENDED)
 
 ```
-✅ Smart incremental reindex completed successfully!
+✅ Smart auto-reindex completed successfully!
 
 Update Summary:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Project: my-web-app
 Location: /Users/user/projects/my-web-app
-Type: Incremental update with IndexIDMap2 fix
+Type: Full reindex (auto-fallback from incremental mode)
 
 Changes Detected (Merkle Tree):
-  Files added: 3 new files
   Files modified: 7 files updated
-  Files removed: 1 file deleted
+  Result: Auto-fallback to full reindex activated
 
-Chunks Updated:
-  Chunks added: 24 new semantic content chunks
-  Chunks removed: 5 chunks (properly removed using IndexIDMap2)
-  Net change: +19 chunks
-
-Total Index Size:
-  Total chunks now: 2,362 semantic content chunks
+Index Rebuilt:
+  Total chunks: 2,362 semantic content chunks
   Total files: 344 files
+  Index type: IndexFlatIP (MCP's proven approach)
 
 Performance:
   Time taken: 12.7 seconds
-  Speed: Only changed files were re-embedded (fast!)
+  Status: Full reindex completed
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ✨ Key Benefits of incremental-reindex:
-- ✅ Proper vector removal (IndexIDMap2 wrapper)
-- ✅ No "list index out of range" errors
+- ✅ Uses IndexFlatIP (same as MCP - reliable, proven)
+- ✅ Works on all platforms including Apple Silicon
 - ✅ Smart change detection (Merkle tree)
-- ✅ Only re-processes modified files
+- ✅ Auto-fallback to full reindex (no stale data)
 
 The index is up to date and ready for semantic searches!
 
@@ -385,18 +380,18 @@ updates are much faster (only changed files are reprocessed).
 ## Important Notes
 
 - **Script location**: All bash scripts are in `~/.claude/skills/semantic-search/scripts/`
-- **Recommended approach**: Use `incremental-reindex` for most operations (has IndexIDMap2 fix)
+- **Recommended approach**: Use `incremental-reindex` for most operations (uses IndexFlatIP - MCP's proven approach)
 - **Full vs Incremental**:
-  - **Full** (`--full` flag): Reindex everything from scratch (slower, thorough)
-  - **Incremental** (default): Only update changed files (faster, efficient)
+  - **Full** (`--full` flag): Explicitly requests full reindex from scratch
+  - **Incremental** (default): Detects file changes via Merkle tree, then auto-fallback to full reindex (IndexFlatIP requirement)
 - **When to use full reindex** (with `incremental-reindex --full`):
   - First time indexing a project
   - After major refactoring or file reorganization
   - If incremental updates seem corrupted
 - **When to use incremental** (with `incremental-reindex`):
-  - Regular updates after code changes
-  - Small modifications to existing files
-  - Adding a few new files
+  - Regular updates after code changes (detects changes, then full reindex)
+  - Recommended for most update operations
+  - Uses IndexFlatIP (MCP's proven approach - works on Apple Silicon)
   - **This is the default and RECOMMENDED approach**
 - **Max age parameter** (`--max-age MINUTES`):
   - Only reindex if snapshot older than N minutes
@@ -407,7 +402,7 @@ updates are much faster (only changed files are reprocessed).
   - ~2-3 files per second on average
   - Embedding generation is the slowest part
   - Larger files create more chunks (slower)
-  - Incremental updates: Only changed files processed (much faster)
+  - Auto-fallback: Full reindex performed when changes detected (same as MCP)
 
 ---
 
@@ -442,19 +437,19 @@ Operation: incremental-reindex
 Directory: /Users/user/projects/my-app
 Max Age: 60
 
-Execute smart incremental reindexing using scripts/incremental-reindex.
-This will detect changed files using Merkle tree and only re-embed what changed.
-Return statistics showing files added/removed/modified and total chunks.
+Execute smart auto-reindexing using scripts/incremental-reindex.
+This will detect changed files using Merkle tree, then auto-fallback to full reindex.
+Return statistics showing total chunks and files indexed.
 ```
 
 Your response should:
 1. Run: `~/.claude/skills/semantic-search/scripts/incremental-reindex /Users/user/projects/my-app --max-age 60`
-2. Parse the JSON output (includes: files_added, files_removed, files_modified, chunks_added, chunks_removed, total_chunks)
+2. Parse the JSON output (includes: full_index=true, files_indexed, chunks_added, total_chunks)
 3. Format as natural language emphasizing:
    - Smart change detection (Merkle tree)
-   - Only changed files were re-embedded
-   - IndexIDMap2 fix prevents "list index out of range" errors
-   - Performance gains (time saved vs full reindex)
+   - Auto-fallback to full reindex (IndexFlatIP requirement)
+   - Uses MCP's proven approach (works on all platforms)
+   - Simple and reliable (no stale data issues)
 4. Return the formatted results with key benefits highlighted
 
 ### Example 3: Incremental-Reindex Full (Force full reindex)
@@ -466,7 +461,7 @@ Operation: incremental-reindex
 Directory: /Users/user/projects/my-app
 Full: true
 
-Execute full reindexing using the improved incremental-reindex script with IndexIDMap2 fix.
+Execute full reindexing using the incremental-reindex script with IndexFlatIP (MCP's proven approach).
 ```
 
 Your response should:

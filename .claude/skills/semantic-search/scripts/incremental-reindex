@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Incremental Reindex - Orchestrator with IndexIDMap2 fix
+# Incremental Reindex - Orchestrator with Auto-Fallback
 #
-# This script provides true incremental indexing by using FAISS IndexIDMap2
-# to support proper vector removal. It extracts working code from MCP and
-# adds the fix to prevent metadata/FAISS desynchronization.
+# This script uses IndexFlatIP (MCP's proven approach) with auto-fallback to
+# full reindex. Detects file changes via Merkle tree, then performs complete
+# reindex to ensure no stale data or desynchronization issues.
 #
 # Usage:
 #   incremental-reindex PROJECT_PATH [--full] [--max-age MINUTES] [--check-only]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Search using FixedCodeIndexManager with IndexIDMap2 support
+# Search using FixedCodeIndexManager with IndexFlatIP (MCP's proven approach)
 
 VENV_PYTHON="$HOME/.local/share/claude-context-local/.venv/bin/python"
 export PYTHONPATH="$HOME/.local/share/claude-context-local"
@@ -30,7 +30,7 @@ done
 
 cd "$HOME/.local/share/claude-context-local"
 
-# Call our search implementation with IndexIDMap2 support
+# Call our search implementation with IndexFlatIP (simple, reliable)
 "$VENV_PYTHON" -c "
 # CRITICAL: Force CPU mode BEFORE any imports to avoid MPS+FAISS segfault
 import os
@@ -77,14 +77,14 @@ if not project_path:
     sys.exit(1)
 
 try:
-    # Load index manager with IndexIDMap2 support
+    # Load index manager with IndexFlatIP (sequential IDs)
     index_manager = FixedCodeIndexManager(project_path)
 
     # Embed query
     embedder = CodeEmbedder()
     query_embedding = embedder.embed_query(query)
 
-    # Search (uses reverse_id_mapping for IndexIDMap2)
+    # Search (uses chunk_ids list for IndexFlatIP)
     results = index_manager.search(query_embedding, k=k)
 
     # Format results (compatible with expected output format)

@@ -782,28 +782,28 @@ def build_index_enforcement_message(matched_keywords: list, matched_patterns: li
 
 **Required Skill**: semantic-search (indexer agent)
 
-**CRITICAL REMINDER - INCREMENTAL INDEXING**:
-❌ DO NOT use full reindex unless necessary (wastes time re-processing unchanged files)
-✅ MUST use incremental-reindex FIRST (smart Merkle tree change detection)
+**CRITICAL REMINDER - AUTO-REINDEX**:
+❌ DO NOT use full reindex manually (use incremental-reindex for all updates)
+✅ MUST use incremental-reindex FIRST (smart Merkle tree change detection + auto-fallback)
 
 **Why Incremental-Reindex is Better**:
-- Traditional full reindex: ~186 seconds (re-embeds all files)
-- Incremental reindex: ~3 seconds (only changed files, 59x faster)
-- **Performance: 59x speedup for typical updates**
-- **Proper vector removal**: IndexIDMap2 wrapper (fixes "list index out of range" bug)
-- **Smart detection**: Merkle tree identifies new/modified/deleted files automatically
+- **Smart detection**: Merkle tree identifies when files have changed
+- **Auto-fallback**: Automatically performs full reindex when changes detected
+- **Uses IndexFlatIP**: MCP's proven approach (works on all platforms including Apple Silicon)
+- **Simple and reliable**: No stale data, no vector removal bugs
+- **Performance**: Only reindexes when files actually changed (saves time when no changes)
 
 **When to Use Which**:
 1. **incremental-reindex (RECOMMENDED - Default)**:
    - Regular updates after code changes
-   - Detects and processes only changed files
-   - Fast (sub-5 second updates for <100 changed files)
-   - Proper vector removal via IndexIDMap2
+   - Detects changes via Merkle tree, then full reindex
+   - Works on all platforms (Apple Silicon mps:0 support)
+   - Uses IndexFlatIP (MCP's reliable approach)
 
 2. **Full reindex (ONLY IF)**:
    - First-time indexing (no existing index)
-   - Major refactoring (100+ files changed)
-   - Index corruption/debugging
+   - Explicit full reindex request from user
+   - Both methods use IndexFlatIP (same index type)
 
 **Correct Workflow**:
 1. INVOKE - Activate semantic-search skill

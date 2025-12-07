@@ -592,7 +592,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Incremental reindex with IndexIDMap2 fix'
+        description='Incremental reindex with IndexFlatIP (auto-fallback to full reindex)'
     )
     parser.add_argument('project_path', help='Path to project directory')
     parser.add_argument('--full', action='store_true', help='Force full reindex')
