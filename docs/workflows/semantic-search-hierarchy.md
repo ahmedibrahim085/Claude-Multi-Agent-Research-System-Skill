@@ -99,11 +99,11 @@ Semantic search reduces exploration overhead by **90%+ (~5,000-10,000 tokens per
 **Auto-Reindex (v2.4.0)**:
 - **Session-start trigger**: Reindexes on startup/resume (smart change detection, 60-min cooldown)
 - **Post-modification trigger**: Reindexes after Write/Edit operations (5-min cooldown)
-- **Incremental reindex**: ~5 seconds (42x faster than full reindex)
+- **IndexFlatIP auto-fallback**: Change detection <1s (Merkle tree), Full reindex 3-10 min (will timeout at 50s if changes detected)
 - **Decision tracing**: All skip reasons logged to session transcript for debugging
 - Prerequisites checked before enforcement (`logs/state/semantic-search-prerequisites.json`)
 - If prerequisites FALSE: Gracefully falls back to Grep/Glob (no errors, no blocking)
-- Synchronous process: Reindex completes before returning control (2-5s typical, hook overhead <20ms)
+- Synchronous process with 50s timeout: Hook completes quickly (<1s if no changes), times out if full reindex needed (manual reindex required)
 
 **If index missing or prerequisites not ready**:
 - **Check prerequisites**: Run `scripts/check-prerequisites` to validate 23 checks (MCP, model, scripts, etc.)

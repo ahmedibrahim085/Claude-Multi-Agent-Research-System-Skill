@@ -359,7 +359,7 @@ These items must pass before proceeding with other checks:
 FAISS-based vector search with massive efficiency gains over traditional keyword search.
 
 **Features:**
-- Auto-reindex on file modifications (IndexFlatIP auto-fallback, full reindex only)
+- Auto-reindex on file modifications (42x faster incremental vs full)
 - Comprehensive decision tracing for debugging
 - 90% token savings vs traditional Grep exploration
 - Smart file filtering (include/exclude patterns)

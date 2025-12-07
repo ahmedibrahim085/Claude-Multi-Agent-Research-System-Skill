@@ -1,3 +1,17 @@
+---
+**⚠️ HISTORICAL DOCUMENT - IndexIDMap2 Era (Superseded)**
+
+This document describes the **OLD IndexIDMap2 implementation** (v2.4.0) which was replaced by **IndexFlatIP** due to Apple Silicon segfaults.
+
+**Current Implementation** (v2.4.1+): IndexFlatIP with auto-fallback (full reindex only)
+- No incremental updates (IndexFlatIP limitation)
+- Full reindex: 3-10 minutes (not "~5 seconds" as claimed below)
+- See current docs: `.claude/skills/semantic-search/SKILL.md`
+
+**This document is preserved for historical reference only. Performance claims below are OUTDATED.**
+
+---
+
 # Release Notes: v2.4.0 - Production-Grade Auto-Reindex + Tracing
 ## Multi-Skill Orchestration Platform
 

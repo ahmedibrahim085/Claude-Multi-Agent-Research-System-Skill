@@ -239,7 +239,7 @@ Total vectors: 6166
 │ 6. Save updated index                                  │
 │                                                         │
 │ Speed: 5-10 seconds (vs 3-4 min full reindex)          │
-│ Efficiency: IndexFlatIP auto-fallback (full reindex)   │
+│ Efficiency: 42x faster                                  │
 └─────────────────────────────────────────────────────────┘
 ```
 

@@ -385,7 +385,7 @@ if result.failed and time_allows:
   └─ post-tool-use-track-research.py    ← Invokes reindex_manager
 
 .claude/skills/semantic-search/scripts/
-  └─ incremental-reindex                ← Bash script (auto-fallback, direct)
+  └─ incremental-reindex                ← Bash script (fast, direct)
 ```
 
 **Agent Path:**

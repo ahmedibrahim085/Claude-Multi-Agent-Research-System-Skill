@@ -224,7 +224,7 @@ This feature release transforms the semantic search skill from basic functionali
 #### Benchmarks
 - **Incremental reindex:** 5.29s for single file modification
 - **Full reindex:** 225s for 196 files, 5755 chunks
-- **Performance improvement:** Auto-reindex with IndexFlatIP auto-fallback
+- **Performance improvement:** 42x faster incremental vs full
 - **Token savings:** 90% using semantic search vs traditional Grep
   - Example: 1 search + 2 reads vs 15 Grep + 26 reads
   - Savings: 5,000-10,000 tokens per task

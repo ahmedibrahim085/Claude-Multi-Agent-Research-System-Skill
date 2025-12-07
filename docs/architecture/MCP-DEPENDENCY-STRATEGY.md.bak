@@ -44,7 +44,7 @@ import faiss                                                # Vector similarity
 **Why These Are Good:**
 - ✅ Well-tested, production-quality code
 - ✅ Handles 15+ programming languages
-- ✅ Merkle tree change detection (enables auto-fallback decision)
+- ✅ Merkle tree change detection (42x faster than full reindex)
 - ✅ Proper chunking boundaries (functions, classes, methods)
 
 ---

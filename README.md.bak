@@ -19,7 +19,7 @@ A **tri-skill platform** with smart routing, auto-indexing, and compound request
 | **semantic-search** | Natural language content search (code, docs, configs) | semantic-search-reader, semantic-search-indexer |
 
 **Key Features**:
-- **Auto-Reindex on File Changes** - Triggers on Write/Edit with 5-min cooldown (IndexFlatIP auto-fallback (full reindex only))
+- **Auto-Reindex on File Changes** - Triggers on Write/Edit with 5-min cooldown (42x faster incremental)
 - **Auto-Reindex on Session Start** - Smart change detection when Claude Code starts
 - **Comprehensive Decision Tracing** - Full visibility into reindex decisions (skip reasons, timing, errors)
 - **Smart Compound Detection** - When prompts trigger multiple skills, asks for clarification
