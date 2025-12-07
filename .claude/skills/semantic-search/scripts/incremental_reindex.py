@@ -417,6 +417,11 @@ class FixedIncrementalIndexer:
         start_time = time.time()
 
         try:
+            # IndexFlatIP doesn't support remove_ids() - always use full reindex
+            # (IndexIDMap2 would support incremental, but we switched for simplicity)
+            if isinstance(self.indexer.index, faiss.IndexFlatIP):
+                force_full = True
+
             # Check if we should do full index
             if force_full or not self.snapshot_manager.has_snapshot(self.project_path):
                 return self._full_index(start_time)
