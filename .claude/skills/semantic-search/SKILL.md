@@ -399,7 +399,7 @@ scripts/incremental-reindex /path/to/project --check-only
 # Full index (recommended on first run or after major changes)
 scripts/incremental-reindex /path/to/project --full
 
-# Incremental index (faster, only processes changed files)
+# Auto-reindex (detects changes via Merkle tree, then full reindex if needed)
 scripts/incremental-reindex /path/to/project
 
 # Custom project name
@@ -648,5 +648,5 @@ Each bash script:
 
 **Next Steps**:
 - For creating searchable indices: `scripts/incremental-reindex /path/to/project --full`
-- For local incremental updates (testing): `scripts/incremental-reindex /path/to/project`
+- For auto-reindex (detects changes, then full reindex): `scripts/incremental-reindex /path/to/project`
 - Then explore with semantic search queries using `scripts/search`

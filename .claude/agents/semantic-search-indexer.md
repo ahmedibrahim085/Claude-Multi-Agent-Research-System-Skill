@@ -306,8 +306,8 @@ Chunk Type Distribution:
 Index Health:
 ⚠️  Note: Index is 3 days old
     Consider reindexing if the code has changed significantly.
-    Run: index /path/to/project (incremental update)
-    Or: index /path/to/project --full (complete reindex)
+    Run: incremental-reindex /path/to/project (auto-detects changes, then full reindex)
+    Or: incremental-reindex /path/to/project --full (force full reindex immediately)
 
 The index is ready for semantic searches. Most code is in src/api/
 and src/components/ directories.
@@ -351,7 +351,7 @@ detects changes (Merkle tree) and only rebuilds when files actually changed.
 - **When to use full reindex** (with `incremental-reindex --full`):
   - First time indexing a project
   - After major refactoring or file reorganization
-  - If incremental updates seem corrupted
+  - When you want to skip change detection and reindex immediately
 - **When to use incremental** (with `incremental-reindex`):
   - Regular updates after code changes (detects changes, then full reindex)
   - Recommended for most update operations

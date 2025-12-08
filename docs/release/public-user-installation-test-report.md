@@ -380,7 +380,7 @@ INFO:embeddings.embedder:Processed 96/571 chunks
 Indexing completed. Added: 86, Time: 29.91s
 ```
 
-After initial index is created, the SessionStart hook will handle incremental updates automatically.
+After initial index is created, the SessionStart hook will automatically detect changes and reindex via auto-fallback to full reindex (IndexFlatIP).
 ```
 
 **Why This Matters:**

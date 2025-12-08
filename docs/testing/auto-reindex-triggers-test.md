@@ -142,7 +142,7 @@ The session-start hook now implements smart auto-reindexing based on trigger typ
 **Result**:
 - Same logic as startup with existing index
 - Detects files changed during pause
-- Fast incremental update
+- Auto-fallback to full reindex (IndexFlatIP)
 
 ---
 

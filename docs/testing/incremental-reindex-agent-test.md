@@ -1,5 +1,20 @@
 # Incremental-Reindex Agent Integration Test Report
 
+---
+⚠️ **HISTORICAL DOCUMENT - IndexIDMap2 Era (Superseded)**
+
+This document describes tests of the OLD IndexIDMap2 implementation (v2.4.0) which was replaced by IndexFlatIP due to Apple Silicon segfaults.
+
+**Current Implementation (v2.4.1+)**: IndexFlatIP with auto-fallback (full reindex only)
+- No incremental updates (IndexFlatIP limitation - sequential IDs, no selective deletion)
+- Full reindex: 3-10 minutes (not incremental as claimed below)
+- Auto-fallback: Detects changes via Merkle tree, then performs full reindex
+
+See current implementation: `.claude/skills/semantic-search/scripts/incremental_reindex.py`
+
+This document is preserved for historical reference only. Functionality described below is OUTDATED.
+---
+
 **Date**: 2025-12-03
 **Test Type**: Agent Integration & Functional Verification
 **Feature**: Incremental-reindex with IndexIDMap2 fix

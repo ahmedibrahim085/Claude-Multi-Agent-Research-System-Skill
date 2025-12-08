@@ -783,8 +783,8 @@ def build_index_enforcement_message(matched_keywords: list, matched_patterns: li
 **Required Skill**: semantic-search (indexer agent)
 
 **CRITICAL REMINDER - AUTO-REINDEX**:
-❌ DO NOT use full reindex manually (use incremental-reindex for all updates)
-✅ MUST use incremental-reindex FIRST (smart Merkle tree change detection + auto-fallback)
+✅ ALWAYS use incremental-reindex (smart change detection, then auto-fallback to full reindex)
+✅ IndexFlatIP auto-fallback: Detects changes via Merkle tree, then performs full reindex
 
 **Why Incremental-Reindex is Better**:
 - **Smart detection**: Merkle tree identifies when files have changed
