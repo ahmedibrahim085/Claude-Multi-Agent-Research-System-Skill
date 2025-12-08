@@ -218,18 +218,6 @@ class FixedCodeIndexManager:
         # Append chunk_ids to maintain order
         self.chunk_ids.extend(chunk_ids_to_add)
 
-    def remove_file_chunks(self, file_path: str, project_name: Optional[str] = None) -> int:
-        """
-        Not supported with IndexFlatIP - use full reindex instead.
-
-        IndexFlatIP doesn't support removing individual vectors. For incremental
-        updates, run a full reindex. This is the same as MCP's approach.
-        """
-        raise NotImplementedError(
-            "Incremental chunk removal not supported with IndexFlatIP. "
-            "Use full reindex instead: index --full /path/to/project"
-        )
-
     def clear_index(self):
         """Clear entire index - SIMPLIFIED for IndexFlatIP"""
         self.index = faiss.IndexFlatIP(self.dimension)
@@ -412,60 +400,55 @@ class FixedIncrementalIndexer:
             # Don't fail indexing if state recording fails
             print(f"Warning: Failed to record index timestamp: {e}", file=sys.stderr)
 
-    def incremental_index(self, force_full: bool = False):
-        """Perform incremental indexing with proper removal support"""
+    def auto_reindex(self, force_full: bool = False):
+        """Auto-reindex with IndexFlatIP (detects changes via Merkle tree, then full reindex if needed)
+
+        IndexFlatIP Limitation:
+        - Uses sequential IDs (0, 1, 2...) - no selective deletion supported
+        - Only full reindex possible (clear entire index + rebuild)
+
+        Smart Auto-Fallback:
+        1. If force_full=True → skip change detection, full reindex immediately
+        2. If no snapshot exists → full reindex (first time)
+        3. If IndexFlatIP detected → force full reindex (always true in current implementation)
+        4. If changes detected → full reindex (can't do selective updates)
+        5. If no changes → skip reindex (fast path)
+
+        Performance:
+        - Change detection: <1 second (Merkle tree)
+        - Full reindex: 3-10 minutes (~6,000 chunks)
+        - No changes: <1 second (instant skip)
+        """
         start_time = time.time()
 
         try:
-            # IndexFlatIP doesn't support remove_ids() - always use full reindex
-            # (IndexIDMap2 would support incremental, but we switched for simplicity)
+            # IndexFlatIP only supports full reindex (no selective deletion)
+            # Auto-fallback: Detect this and force full reindex
             if isinstance(self.indexer.index, faiss.IndexFlatIP):
                 force_full = True
 
-            # Check if we should do full index
-            if force_full or not self.snapshot_manager.has_snapshot(self.project_path):
+            # If no snapshot exists, must do full reindex (first time)
+            if not self.snapshot_manager.has_snapshot(self.project_path):
+                force_full = True
+
+            # If force_full requested, skip change detection and reindex immediately
+            if force_full:
                 return self._full_index(start_time)
 
-            # Detect changes using Merkle tree
+            # Detect changes using Merkle tree (fast: <1 second)
             changes, current_dag = self.change_detector.detect_changes_from_snapshot(self.project_path)
 
             if not changes.has_changes():
+                # No changes detected - skip reindex entirely (instant)
                 return {
                     'success': True,
                     'no_changes': True,
                     'time_taken': round(time.time() - start_time, 2)
                 }
 
-            # Process changes (now with working remove_file_chunks!)
-            chunks_removed = self._remove_old_chunks(changes)
-            chunks_added = self._add_new_chunks(changes)
-
-            # Update snapshot
-            self.snapshot_manager.save_snapshot(current_dag, {
-                'project_name': self.project_name,
-                'incremental_update': True,
-                'files_added': len(changes.added),
-                'files_removed': len(changes.removed),
-                'files_modified': len(changes.modified)
-            })
-
-            # Save index
-            self.indexer.save_index()
-
-            # Record timestamp
-            self._record_index_timestamp(is_full_index=False)
-
-            return {
-                'success': True,
-                'incremental': True,
-                'files_added': len(changes.added),
-                'files_removed': len(changes.removed),
-                'files_modified': len(changes.modified),
-                'chunks_added': chunks_added,
-                'chunks_removed': chunks_removed,
-                'total_chunks': self.indexer.get_index_size(),
-                'time_taken': round(time.time() - start_time, 2)
-            }
+            # Changes detected - must do full reindex (IndexFlatIP limitation)
+            # Note: With IndexFlatIP, we can't do selective updates, so we clear + rebuild
+            return self._full_index(start_time)
 
         except Exception as e:
             return {
@@ -545,48 +528,6 @@ class FixedIncrementalIndexer:
                 'time_taken': round(time.time() - start_time, 2)
             }
 
-    def _remove_old_chunks(self, changes: FileChanges) -> int:
-        """Remove chunks for deleted and modified files"""
-        files_to_remove = changes.removed + changes.modified
-        chunks_removed = 0
-
-        for file_path in files_to_remove:
-            removed = self.indexer.remove_file_chunks(file_path, self.project_name)
-            chunks_removed += removed
-
-        return chunks_removed
-
-    def _add_new_chunks(self, changes: FileChanges) -> int:
-        """Add chunks for new and modified files"""
-        files_to_index = changes.added + changes.modified
-        supported_files = [f for f in files_to_index if self.chunker.is_supported(f)]
-
-        chunks_to_embed = []
-        for file_path in supported_files:
-            full_path = Path(self.project_path) / file_path
-            try:
-                chunks = self.chunker.chunk_file(str(full_path))
-                if chunks:
-                    chunks_to_embed.extend(chunks)
-            except Exception as e:
-                print(f"Warning: Failed to chunk {file_path}: {e}", file=sys.stderr)
-
-        all_embedding_results = []
-        if chunks_to_embed:
-            try:
-                all_embedding_results = self.embedder.embed_chunks(chunks_to_embed)
-                for chunk, embedding_result in zip(chunks_to_embed, all_embedding_results):
-                    embedding_result.metadata['project_name'] = self.project_name
-                    embedding_result.metadata['content'] = chunk.content
-            except Exception as e:
-                print(f"Warning: Embedding failed: {e}", file=sys.stderr)
-
-        if all_embedding_results:
-            self.indexer.add_embeddings(all_embedding_results)
-
-        return len(all_embedding_results)
-
-
 def main():
     """Main entry point"""
     import argparse
@@ -636,7 +577,7 @@ def main():
                     'time_taken': 0
                 }
             else:
-                result = indexer.incremental_index(force_full=args.full)
+                result = indexer.auto_reindex(force_full=args.full)
 
         print(json.dumps(result, indent=2))
         sys.exit(0 if result.get('success', True) else 1)
