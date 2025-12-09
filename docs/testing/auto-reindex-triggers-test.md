@@ -2,7 +2,7 @@
 
 ## Overview
 
-The session-start hook now implements smart auto-reindexing based on trigger types and index state. This document shows expected behavior for each trigger type and validates the 60-minute cooldown logic.
+The session-start hook now implements smart auto-reindexing based on trigger types and index state. This document shows expected behavior for each trigger type and validates the 360-minute (6-hour) cooldown logic.
 
 **Date**: 2025-12-03
 **Feature**: Smart Auto-Reindex
@@ -19,10 +19,10 @@ The session-start hook now implements smart auto-reindexing based on trigger typ
 | TRUE | compact | any | **Skip** (no code changes) | |
 | TRUE | startup | never indexed | **Full index** (background) | ~3 min |
 | TRUE | startup | indexed before | **Smart reindex** (background) | Fast if Merkle exists |
-| TRUE | startup | last full <60min | **Smart reindex** (cooldown active) | Fast if Merkle exists, full if Merkle missing |
+| TRUE | startup | last full <6hr | **Smart reindex** (cooldown active) | Fast if Merkle exists, full if Merkle missing |
 | TRUE | resume | never indexed | **Full index** (background) | ~3 min |
 | TRUE | resume | indexed before | **Smart reindex** (background) | Fast if Merkle exists |
-| TRUE | resume | last full <60min | **Smart reindex** (cooldown active) | Fast if Merkle exists, full if Merkle missing |
+| TRUE | resume | last full <6hr | **Smart reindex** (cooldown active) | Fast if Merkle exists, full if Merkle missing |
 
 ---
 
@@ -94,7 +94,7 @@ The session-start hook now implements smart auto-reindexing based on trigger typ
 
 ---
 
-### Scenario 3: Rapid Restart (60-Minute Cooldown)
+### Scenario 3: Rapid Restart (360-Minute / 6-Hour Cooldown)
 
 **State Before**:
 - Prerequisites: TRUE
@@ -112,7 +112,7 @@ The session-start hook now implements smart auto-reindexing based on trigger typ
 
 **Logic**:
 1. Index doesn't exist → normally would do full index
-2. BUT last_full_index < 60 min ago → cooldown active
+2. BUT last_full_index < 360 min (6 hours) ago → cooldown active
 3. Force incremental instead of full
 4. Incremental rebuilds from Merkle tree metadata
 
@@ -224,9 +224,9 @@ The session-start hook now implements smart auto-reindexing based on trigger typ
 
 ---
 
-## 60-Minute Cooldown Logic Details
+## 360-Minute (6-Hour) Cooldown Logic Details
 
-### Why 60 Minutes?
+### Why 360 Minutes (6 Hours)?
 
 **Note**: The cooldown prevents CHOOSING full index when the index directory is deleted, but cannot prevent full index when the Merkle snapshot is also missing (Merkle snapshot is stored INSIDE the index directory at `index/merkle_snapshot.json`). If the entire index directory is deleted, the Merkle snapshot is deleted with it, and the incremental-reindex script will fall back to a full reindex regardless of cooldown status.
 
@@ -253,26 +253,26 @@ The session-start hook now implements smart auto-reindexing based on trigger typ
 
 **Scenario A: Rapid Restart After Full Index**
 - 10:00 - Full index completes
-- 10:15 - Restart (15 min later, <60 min)
+- 10:15 - Restart (15 min later, <360 min)
 - **Result**: Incremental (cooldown)
 
 **Scenario B: Long Break After Full Index**
 - 10:00 - Full index completes
-- 12:00 - Restart (2 hours later, >60 min)
-- **Result**: Incremental (index exists)
+- 17:00 - Restart (7 hours later, >360 min)
+- **Result**: Incremental (index exists, cooldown expired)
 
 **Scenario C: Index Deleted, Recent Full**
 - 10:00 - Full index completes
 - 10:20 - Index directory deleted manually (including Merkle snapshot)
-- 10:25 - Restart (25 min later, <60 min)
+- 10:25 - Restart (25 min later, <360 min)
 - **Result**: Full index (~3 min, not incremental)
 - **Reason**: Merkle snapshot deleted with index directory, cannot use incremental
 - **Note**: Cooldown logic determines index_type="incremental" but script falls back to full when Merkle missing
 
 **Scenario D: Index Deleted, Old Full**
 - 10:00 - Full index completes
-- 12:00 - Index directory deleted manually
-- 12:05 - Restart (2 hours later, >60 min)
+- 17:00 - Index directory deleted manually
+- 17:05 - Restart (7 hours later, >360 min)
 - **Result**: Full index (cooldown expired)
 
 ---
@@ -476,7 +476,7 @@ The smart auto-reindex system provides:
 ✅ **Automatic**: No manual reindex needed
 ✅ **Smart**: Chooses optimal index type (full/incremental)
 ✅ **Fast**: Hook overhead <20ms, never blocks
-✅ **Efficient**: 60-min cooldown prevents full reindex spam
+✅ **Efficient**: 360-min (6-hour) cooldown prevents full reindex spam
 ✅ **Robust**: Graceful error handling, no failures
 ✅ **Trigger-aware**: Skips when unnecessary (clear/compact)
 ✅ **User-friendly**: Background process, seamless UX
