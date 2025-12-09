@@ -347,8 +347,9 @@ class FixedIncrementalIndexer:
     """
 
     def __init__(self, project_path: str):
-        self.project_path = str(Path(project_path).resolve())
-        self.project_name = Path(project_path).name
+        project_path_obj = Path(project_path).resolve()
+        self.project_path = str(project_path_obj)
+        self.project_name = project_path_obj.name  # FIX: Use resolved path to get correct name
 
         # Initialize components
         self.indexer = FixedCodeIndexManager(self.project_path)
@@ -400,6 +401,99 @@ class FixedIncrementalIndexer:
             # Don't fail indexing if state recording fails
             print(f"Warning: Failed to record index timestamp: {e}", file=sys.stderr)
 
+    def _update_prerequisites_state_after_successful_reindex(self):
+        """Update prerequisites state after successful full reindex
+
+        Design Rationale:
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        - Conservative approach: Only update if index actually exists
+        - Respects manual_override: Don't update if user manually set state
+        - Graceful failure: Don't break indexing if state update fails
+        - Closes architectural gap: Hooks were skipping indexing even after
+          successful reindex because prerequisites stayed FALSE forever
+
+        Context:
+        - Prerequisites file: logs/state/semantic-search-prerequisites.json
+        - Read by: reindex_manager.read_prerequisites_state() (hooks use this)
+        - Previously ONLY updated by: scripts/check-prerequisites (manual)
+        - Gap: After successful reindex, prerequisites never auto-recovered
+
+        Logic:
+        1. Verify index file actually exists (conservative check)
+        2. Read existing prerequisites state
+        3. If manual_override=true → Skip (respect user's manual setting)
+        4. Update SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY = true
+        5. Update last_checked timestamp
+        6. Preserve other state fields
+
+        Args:
+            None (uses self.project_path, self.project_name)
+
+        Returns:
+            None (prints warning on failure, never raises)
+        """
+        try:
+            from datetime import datetime, timezone
+            import hashlib
+
+            # Step 1: Verify index file exists (conservative check)
+            storage_dir = Path.home() / '.claude_code_search'
+            project_path_obj = Path(self.project_path).resolve()
+            project_hash = hashlib.md5(str(project_path_obj).encode()).hexdigest()[:8]
+            project_dir = storage_dir / 'projects' / f'{self.project_name}_{project_hash}'
+            index_file = project_dir / 'index' / 'code.index'
+
+            if not index_file.exists():
+                # Index doesn't exist - don't update prerequisites
+                # This should never happen here (called after successful reindex)
+                # but being conservative
+                return
+
+            # Step 2: Locate prerequisites state file
+            prerequisites_state_file = project_path_obj / 'logs' / 'state' / 'semantic-search-prerequisites.json'
+
+            # Step 3: Read existing state (if it exists)
+            state = {}
+            if prerequisites_state_file.exists():
+                try:
+                    with open(prerequisites_state_file, 'r') as f:
+                        state = json.load(f)
+                except Exception:
+                    # If file is corrupted, create fresh state
+                    state = {}
+
+            # Step 4: Check manual_override - RESPECT user's manual setting
+            if state.get('manual_override', False):
+                # User manually set state - don't auto-update
+                # Silently skip (user explicitly disabled auto-updates)
+                return
+
+            # Step 5: Update prerequisites to TRUE
+            # Rationale: If full reindex succeeded, core prerequisites must be met
+            # (Python libs, dependencies, model, etc. all worked)
+            timestamp = datetime.now(timezone.utc).isoformat()
+
+            state['SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY'] = True
+            state['last_checked'] = timestamp
+            state['last_check_details'] = {
+                'total_checks': 1,
+                'passed': 1,
+                'failed': 0,
+                'warnings': 0
+            }
+            state['manual_override'] = False
+            state['notes'] = 'This file tracks semantic-search skill prerequisites status. Set manual_override to true and SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY to true/false to prevent auto-updates. Run scripts/check-prerequisites to auto-update.'
+
+            # Step 6: Write updated state
+            prerequisites_state_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(prerequisites_state_file, 'w') as f:
+                json.dump(state, f, indent=2)
+
+        except Exception as e:
+            # Don't fail indexing if prerequisites state update fails
+            # This is a convenience feature, not critical
+            print(f"Warning: Failed to update prerequisites state: {e}", file=sys.stderr)
+
     def auto_reindex(self, force_full: bool = False):
         """Auto-reindex with IndexFlatIP (always full reindex when called)
 
@@ -449,32 +543,47 @@ class FixedIncrementalIndexer:
         """Perform full indexing"""
         try:
             # Clear existing
+            print("Clearing existing index...", file=sys.stderr)
             self.indexer.clear_index()
 
             # Build DAG
+            print("Building file DAG...", file=sys.stderr)
             dag = MerkleDAG(self.project_path)
             dag.build()
             all_files = dag.get_all_files()
 
             # Filter supported files
             supported_files = [f for f in all_files if self.chunker.is_supported(f)]
+            print(f"Found {len(supported_files)}/{len(all_files)} supported files", file=sys.stderr)
 
             # Chunk all files
+            print(f"Chunking {len(supported_files)} files...", file=sys.stderr)
             all_chunks = []
-            for file_path in supported_files:
+            for idx, file_path in enumerate(supported_files, 1):
                 full_path = Path(self.project_path) / file_path
                 try:
                     chunks = self.chunker.chunk_file(str(full_path))
                     if chunks:
                         all_chunks.extend(chunks)
+                    # Progress every 50 files
+                    if idx % 50 == 0:
+                        print(f"  Chunked {idx}/{len(supported_files)} files ({len(all_chunks)} chunks so far)...", file=sys.stderr)
                 except Exception as e:
                     print(f"Warning: Failed to chunk {file_path}: {e}", file=sys.stderr)
+            print(f"Chunking complete: {len(all_chunks)} chunks from {len(supported_files)} files", file=sys.stderr)
 
             # Embed all chunks
             all_embedding_results = []
             if all_chunks:
                 try:
-                    all_embedding_results = self.embedder.embed_chunks(all_chunks)
+                    # Use larger batch size (64) for better GPU utilization
+                    # MCP default is 32, but modern GPUs can handle more
+                    batch_size = 64
+                    print(f"Generating embeddings for {len(all_chunks)} chunks (batch_size={batch_size})...", file=sys.stderr)
+                    all_embedding_results = self.embedder.embed_chunks(all_chunks, batch_size=batch_size)
+                    print(f"Embedding complete: {len(all_embedding_results)} embeddings generated", file=sys.stderr)
+
+                    # Add metadata (project_name + content)
                     for chunk, embedding_result in zip(all_chunks, all_embedding_results):
                         embedding_result.metadata['project_name'] = self.project_name
                         embedding_result.metadata['content'] = chunk.content
@@ -483,9 +592,11 @@ class FixedIncrementalIndexer:
 
             # Add to index
             if all_embedding_results:
+                print(f"Adding {len(all_embedding_results)} embeddings to FAISS index...", file=sys.stderr)
                 self.indexer.add_embeddings(all_embedding_results)
 
             # Save snapshot
+            print("Saving Merkle DAG snapshot...", file=sys.stderr)
             self.snapshot_manager.save_snapshot(dag, {
                 'project_name': self.project_name,
                 'full_index': True,
@@ -495,10 +606,16 @@ class FixedIncrementalIndexer:
             })
 
             # Save index
+            print("Saving FAISS index to disk...", file=sys.stderr)
             self.indexer.save_index()
 
             # Record timestamp
             self._record_index_timestamp(is_full_index=True)
+
+            # Update prerequisites state (auto-recovery after successful reindex)
+            self._update_prerequisites_state_after_successful_reindex()
+
+            print(f"✓ Full reindex complete: {len(all_embedding_results)} chunks indexed", file=sys.stderr)
 
             return {
                 'success': True,

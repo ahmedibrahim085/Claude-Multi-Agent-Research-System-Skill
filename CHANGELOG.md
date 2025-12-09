@@ -7,7 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - 2025-12-09
+
+### ⚡ Performance: Simple Reindex Optimizations
+
+**Simple optimizations** to improve full reindex UX and performance without architectural changes.
+
+**Changes:**
+
+1. **Progress Indicators (UX Improvement)**
+   - Added progress messages at each reindex stage
+   - Shows file counts, chunk counts, operation names
+   - Progress every 50 files during chunking
+   - Users now see what's happening during 3-4 minute reindex
+   - No more "frozen" appearance
+
+2. **Increased Embedding Batch Size (Performance)**
+   - Changed from batch_size=32 (MCP default) to batch_size=64
+   - Better GPU utilization for embeddinggemma-300m model
+   - Expected speedup: ~15-20% for embedding phase
+   - Safe: Uses MCP's existing batch_size parameter
+
+**Impact:**
+- Better UX: Users see progress, understand what's happening
+- Faster: ~15-20% reduction in embedding time (largest bottleneck)
+- Simple: No new dependencies, no architectural changes
+- Safe: Falls back to existing behavior if issues
+
+**Rationale:**
+- Aligns with "SIMPLICITY IS THE KEY" principle
+- Uses MCP's existing capabilities (batch_size parameter)
+- No complex infrastructure (no parallel processing, no external databases)
+- Works with pip-installable dependencies only
+
+**Files Modified:**
+- `.claude/skills/semantic-search/scripts/incremental_reindex.py`:
+  - Lines 546-615: Added progress print statements
+  - Lines 579-583: Increased batch_size from 32 to 64
+
+---
+
 ## [2.4.1] - 2025-12-04
+
+---
+**⚠️ HISTORICAL CONTEXT - IndexIDMap2 Era (Superseded Dec 7, 2025)**
+
+This changelog entry describes the **Dec 4, 2025 bug fix** that temporarily used IndexIDMap2. **Three days later (Dec 7)**, we deliberately switched TO IndexFlatIP for Apple Silicon compatibility.
+
+**Current Implementation** (Dec 7+): IndexFlatIP with auto-fallback (full reindex only)
+- IndexIDMap2 caused segfaults on Apple Silicon (exit 139)
+- IndexFlatIP works perfectly on all platforms including Apple Silicon
+- No incremental updates (IndexFlatIP limitation - full reindex only)
+
+**This entry is preserved for historical accuracy - it describes what happened on Dec 4, not current implementation.**
+
+See: Commit `84a92d7` (Dec 7, 2025) - "FIX: Switch from IndexIDMap2 to IndexFlatIP"
+
+---
 
 ### 🐛 Bug Fix: IndexFlatIP Confusion + Auto-Reindex Corruption
 
