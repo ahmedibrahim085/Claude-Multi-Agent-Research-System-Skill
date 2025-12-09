@@ -497,8 +497,9 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
     - 50-second timeout: Designed for Merkle tree change DETECTION only
       * Change detection: <1 second (Merkle tree, well under limit)
       * Full reindex (IndexFlatIP auto-fallback): 3-10 minutes (FAR EXCEEDS timeout)
-      * Result: Hook WILL timeout if changes detected, full reindex aborted
-      * Workaround: Manual full reindex required after file changes
+      * Age check: 360 minutes (6 hours) - timeout occurs only when index very stale
+      * Result: Hook WILL timeout if index >6 hours old, full reindex aborted
+      * Workaround: Manual full reindex required when timeout occurs
       * Buffer accounts for: hook overhead, state file I/O, error handling
 
     - Visible errors: capture_output=True (not DEVNULL)
@@ -564,8 +565,9 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
             _release_reindex_lock(project_path)
 
     except subprocess.TimeoutExpired:
-        print(f"⚠️  Index update timed out (>50s) - will retry next session", file=sys.stderr)
-        print(f"   This may indicate a very large changeset", file=sys.stderr)
+        print(f"⚠️  Index update timed out (>50s)", file=sys.stderr)
+        print(f"   Occurs when index >6 hours old (age-based refresh limitation)", file=sys.stderr)
+        print(f"   Run manual full reindex: {script} --full {project_path}", file=sys.stderr)
         return False
 
     except PermissionError as e:
@@ -776,7 +778,8 @@ def auto_reindex_on_session_start(input_data: dict) -> None:
     - 50-second timeout: Leaves 10s buffer from hook's 60s hard limit
       * Change detection: <1 second (Merkle tree, well under limit)
       * Full reindex (IndexFlatIP auto-fallback): 3-10 minutes (EXCEEDS timeout)
-      * Result: Timeout aborts full reindex if changes detected
+      * Age check: 360 minutes (6 hours) - timeout occurs only when index very stale
+      * Result: Timeout aborts full reindex if index >6 hours old
       * Buffer accounts for: hook overhead, state file I/O, error handling
 
     - Visible errors: capture_output=True (not DEVNULL)

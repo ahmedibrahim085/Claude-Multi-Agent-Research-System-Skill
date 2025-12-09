@@ -357,7 +357,7 @@ class FixedIncrementalIndexer:
         self.snapshot_manager = SnapshotManager()
         self.change_detector = ChangeDetector(self.snapshot_manager)
 
-    def needs_reindex(self, max_age_minutes: float = 60) -> bool:
+    def needs_reindex(self, max_age_minutes: float = 360) -> bool:
         """Check if reindex is needed based on age"""
         if not self.snapshot_manager.has_snapshot(self.project_path):
             return True
@@ -401,23 +401,25 @@ class FixedIncrementalIndexer:
             print(f"Warning: Failed to record index timestamp: {e}", file=sys.stderr)
 
     def auto_reindex(self, force_full: bool = False):
-        """Auto-reindex with IndexFlatIP (detects changes via Merkle tree, then full reindex if needed)
+        """Auto-reindex with IndexFlatIP (always full reindex when called)
 
         IndexFlatIP Limitation:
         - Uses sequential IDs (0, 1, 2...) - no selective deletion supported
         - Only full reindex possible (clear entire index + rebuild)
 
-        Smart Auto-Fallback:
-        1. If force_full=True → skip change detection, full reindex immediately
-        2. If no snapshot exists → full reindex (first time)
-        3. If IndexFlatIP detected → force full reindex (always true in current implementation)
-        4. If changes detected → full reindex (can't do selective updates)
-        5. If no changes → skip reindex (fast path)
+        Design:
+        - ALWAYS does full reindex when called (3-10 minutes for ~6,000 chunks)
+        - Change detection happens in needs_reindex(), not here
+        - This function is called only when reindex is needed
 
-        Performance:
-        - Change detection: <1 second (Merkle tree)
-        - Full reindex: 3-10 minutes (~6,000 chunks)
-        - No changes: <1 second (instant skip)
+        Logic:
+        1. If IndexFlatIP detected → force full reindex (always true in current implementation)
+        2. If no snapshot exists → force full reindex (first time)
+        3. Execute full reindex (clear entire index + rebuild)
+
+        Note: The IndexFlatIP check (line 427-428) makes this function always do full reindex,
+        regardless of force_full parameter. Change detection to skip unnecessary reindex
+        happens at the caller level (needs_reindex()).
         """
         start_time = time.time()
 
@@ -431,24 +433,10 @@ class FixedIncrementalIndexer:
             if not self.snapshot_manager.has_snapshot(self.project_path):
                 force_full = True
 
-            # If force_full requested, skip change detection and reindex immediately
+            # If force_full requested, do full reindex immediately
+            # Note: With IndexFlatIP, this is always True (lines 427-428), so we always reach here
             if force_full:
                 return self._full_index(start_time)
-
-            # Detect changes using Merkle tree (fast: <1 second)
-            changes, current_dag = self.change_detector.detect_changes_from_snapshot(self.project_path)
-
-            if not changes.has_changes():
-                # No changes detected - skip reindex entirely (instant)
-                return {
-                    'success': True,
-                    'no_changes': True,
-                    'time_taken': round(time.time() - start_time, 2)
-                }
-
-            # Changes detected - must do full reindex (IndexFlatIP limitation)
-            # Note: With IndexFlatIP, we can't do selective updates, so we clear + rebuild
-            return self._full_index(start_time)
 
         except Exception as e:
             return {
@@ -537,8 +525,8 @@ def main():
     )
     parser.add_argument('project_path', help='Path to project directory')
     parser.add_argument('--full', action='store_true', help='Force full reindex')
-    parser.add_argument('--max-age', type=float, default=60,
-                       help='Max age in minutes before auto-reindex (default: 60)')
+    parser.add_argument('--max-age', type=float, default=360,
+                       help='Max age in minutes before auto-reindex (default: 360)')
     parser.add_argument('--check-only', action='store_true',
                        help='Only check if reindex is needed, don\'t execute')
 

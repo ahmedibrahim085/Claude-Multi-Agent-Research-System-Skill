@@ -73,7 +73,7 @@ Task(
 
 Operation: incremental-reindex
 Directory: /path/to/project
-Max Age: 60  # minutes
+Max Age: 360  # minutes (6 hours)
 
 Execute smart auto-reindexing using scripts/incremental-reindex.
 This will detect changed files using Merkle tree, then auto-fallback to full reindex.
@@ -229,17 +229,17 @@ The semantic-search skill now automatically maintains index freshness via the Se
 |--------------|-------------|--------|----------|
 | `startup` / `resume` | Never indexed | **Full index** (background) | ~3 min |
 | `startup` / `resume` | Indexed before | **Smart reindex** (background) | ~5 sec (with Merkle tree) |
-| `startup` / `resume` | Last full <60min | **Smart reindex** (cooldown active) | ~5 sec (with Merkle tree) |
+| `startup` / `resume` | Last full <6 hours | **Smart reindex** (cooldown active) | ~5 sec (with Merkle tree) |
 | `clear` / `compact` | Any | **Skip** (no code changes) | N/A |
 
 **Key Benefits**:
 - ✅ **Automatic**: No manual reindexing required after code changes
 - ✅ **Smart**: Uses Merkle tree to detect when files changed, then auto-fallback to full reindex
-- ✅ **Efficient**: 60-minute cooldown prevents rapid full reindex spam
+- ✅ **Efficient**: 6-hour cooldown prevents rapid full reindex spam
 - ✅ **Non-blocking**: Background process, session starts immediately (<20ms overhead)
 - ✅ **Simple**: IndexFlatIP full reindex - proven, reliable (same as MCP)
 
-### 60-Minute Cooldown Protection
+### 6-Hour Cooldown Protection
 
 Prevents expensive full reindex spam during rapid restarts:
 
@@ -305,7 +305,7 @@ Window 3: Opens → No lock → Proceeds normally
   ```
 
 **Index State**: `~/.claude_code_search/projects/{project}_{hash}/index_state.json`
-- **Purpose**: Tracks indexing timestamps for 60-minute cooldown logic
+- **Purpose**: Tracks indexing timestamps for 6-hour cooldown logic
 - **Updated by**: `scripts/incremental-reindex` (after full index), `scripts/incremental-reindex` (after any index)
 - **Read by**: SessionStart hook (determine index type)
 - **Content**:
@@ -365,7 +365,7 @@ scripts/incremental-reindex /path/to/project --check-only
 **Background Indexing**:
 - Full index: ~3-10 minutes (IndexFlatIP auto-fallback, always happens)
 - Change detection: <1 second (Merkle tree)
-- Hook timeout: 50 seconds (will abort if changes detected → manual full reindex required)
+- Hook timeout: 50 seconds (will abort if index >6 hours old → manual full reindex required)
 - Hook never blocks: Process detached, survives IDE close
 
 **Cooldown Impact**:
@@ -415,7 +415,7 @@ scripts/incremental-reindex /path/to/project --project-name my-project --full
 **What it does**: Uses Merkle tree change detection to identify when files have changed. **Auto-fallback**: IndexFlatIP doesn't support incremental vector updates, so the script automatically performs a full reindex (clears index and rebuilds from scratch). This is the same approach used by MCP (proven, reliable, works on all platforms including Apple Silicon).
 
 ```bash
-# Auto-detect changes and reindex if >60min old (default)
+# Auto-detect changes and reindex if >360min old / 6 hours (default)
 scripts/incremental-reindex /path/to/project
 
 # Custom age threshold (reindex if >30min old)
