@@ -391,7 +391,7 @@ def _record_index_timestamp():
 
 - [x] startup + never indexed → Full index
 - [x] startup + indexed before → Incremental
-- [x] startup + last full <60min → Incremental (cooldown)
+- [x] startup + last full <360min (6hr) → Incremental (cooldown)
 - [x] resume + never indexed → Full index
 - [x] resume + indexed before → Incremental
 - [x] clear → Skip (no code changes)
@@ -424,7 +424,7 @@ def _record_index_timestamp():
 
 ### Calls:
 1. `.claude/skills/semantic-search/scripts/index --full {path}`
-   - Full index (first time or >60min + no index)
+   - Full index (first time or >360min (6 hours) + no index)
 
 2. `.claude/skills/semantic-search/scripts/incremental-reindex {path}`
    - Incremental index (typical case)
@@ -443,7 +443,7 @@ rm -rf ~/.claude_code_search/projects/Claude-Multi-Agent-Research-System-Skill_*
 # Test 2: Second startup (index exists)
 # Restart Claude Code → Should see incremental message
 
-# Test 3: Rapid restart (<60min)
+# Test 3: Rapid restart (<360min / 6 hours)
 rm -rf ~/.claude_code_search/projects/Claude-Multi-Agent-Research-System-Skill_*/index
 # Restart Claude Code immediately → Should see incremental (cooldown)
 
