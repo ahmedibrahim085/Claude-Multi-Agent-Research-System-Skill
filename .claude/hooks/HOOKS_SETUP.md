@@ -29,7 +29,7 @@ This guide explains how to configure the workflow enforcement hooks in Claude Co
 **SessionStart Hook** (Required):
 - **Matcher**: (leave empty)
 - **Command**: `python3 .claude/hooks/session-start.py`
-- **Description**: Auto-reindex semantic search (smart change detection, 60-min cooldown), session logging initialization, prerequisites checking, skill crash recovery
+- **Description**: Auto-reindex semantic search (smart change detection, 6-hour cooldown), session logging initialization, prerequisites checking, skill crash recovery
 
 ### Option 2: Via settings.json
 
@@ -156,7 +156,7 @@ If hooks fail with Python errors:
 ### SessionStart (Required)
 
 - **Auto-reindex semantic search**: Trigger-based logic (startup/resume/clear/compact) with smart change detection
-- **60-minute cooldown**: Prevents rapid full reindex spam during frequent restarts
+- **6-hour cooldown**: Prevents rapid full reindex spam during frequent restarts
 - **Concurrent protection**: PID-based lock files prevent duplicate indexing operations
 - **Prerequisites checking**: Validates semantic-search setup, enables conditional enforcement
 - **Session logging**: Initializes transcript, tool calls, and state tracking
