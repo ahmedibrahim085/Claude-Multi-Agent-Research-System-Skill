@@ -359,7 +359,7 @@ detects changes (Merkle tree) and only rebuilds when files actually changed.
   - **This is the default and RECOMMENDED approach**
 - **Max age parameter** (`--max-age MINUTES`):
   - Only reindex if snapshot older than N minutes
-  - Default: 60 minutes
+  - Default: 360 minutes (6 hours)
   - Use for hook-based auto-reindexing
   - Example: `incremental-reindex . --max-age 30` (only if >30min old)
 - **Performance expectations**:
@@ -399,7 +399,7 @@ You are the semantic-search-indexer agent.
 
 Operation: incremental-reindex
 Directory: /Users/user/projects/my-app
-Max Age: 60
+Max Age: 360
 
 Execute smart auto-reindexing using scripts/incremental-reindex.
 This will detect changed files using Merkle tree, then auto-fallback to full reindex.
@@ -407,7 +407,7 @@ Return statistics showing total chunks and files indexed.
 ```
 
 Your response should:
-1. Run: `~/.claude/skills/semantic-search/scripts/incremental-reindex /Users/user/projects/my-app --max-age 60`
+1. Run: `~/.claude/skills/semantic-search/scripts/incremental-reindex /Users/user/projects/my-app --max-age 360`
 2. Parse the JSON output (includes: full_index=true, files_indexed, chunks_added, total_chunks)
 3. Format as natural language emphasizing:
    - Smart change detection (Merkle tree)
