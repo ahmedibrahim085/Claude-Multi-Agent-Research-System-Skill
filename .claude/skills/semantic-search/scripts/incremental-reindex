@@ -9,7 +9,7 @@
 #   incremental-reindex PROJECT_PATH [--full] [--max-age MINUTES] [--check-only]
 #
 # Examples:
-#   incremental-reindex .                    # Incremental if >60min old
+#   incremental-reindex .                    # Incremental if >360min old (6 hours)
 #   incremental-reindex . --full             # Force full reindex
 #   incremental-reindex . --max-age 30       # Reindex if >30min old
 #   incremental-reindex . --check-only       # Only check, don't reindex

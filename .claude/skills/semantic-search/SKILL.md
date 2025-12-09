@@ -344,7 +344,7 @@ You can still manually trigger indexing operations:
 # Force full reindex (ignores cooldown, always does full)
 scripts/incremental-reindex /path/to/project --full
 
-# Smart incremental (respects age threshold, default 60min)
+# Smart incremental (respects age threshold, default 360min / 6 hours)
 scripts/incremental-reindex /path/to/project
 
 # Custom age threshold (reindex if >30min old)
