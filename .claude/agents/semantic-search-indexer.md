@@ -336,7 +336,7 @@ To create an index:
 3. Once complete, you can search using natural language queries
 
 The index only needs to be created once. After that, auto-reindex
-detects changes (Merkle tree) and only rebuilds when files actually changed.
+detects changes (Merkle tree) and performs full reindex when files actually changed.
 ```
 
 ---

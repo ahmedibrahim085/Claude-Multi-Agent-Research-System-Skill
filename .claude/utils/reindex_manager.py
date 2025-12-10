@@ -21,6 +21,7 @@ import hashlib
 import json
 import sys
 import os
+import signal
 import time
 from pathlib import Path
 from datetime import datetime, timezone
@@ -425,7 +426,10 @@ def _acquire_reindex_lock(project_path: Path) -> bool:
     Returns:
         True if lock acquired, False if another process is reindexing
     """
-    claim_file = get_project_storage_dir(project_path) / '.reindex_claim'
+    storage_dir = get_project_storage_dir(project_path)
+    claim_file = storage_dir / '.reindex_claim'
+    print(f"DEBUG _acquire_reindex_lock: claim_file = {claim_file}", file=sys.stderr)
+    print(f"DEBUG _acquire_reindex_lock: storage_dir exists = {storage_dir.exists()}", file=sys.stderr)
 
     # Check for existing claim (stale or active)
     if claim_file.exists():
@@ -538,36 +542,65 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
             return False
 
         # Acquire lock to prevent concurrent reindex (FIX: Issue #1)
-        if not _acquire_reindex_lock(project_path):
+        print(f"DEBUG: Attempting to acquire lock for {project_path}", file=sys.stderr)
+        lock_acquired = _acquire_reindex_lock(project_path)
+        print(f"DEBUG: Lock acquired = {lock_acquired}", file=sys.stderr)
+
+        if not lock_acquired:
             # Another process is reindexing, skip silently
             # FIX: Issue #15 - Return None to indicate "skipped" (not success/failure)
             # Prevents misleading "index updated" message when we didn't do anything
+            print(f"DEBUG: Skipping - another process has lock", file=sys.stderr)
             return None
 
+        proc = None
         try:
-            # Run synchronously with timeout (leave 10s buffer from 60s limit)
-            result = subprocess.run(
+            # CRITICAL FIX: Use Popen with start_new_session to create process group
+            # This allows killing the entire process group (bash wrapper + Python subprocess)
+            # without this, proc.kill() only kills bash wrapper, leaving Python orphaned
+            proc = subprocess.Popen(
                 [str(script), str(project_path)],
-                timeout=50,
-                capture_output=True,
-                text=True
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True  # Create new process group for clean termination
             )
 
-            if result.returncode == 0:
-                return True
-            else:
-                # Show error (not suppressed!)
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                print(f"⚠️  Index update failed: {error_msg[:300]}", file=sys.stderr)
+            try:
+                # Wait for completion with timeout
+                stdout, stderr = proc.communicate(timeout=50)
+
+                if proc.returncode == 0:
+                    return True
+                else:
+                    # Show error (not suppressed!)
+                    error_msg = stderr.strip() if stderr else "Unknown error"
+                    print(f"⚠️  Index update failed: {error_msg[:300]}", file=sys.stderr)
+                    return False
+            except subprocess.TimeoutExpired:
+                # CRITICAL: Kill ENTIRE PROCESS GROUP to terminate bash wrapper + Python subprocess
+                # proc.kill() only kills bash script, leaving Python subprocess orphaned
+                # Using process group ensures complete cleanup
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)  # Try graceful shutdown first
+                    time.sleep(0.5)  # Brief grace period
+                    os.killpg(proc.pid, signal.SIGKILL)  # Force kill if still alive
+                except ProcessLookupError:
+                    pass  # Process group already dead
+                proc.wait(timeout=5)  # Wait up to 5s for full cleanup
+
+                print(f"⚠️  Index update timed out (>50s)", file=sys.stderr)
+                print(f"   Subprocess terminated to prevent index corruption", file=sys.stderr)
+                print(f"   Occurs when index >6 hours old (age-based refresh limitation)", file=sys.stderr)
+                print(f"   Run manual full reindex: {script} --full {project_path}", file=sys.stderr)
                 return False
         finally:
-            # Always release lock, even if reindex failed
+            # Always release lock - safe now because subprocess killed in timeout handler
             _release_reindex_lock(project_path)
 
     except subprocess.TimeoutExpired:
-        print(f"⚠️  Index update timed out (>50s)", file=sys.stderr)
-        print(f"   Occurs when index >6 hours old (age-based refresh limitation)", file=sys.stderr)
-        print(f"   Run manual full reindex: {script} --full {project_path}", file=sys.stderr)
+        # This should never be reached (handled in inner try), but keep for safety
+        print(f"⚠️  Unexpected timeout in outer handler", file=sys.stderr)
         return False
 
     except PermissionError as e:

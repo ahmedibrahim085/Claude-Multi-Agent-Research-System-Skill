@@ -649,21 +649,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Setup lock file cleanup
-    project_path_obj = Path(args.project_path).resolve()
-    project_name = project_path_obj.name
-    project_hash = hashlib.md5(str(project_path_obj).encode()).hexdigest()[:8]
-    storage_dir = Path.home() / '.claude_code_search'
-    lock_file = storage_dir / 'projects' / f'{project_name}_{project_hash}' / 'indexing.lock'
-
     try:
-        # Update lock file with our PID (overwrite hook's PID)
-        if lock_file.exists():
-            try:
-                lock_file.write_text(str(os.getpid()))
-            except:
-                pass  # Non-critical
-
         indexer = FixedIncrementalIndexer(args.project_path)
 
         if args.check_only:
@@ -693,14 +679,6 @@ def main():
             'error': str(e)
         }, indent=2), file=sys.stderr)
         sys.exit(1)
-
-    finally:
-        # Clean up lock file
-        if lock_file.exists():
-            try:
-                lock_file.unlink()
-            except:
-                pass  # Non-critical if cleanup fails
 
 
 if __name__ == '__main__':
