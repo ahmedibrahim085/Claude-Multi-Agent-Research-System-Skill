@@ -1296,3 +1296,194 @@ def _reindex_on_session_start_core(trigger: str) -> None:
     except Exception as e:
         # Don't fail hook if auto-indexing fails
         print(f"⚠️  Auto-indexing error: {e}\n", file=sys.stderr)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 9: SESSION REINDEX STATE TRACKING (PHASE 3)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def record_session_reindex_event(trigger: str, result: str, details: dict = None) -> None:
+    """Record reindex event in session state for first-prompt UX
+
+    **Phase 3: Session Reindex State Tracking**
+
+    Purpose:
+    - Track when auto-reindex last ran in this session
+    - Show index freshness on first semantic-search use
+    - Detect timeout scenarios (SessionStart reindex >50s)
+    - Foundation for future async support (when Bug #1481 fixed)
+
+    Design Rationale:
+    - Synchronous architecture: No race condition (reindex completes before first prompt)
+    - Informational UX: "Index updated 5 minutes ago" messaging
+    - Graceful timeout handling: Show "May be stale, run manual reindex" on timeout
+    - Session-scoped: Clear state on Stop hook (fresh per session)
+
+    Args:
+        trigger: Reindex trigger source ("session_start", "stop_hook", "manual")
+        result: Reindex result ("success", "skipped", "failed", "timeout")
+        details: Optional dict with additional context (e.g., {"error": "..."})
+
+    State File: logs/state/session-reindex-tracking.json
+    Schema:
+        {
+            "session_id": "20251210_123456",
+            "last_reindex": {
+                "trigger": "session_start",
+                "result": "success",
+                "timestamp": "2025-12-10T12:34:56Z",
+                "details": {}
+            },
+            "first_semantic_search_shown": false
+        }
+    """
+    try:
+        import session_logger
+        state_file = Path("logs/state/session-reindex-tracking.json")
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+
+        session_id = session_logger.get_session_id()
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        # Load existing state or create new
+        if state_file.exists():
+            try:
+                state = json.loads(state_file.read_text())
+            except (json.JSONDecodeError, OSError):
+                state = {}
+        else:
+            state = {}
+
+        # Update with new reindex event
+        state.update({
+            "session_id": session_id,
+            "last_reindex": {
+                "trigger": trigger,
+                "result": result,
+                "timestamp": timestamp,
+                "details": details or {}
+            },
+            "first_semantic_search_shown": state.get("first_semantic_search_shown", False)
+        })
+
+        state_file.write_text(json.dumps(state, indent=2))
+
+    except Exception as e:
+        # Don't fail caller if state tracking fails
+        print(f"DEBUG: Failed to record session reindex event: {e}", file=sys.stderr)
+
+
+def get_session_reindex_info() -> dict:
+    """Get session reindex info for first-prompt UX
+
+    Returns:
+        dict with keys:
+            - has_info: bool - whether session reindex info exists
+            - trigger: str - reindex trigger source ("session_start", etc.)
+            - result: str - reindex result ("success", "timeout", etc.)
+            - timestamp: str - ISO timestamp of last reindex
+            - age_seconds: int - seconds since last reindex
+            - age_display: str - human-readable age ("5 minutes ago")
+            - details: dict - additional context
+    """
+    try:
+        state_file = Path("logs/state/session-reindex-tracking.json")
+
+        if not state_file.exists():
+            return {"has_info": False}
+
+        state = json.loads(state_file.read_text())
+        last_reindex = state.get("last_reindex", {})
+
+        if not last_reindex:
+            return {"has_info": False}
+
+        # Calculate age
+        timestamp_str = last_reindex.get("timestamp", "")
+        if timestamp_str:
+            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            age_seconds = int((datetime.now(timezone.utc) - timestamp).total_seconds())
+
+            # Human-readable age
+            if age_seconds < 60:
+                age_display = f"{age_seconds} seconds ago"
+            elif age_seconds < 3600:
+                minutes = age_seconds // 60
+                age_display = f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+            else:
+                hours = age_seconds // 3600
+                age_display = f"{hours} hour{'s' if hours != 1 else ''} ago"
+        else:
+            age_seconds = 0
+            age_display = "unknown"
+
+        return {
+            "has_info": True,
+            "trigger": last_reindex.get("trigger", "unknown"),
+            "result": last_reindex.get("result", "unknown"),
+            "timestamp": timestamp_str,
+            "age_seconds": age_seconds,
+            "age_display": age_display,
+            "details": last_reindex.get("details", {})
+        }
+
+    except Exception as e:
+        print(f"DEBUG: Failed to get session reindex info: {e}", file=sys.stderr)
+        return {"has_info": False}
+
+
+def should_show_first_prompt_status() -> bool:
+    """Check if we should show reindex status on first semantic-search use
+
+    Returns:
+        True if this is first semantic-search use in session and we have reindex info
+    """
+    try:
+        state_file = Path("logs/state/session-reindex-tracking.json")
+
+        if not state_file.exists():
+            return False
+
+        state = json.loads(state_file.read_text())
+
+        # Show if NOT yet shown AND we have reindex info
+        return (
+            not state.get("first_semantic_search_shown", False) and
+            bool(state.get("last_reindex"))
+        )
+
+    except Exception:
+        return False
+
+
+def mark_first_prompt_shown() -> None:
+    """Mark that we've shown first-prompt status (don't show again this session)"""
+    try:
+        state_file = Path("logs/state/session-reindex-tracking.json")
+
+        if not state_file.exists():
+            return
+
+        state = json.loads(state_file.read_text())
+        state["first_semantic_search_shown"] = True
+        state_file.write_text(json.dumps(state, indent=2))
+
+    except Exception as e:
+        # Don't fail caller if marking fails
+        print(f"DEBUG: Failed to mark first prompt shown: {e}", file=sys.stderr)
+
+
+def clear_session_reindex_state() -> None:
+    """Clear session reindex state (called by Stop hook)
+
+    Prepares for next session by removing tracking file.
+    Next SessionStart will create fresh state.
+    """
+    try:
+        state_file = Path("logs/state/session-reindex-tracking.json")
+        state_file.unlink(missing_ok=True)  # Python 3.8+ - no error if missing
+
+    except Exception as e:
+        # Don't fail Stop hook if cleanup fails
+        print(f"DEBUG: Failed to clear session reindex state: {e}", file=sys.stderr)

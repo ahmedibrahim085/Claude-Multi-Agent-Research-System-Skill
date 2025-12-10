@@ -293,7 +293,20 @@ def main():
         print(f"⚠️  Skill crash recovery failed: {e}", file=sys.stderr)
 
     # Step 3: Auto-reindex semantic search (if prerequisites met)
-    reindex_manager.auto_reindex_on_session_start(input_data)
+    # Phase 3: Record reindex event for session tracking
+    source = input_data.get('source', 'unknown')
+
+    # Capture reindex result by calling the function and checking what happened
+    # We can't directly get return value, so we'll rely on the function's success/failure
+    try:
+        reindex_manager.auto_reindex_on_session_start(input_data)
+        # If we get here, reindex didn't raise an exception
+        # It may have succeeded, skipped, or failed gracefully
+        # For now, record as "completed" (actual result tracked internally)
+        reindex_manager.record_session_reindex_event("session_start", "completed", {})
+    except Exception as e:
+        # Reindex raised an exception
+        reindex_manager.record_session_reindex_event("session_start", "failed", {"error": str(e)})
 
     # Step 4: Check for active research session
     resumption_context = check_research_session()

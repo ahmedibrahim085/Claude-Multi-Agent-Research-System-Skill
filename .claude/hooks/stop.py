@@ -138,6 +138,13 @@ def main():
         # Don't fail hook if reindexing fails
         print(f"Auto-reindex on stop failed: {e}", file=sys.stderr)
 
+    # Phase 3: Clear session reindex state (prepares for next session)
+    try:
+        reindex_manager.clear_session_reindex_state()
+    except Exception as e:
+        # Don't fail hook if cleanup fails
+        print(f"DEBUG: Failed to clear session reindex state: {e}", file=sys.stderr)
+
     sys.exit(0)
 
 

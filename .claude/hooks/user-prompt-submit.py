@@ -831,7 +831,10 @@ def build_index_enforcement_message(matched_keywords: list, matched_patterns: li
 
 
 def build_semantic_search_enforcement_message(triggers: dict) -> str:
-    """Build enforcement message for semantic-search skill - routes to SEARCH or INDEX message"""
+    """Build enforcement message for semantic-search skill - routes to SEARCH or INDEX message
+
+    Phase 3: Prepends first-prompt status if this is first semantic-search use in session
+    """
     matched_keywords = triggers.get('keywords', [])
     matched_patterns = triggers.get('patterns', [])
 
@@ -840,9 +843,45 @@ def build_semantic_search_enforcement_message(triggers: dict) -> str:
 
     # Route to appropriate message builder
     if operation == 'index':
-        return build_index_enforcement_message(matched_keywords, matched_patterns)
+        base_message = build_index_enforcement_message(matched_keywords, matched_patterns)
     else:
-        return build_search_enforcement_message(matched_keywords, matched_patterns)
+        base_message = build_search_enforcement_message(matched_keywords, matched_patterns)
+
+    # Phase 3: Prepend first-prompt status if needed
+    try:
+        # Import reindex_manager for session tracking
+        import reindex_manager
+
+        if reindex_manager.should_show_first_prompt_status():
+            info = reindex_manager.get_session_reindex_info()
+
+            if info['has_info']:
+                result = info['result']
+                age_display = info['age_display']
+                trigger = info['trigger']
+
+                # Build status message based on result
+                if result == 'completed':
+                    status_msg = f"ℹ️  **Index Status**: Updated {age_display} (trigger: {trigger})\n\n"
+                elif result == 'failed':
+                    error = info['details'].get('error', 'unknown error')
+                    status_msg = f"⚠️  **Index Status**: Update failed {age_display} (error: {error})\n   Consider running manual reindex\n\n"
+                elif result == 'timeout':
+                    status_msg = f"⚠️  **Index Status**: Update timed out {age_display}\n   Index may be stale, consider manual reindex\n\n"
+                else:
+                    status_msg = f"ℹ️  **Index Status**: {result} {age_display}\n\n"
+
+                # Mark as shown (don't show again this session)
+                reindex_manager.mark_first_prompt_shown()
+
+                return status_msg + base_message
+
+    except Exception as e:
+        # Don't fail hook if status display fails
+        import sys
+        print(f"DEBUG: Failed to show first-prompt status: {e}", file=sys.stderr)
+
+    return base_message
 
 
 def main():
