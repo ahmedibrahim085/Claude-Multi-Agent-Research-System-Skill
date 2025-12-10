@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 try:
     import state_manager
     import session_logger
+    import reindex_manager
 except ImportError as e:
     print(f"Failed to import utilities: {e}", file=sys.stderr)
     sys.exit(0)
@@ -127,6 +128,15 @@ def main():
                     print(f"Failed to write skill to session state: {e}", file=sys.stderr)
         except Exception as e:
             print(f"Failed to end skill: {e}", file=sys.stderr)
+
+    # Trigger auto-reindex on stop (batches all file changes from conversation turn)
+    # NEW Architecture: Replaces post-tool-use hook for better efficiency
+    # Stop hook fires once per conversation turn vs after every Write/Edit operation
+    try:
+        reindex_manager.reindex_on_stop()
+    except Exception as e:
+        # Don't fail hook if reindexing fails
+        print(f"Auto-reindex on stop failed: {e}", file=sys.stderr)
 
     sys.exit(0)
 

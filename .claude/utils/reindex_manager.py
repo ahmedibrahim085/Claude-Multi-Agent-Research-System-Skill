@@ -23,6 +23,7 @@ import sys
 import os
 import signal
 import time
+import random
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
@@ -443,8 +444,143 @@ def _acquire_reindex_lock(project_path: Path) -> bool:
                 except FileNotFoundError:
                     pass  # Another process removed it
             else:
-                # Recent claim, active reindex in progress
-                return False
+                # Recent claim - try to kill and restart (NEW: kill-and-restart architecture)
+                # Step 1: Parse PID from claim file
+                try:
+                    claim_content = claim_file.read_text().strip()
+                    pid = int(claim_content.split(':')[0])
+                except (ValueError, IndexError, FileNotFoundError, OSError) as e:
+                    # Corrupted or unreadable - remove and continue to atomic creation
+                    print(f"DEBUG: Corrupted claim file, removing: {e}", file=sys.stderr)
+                    try:
+                        claim_file.unlink()
+                    except FileNotFoundError:
+                        pass
+                    # Fall through to atomic creation (don't return here)
+                else:
+                    # Successfully parsed PID
+                    # Step 2: Verify PID is running incremental-reindex (SAFETY: prevent killing wrong process)
+                    process_verified = False
+                    try:
+                        result = subprocess.run(
+                            ['ps', '-p', str(pid), '-o', 'command='],
+                            capture_output=True,
+                            text=True,
+                            timeout=1
+                        )
+                        if result.returncode == 0:
+                            command = result.stdout.strip()
+                            # Kill-and-restart ONLY for incremental-reindex processes
+                            if 'incremental-reindex' in command:
+                                # Production reindex process - mark for kill-and-restart
+                                process_verified = True
+                                print(f"DEBUG: Verified PID {pid} running incremental-reindex", file=sys.stderr)
+                            else:
+                                # Process exists but is NOT incremental-reindex
+                                # This could be:
+                                # - Test process (pytest, multiprocessing worker, etc.)
+                                # - Unrelated process (PID genuinely reused)
+                                # SAFE: Respect the lock and return False (don't remove claim)
+                                # This prevents killing test processes and respects valid locks
+                                print(f"DEBUG: PID {pid} not incremental-reindex (cmd: {command[:80]}), respecting lock", file=sys.stderr)
+                                return False  # Abort - other process owns the lock
+                        else:
+                            # Process doesn't exist but claim is RECENT (<60s)
+                            # Process may have just finished - respect the lock window
+                            print(f"DEBUG: PID {pid} doesn't exist but claim is recent, respecting lock", file=sys.stderr)
+                            return False  # Respect recent claim even if process gone
+                    except Exception as e:
+                        # ps command failed - assume stale
+                        print(f"DEBUG: ps command failed ({e}), assuming stale claim", file=sys.stderr)
+                        try:
+                            claim_file.unlink()
+                        except:
+                            pass
+
+                    # Step 3: If process verified, try to kill it (max 3 retries with random delays)
+                    if process_verified:
+                        killed = False
+                        for attempt in range(3):
+                            print(f"DEBUG: Kill attempt {attempt + 1}/3 for PID {pid}", file=sys.stderr)
+                            try:
+                                # Try process group kill first (preferred - kills bash wrapper + Python subprocess)
+                                try:
+                                    os.killpg(pid, signal.SIGTERM)
+                                    time.sleep(0.5)
+                                    os.killpg(pid, signal.SIGKILL)
+                                    print(f"DEBUG: Sent SIGTERM+SIGKILL to process group {pid}", file=sys.stderr)
+                                except (ProcessLookupError, OSError) as e:
+                                    # Process group kill failed - try regular kill
+                                    print(f"DEBUG: Process group kill failed ({e}), trying regular kill", file=sys.stderr)
+                                    try:
+                                        os.kill(pid, signal.SIGTERM)
+                                        time.sleep(0.5)
+                                        os.kill(pid, signal.SIGKILL)
+                                        print(f"DEBUG: Sent SIGTERM+SIGKILL to process {pid}", file=sys.stderr)
+                                    except ProcessLookupError:
+                                        print(f"DEBUG: Process {pid} already dead", file=sys.stderr)
+                                    except PermissionError:
+                                        # Can't kill - not our process (DECISION: return False)
+                                        print(f"⚠️  Cannot kill reindex process {pid} (permission denied)", file=sys.stderr)
+                                        return False  # Skip reindex
+                                except PermissionError:
+                                    # Process group permission denied (DECISION: return False)
+                                    print(f"⚠️  Cannot kill reindex process group {pid} (permission denied)", file=sys.stderr)
+                                    return False  # Skip reindex
+
+                                # Verify process actually died (SAFETY: check before claiming success)
+                                time.sleep(0.2)  # Brief wait for process to die
+                                try:
+                                    os.kill(pid, 0)  # Check if process exists
+                                    # Process still alive!
+                                    print(f"DEBUG: Process {pid} still alive after kill", file=sys.stderr)
+                                    if attempt == 2:  # Last attempt (DECISION: return False after 3 attempts)
+                                        print(f"⚠️  Reindex process {pid} won't die after 3 attempts", file=sys.stderr)
+                                        return False  # Give up
+                                    time.sleep(0.5)  # Wait longer before retry
+                                    continue  # Retry
+                                except ProcessLookupError:
+                                    # Process dead - success!
+                                    print(f"DEBUG: Process {pid} successfully killed", file=sys.stderr)
+                                    killed = True
+
+                                # Remove claim file (best effort)
+                                try:
+                                    claim_file.unlink()
+                                    print(f"DEBUG: Removed claim file", file=sys.stderr)
+                                except FileNotFoundError:
+                                    pass  # Already gone
+                                except PermissionError as e:
+                                    # Can't remove - log but continue (atomic creation might fail)
+                                    print(f"⚠️  Cannot remove claim file: {e}", file=sys.stderr)
+
+                                # Random delay to prevent race conditions
+                                delay = random.uniform(0.1, 0.5)
+                                print(f"DEBUG: Random delay {delay:.3f}s", file=sys.stderr)
+                                time.sleep(delay)
+                                break  # Success - exit retry loop
+
+                            except ProcessLookupError:
+                                # Process already dead during kill
+                                print(f"DEBUG: Process {pid} already dead during kill", file=sys.stderr)
+                                try:
+                                    claim_file.unlink()
+                                except FileNotFoundError:
+                                    pass
+                                killed = True
+                                break  # Success
+
+                            except Exception as e:
+                                # Unexpected error
+                                if attempt == 2:  # Last attempt
+                                    print(f"⚠️  Failed to kill reindex after 3 attempts: {e}", file=sys.stderr)
+                                    return False  # Give up
+                                time.sleep(random.uniform(0.1, 0.5))
+
+                        if not killed:
+                            # All retries exhausted
+                            return False
+                    # else: process not verified (not running or wrong process), fall through to atomic creation
         except FileNotFoundError:
             # File removed between exists() and stat() - continue to create
             pass
@@ -955,6 +1091,136 @@ def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) 
             "decision": "skip",
             "reason": "exception",
             "details": {"file": file_name, "error": str(e)},
+            "timestamp": timestamp
+        }
+
+
+def reindex_on_stop(cooldown_seconds: Optional[int] = None) -> dict:
+    """Auto-reindex on stop hook (batches all changes from conversation turn)
+
+    NEW Architecture: Stop hook replaces post-tool-use hook for reindexing.
+    - OLD: Post-tool-use triggered after EVERY Write/Edit operation
+    - NEW: Stop hook triggers ONCE per conversation turn (when Claude finishes responding)
+    - BENEFIT: Batches multiple file changes into single reindex (50% reduction in trigger frequency)
+
+    Trigger Behavior (from official docs at code.claude.com/docs/en/hooks):
+    - Fires when "main Claude Code agent has finished responding"
+    - Does NOT fire "if stoppage occurred due to a user interrupt"
+    - Fires ONCE per conversation turn (NOT after each spawned agent)
+
+    Business Logic:
+    ━━━━━━━━━━━━━━━━
+    1. Prerequisites FALSE → Skip (manual setup not done yet)
+    2. Cooldown active → Skip (prevents rapid reindex on rapid conversation turns)
+    3. Index doesn't exist → Skip (run initial setup first)
+    4. All checks pass → Run auto-reindex with kill-and-restart
+
+    Differences from reindex_after_write():
+    - NO file filtering (stop hook doesn't have file_path context)
+    - KEEPS cooldown (prevents rapid reindex on rapid turns)
+    - KEEPS prerequisites check
+    - KEEPS index exists check
+
+    Args:
+        cooldown_seconds: Optional cooldown override (None = use config, default 300s)
+
+    Returns:
+        dict: Decision data with keys:
+            - decision: "skip" or "run"
+            - reason: Human-readable reason code
+            - details: Additional context
+            - timestamp: ISO timestamp of decision
+    """
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    try:
+        # Step 1: Check prerequisites
+        if not read_prerequisites_state():
+            return {
+                "decision": "skip",
+                "reason": "prerequisites_not_ready",
+                "details": {
+                    "trigger": "stop_hook",
+                    "state_file": "logs/state/semantic-search-prerequisites.json"
+                },
+                "timestamp": timestamp
+            }
+
+        # Step 2: Check cooldown (prevents rapid reindex on rapid conversation turns)
+        project_path = get_project_root()
+        config = get_reindex_config()
+        cooldown = cooldown_seconds if cooldown_seconds is not None else config['cooldown_seconds']
+
+        if not should_reindex_after_cooldown(project_path, cooldown):
+            last_reindex = get_last_reindex_time(project_path)
+            elapsed = 0
+            if last_reindex:
+                now = datetime.now(timezone.utc)
+                if last_reindex.tzinfo is None:
+                    last_reindex = last_reindex.replace(tzinfo=timezone.utc)
+                elapsed = (now - last_reindex).total_seconds()
+
+            return {
+                "decision": "skip",
+                "reason": "cooldown_active",
+                "details": {
+                    "trigger": "stop_hook",
+                    "cooldown_seconds": cooldown,
+                    "elapsed_seconds": int(elapsed),
+                    "remaining_seconds": int(cooldown - elapsed)
+                },
+                "timestamp": timestamp
+            }
+
+        # Step 3: Check if index exists
+        if not check_index_exists(project_path):
+            storage_dir = get_project_storage_dir(project_path)
+            return {
+                "decision": "skip",
+                "reason": "index_not_found",
+                "details": {
+                    "trigger": "stop_hook",
+                    "expected_index": str(storage_dir / "index" / "code.index")
+                },
+                "timestamp": timestamp
+            }
+
+        # Step 4: Run auto-reindex (with kill-and-restart)
+        print(f"🔄 Updating semantic search index (conversation turn ended)...")
+        result = run_incremental_reindex_sync(project_path)
+
+        # Handle None (skipped), True (success), False (failed)
+        if result is True:
+            print("✅ Semantic search index updated\n")
+            return {
+                "decision": "run",
+                "reason": "reindex_success",
+                "details": {"trigger": "stop_hook"},
+                "timestamp": timestamp
+            }
+        elif result is None:
+            # Skipped (another process is reindexing via kill-and-restart)
+            return {
+                "decision": "skip",
+                "reason": "concurrent_reindex",
+                "details": {"trigger": "stop_hook"},
+                "timestamp": timestamp
+            }
+        else:  # False
+            return {
+                "decision": "run",
+                "reason": "reindex_failed",
+                "details": {"trigger": "stop_hook"},
+                "timestamp": timestamp
+            }
+
+    except Exception as e:
+        # Don't fail hook if auto-indexing fails
+        print(f"⚠️  Auto-indexing error: {e}\n", file=sys.stderr)
+        return {
+            "decision": "skip",
+            "reason": "exception",
+            "details": {"trigger": "stop_hook", "error": str(e)},
             "timestamp": timestamp
         }
 
