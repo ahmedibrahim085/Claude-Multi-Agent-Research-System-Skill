@@ -217,26 +217,27 @@ You can verify an index exists using the `status` script or the `list-projects` 
 
 ## 🔄 Auto-Reindex System
 
-**Automatic Index Management** (New in v2.3.x)
+**Automatic Index Management** (Updated v3.0.x - First-Prompt Architecture)
 
-The semantic-search skill now automatically maintains index freshness via the SessionStart hook, eliminating the need for manual reindexing after code changes.
+The semantic-search skill now automatically maintains index freshness via the **First-Prompt hook**, eliminating the need for manual reindexing after code changes. The reindex runs in the **background** after your first prompt, allowing instant session startup.
 
 ### How It Works
 
-**Trigger-Based Logic**: The SessionStart hook analyzes the session type and index state to determine the optimal action:
+**Background Trigger Logic**: The first user prompt after session start spawns a detached background process that checks for changes and updates the index:
 
-| Session Type | Index State | Action | Duration |
-|--------------|-------------|--------|----------|
-| `startup` / `resume` | Never indexed | **Full index** (background) | ~3 min |
-| `startup` / `resume` | Indexed before | **Smart reindex** (background) | ~5 sec (with Merkle tree) |
-| `startup` / `resume` | Last full <6 hours | **Smart reindex** (cooldown active) | ~5 sec (with Merkle tree) |
-| `clear` / `compact` | Any | **Skip** (no code changes) | N/A |
+| Trigger | Index State | Action | Duration |
+|---------|-------------|--------|----------|
+| First prompt | Never indexed | **Full index** (background) | 3-10 min |
+| First prompt | Indexed before | **Smart reindex** (background) | 3-10 min (Merkle check: 3.5s) |
+| Post-write hook | File modified | **Incremental update** (synchronous) | ~2.7 sec |
+| Session start | Any | **State initialization only** | <100ms (no reindex) |
 
 **Key Benefits**:
+- ✅ **Instant Session Start**: Session starts in ~0.5s (no blocking on reindex)
+- ✅ **Background Processing**: Full reindex completes in 3-10 minutes while you work
 - ✅ **Automatic**: No manual reindexing required after code changes
-- ✅ **Smart**: Uses Merkle tree to detect when files changed, then auto-fallback to full reindex
-- ✅ **Efficient**: 6-hour cooldown prevents rapid full reindex spam
-- ✅ **Non-blocking**: Background process, session starts immediately (<20ms overhead)
+- ✅ **Smart**: Uses Merkle tree to detect when files changed (3.5s check)
+- ✅ **Non-blocking**: Hook exits in <100ms, background process continues independently
 - ✅ **Simple**: IndexFlatIP full reindex - proven, reliable (same as MCP)
 
 ### 6-Hour Cooldown Protection
@@ -289,7 +290,7 @@ Window 3: Opens → No lock → Proceeds normally
 **Prerequisites State**: `logs/state/semantic-search-prerequisites.json`
 - **Purpose**: Controls conditional enforcement in user-prompt-submit hook
 - **Updated by**: `scripts/check-prerequisites`
-- **Read by**: SessionStart hook (fast check, <5ms)
+- **Read by**: First-prompt hook (fast check, <5ms)
 - **Content**:
   ```json
   {
@@ -305,9 +306,9 @@ Window 3: Opens → No lock → Proceeds normally
   ```
 
 **Index State**: `~/.claude_code_search/projects/{project}_{hash}/index_state.json`
-- **Purpose**: Tracks indexing timestamps for 6-hour cooldown logic
-- **Updated by**: `scripts/incremental-reindex` (after full index), `scripts/incremental-reindex` (after any index)
-- **Read by**: SessionStart hook (determine index type)
+- **Purpose**: Tracks indexing timestamps and Merkle tree state
+- **Updated by**: `scripts/incremental_reindex.py` (after any reindex operation)
+- **Read by**: Background reindex process (determine if reindex needed)
 - **Content**:
   ```json
   {
@@ -356,21 +357,27 @@ scripts/incremental-reindex /path/to/project --check-only
 
 ### Performance Characteristics
 
-**Hook Overhead**: <20ms per session start
-- Prerequisites check: <5ms (single file read)
-- Index existence check: <5ms (single file check)
-- Timestamp check: <1ms (JSON parse)
-- Spawn background process: <5ms (detached, non-blocking)
+**Session Start**: ~0.5 seconds (no reindex blocking)
+- Setup & initialization: <400ms
+- Session logging: <50ms
+- State initialization: <50ms
 
-**Background Indexing**:
-- Full index: ~3-10 minutes (IndexFlatIP auto-fallback, always happens)
-- Change detection: <1 second (Merkle tree)
-- Hook timeout: 50 seconds (will abort if index >6 hours old → manual full reindex required)
-- Hook never blocks: Process detached, survives IDE close
+**First-Prompt Hook Overhead**: <100ms
+- Session state check: <10ms (single file read)
+- Background spawn: <50ms (Popen, detached, non-blocking)
+- State update: <10ms (mark as shown)
+- User message: <10ms (stdout print)
 
-**Cooldown Impact**:
-- Prevents: ~3 minutes wasted per rapid restart
-- Typical savings: 6-9 minutes per development session with frequent restarts
+**Background Reindex Process** (runs independently, 3-10 minutes):
+- Merkle tree change detection: 3.5 seconds
+- Full reindex (if changes detected): 3-10 minutes (IndexFlatIP)
+- Lock acquisition: <10ms (atomic file create)
+- Lock release: <1ms
+
+**Post-Write Hook** (synchronous, ~2.7 seconds):
+- Kill-and-restart lock: <50ms
+- Incremental reindex: ~2.7 seconds
+- User sees: "✅ Semantic search index updated"
 
 ### Troubleshooting
 

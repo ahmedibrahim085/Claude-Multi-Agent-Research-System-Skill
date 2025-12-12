@@ -22,6 +22,12 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import time
 
+# Add project utils to path for lock management
+# Script location: PROJECT_ROOT/.claude/skills/semantic-search/scripts/incremental_reindex.py
+# So __file__.parent.parent.parent.parent.parent = PROJECT_ROOT
+project_root = Path(__file__).parent.parent.parent.parent.parent
+sys.path.insert(0, str(project_root / '.claude' / 'utils'))
+
 # Add MCP to path
 sys.path.insert(0, str(Path.home() / ".local/share/claude-context-local"))
 
@@ -41,6 +47,16 @@ except ImportError as e:
         'success': False,
         'error': f'Failed to import dependencies: {e}',
         'hint': 'Ensure MCP server is installed at ~/.local/share/claude-context-local'
+    }, indent=2), file=sys.stderr)
+    sys.exit(1)
+
+# Import lock management from reindex_manager
+try:
+    import reindex_manager
+except ImportError as e:
+    print(json.dumps({
+        'success': False,
+        'error': f'Failed to import reindex_manager: {e}'
     }, indent=2), file=sys.stderr)
     sys.exit(1)
 
@@ -634,8 +650,9 @@ class FixedIncrementalIndexer:
             }
 
 def main():
-    """Main entry point"""
+    """Main entry point with lock management"""
     import argparse
+    from datetime import datetime, timezone
 
     parser = argparse.ArgumentParser(
         description='Incremental reindex with IndexFlatIP (auto-fallback to full reindex)'
@@ -648,7 +665,41 @@ def main():
                        help='Only check if reindex is needed, don\'t execute')
 
     args = parser.parse_args()
+    project_path = Path(args.project_path).resolve()
 
+    # Track operation for logging
+    operation_id = None
+    start_time = datetime.now(timezone.utc).isoformat()
+    result = None
+    exit_code = 0
+
+    # CRITICAL: Acquire lock to prevent concurrent reindex
+    # If lock held by another process, exit immediately with "skipped" status
+    # Use kill_if_held=False to skip (not kill) if another reindex is running
+    lock_acquired = reindex_manager._acquire_reindex_lock(project_path, kill_if_held=False)
+
+    if not lock_acquired:
+        # Another reindex is running, skip silently (no logging needed - parent already logged skip)
+        result = {
+            'success': True,
+            'skipped': True,
+            'reason': 'Another reindex process is running',
+            'time_taken': 0
+        }
+        print(json.dumps(result, indent=2))
+        sys.exit(0)
+
+    # Lock acquired - log operation start (for background processes, parent already logged)
+    # But log here too for manual invocations or if parent logging failed
+    operation_id = reindex_manager.log_reindex_start(
+        trigger='script-direct',  # Will be overridden by parent's log if spawned
+        mode='background',
+        pid=os.getpid(),
+        kill_if_held=False,
+        skipped=False
+    )
+
+    # Lock acquired - proceed with reindex
     try:
         indexer = FixedIncrementalIndexer(args.project_path)
 
@@ -671,14 +722,38 @@ def main():
                 result = indexer.auto_reindex(force_full=args.full)
 
         print(json.dumps(result, indent=2))
-        sys.exit(0 if result.get('success', True) else 1)
+        exit_code = 0 if result.get('success', True) else 1
 
     except Exception as e:
-        print(json.dumps({
+        result = {
             'success': False,
             'error': str(e)
-        }, indent=2), file=sys.stderr)
-        sys.exit(1)
+        }
+        print(json.dumps(result, indent=2), file=sys.stderr)
+        exit_code = 1
+
+    finally:
+        # Log operation end (NEW: Forensic diagnostics)
+        if operation_id and start_time:
+            status = 'completed' if exit_code == 0 else 'failed'
+            index_updated = result and result.get('success', False) and not result.get('skipped', False)
+            files_changed = result.get('files_changed') if result else None
+            error_message = result.get('error') if result and not result.get('success', False) else None
+
+            reindex_manager.log_reindex_end(
+                operation_id=operation_id,
+                start_timestamp=start_time,
+                status=status,
+                exit_code=exit_code,
+                index_updated=index_updated,
+                files_changed=files_changed,
+                error_message=error_message
+            )
+
+        # CRITICAL: Always release lock, even if reindex failed
+        reindex_manager._release_reindex_lock(project_path)
+
+        sys.exit(exit_code)
 
 
 if __name__ == '__main__':
