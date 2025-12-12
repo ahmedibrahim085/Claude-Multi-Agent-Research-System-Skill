@@ -93,9 +93,10 @@ ADRs document significant architectural decisions, their rationale, alternatives
 ## Related Documentation
 
 **Implementation**:
-- `.claude/utils/reindex_manager.py` - Direct script execution logic
+- `.claude/utils/reindex_manager.py` - Script execution logic (background + sync)
 - `.claude/agents/semantic-search-indexer.md` - Agent definition
-- `.claude/hooks/session-start-index.py` - Session start hook
+- `.claude/hooks/first-prompt-reindex.py` - First-prompt hook (background trigger)
+- `.claude/hooks/session-start.py` - Session start hook (state initialization)
 - `.claude/hooks/post-tool-use-track-research.py` - Post-write hook
 
 **Testing**:

@@ -1,33 +1,36 @@
 # Auto-Reindex Design: Quick Reference
 
-**Last Updated**: 2025-12-03
+**Last Updated**: 2025-12-11 (First-Prompt Architecture)
 **Full ADR**: [ADR-001: Direct Script vs Agent](./ADR-001-direct-script-vs-agent-for-auto-reindex.md)
 
 ---
 
 ## TL;DR
 
-**Automatic reindex uses direct bash scripts (fast, free, reliable)**
+**Automatic reindex uses background processes (first-prompt) and direct scripts (post-write)**
 **Manual reindex uses semantic-search-indexer agent (intelligent, interactive)**
+
+**NEW (2025-12-11)**: First-prompt trigger for background reindex (0.5s session start, 3-10min background completion)
 
 ---
 
 ## When to Use What
 
-### ✅ Use Direct Script (Current Implementation)
+### ✅ Use Background/Direct Scripts (Current Implementation)
 
 **Automatic Operations:**
-- Session start reindex
-- Post-file-modification reindex (Write/Edit tools)
+- **First-prompt reindex** (background, detached process)
+- **Post-file-modification reindex** (synchronous, kill-and-restart)
+- **Session start** (state initialization only, no reindex)
 - Any hook-based operation
-- Background maintenance
 
 **Why:**
-- **5x faster** (2.7s vs 14.6s)
+- **Instant session start** (0.5s vs 50s timeout before)
+- **Non-blocking** (<100ms hook overhead)
+- **Complete background** (3-10 minutes, no timeout)
 - **$0 cost** (vs $144/year per 10 devs)
 - **Works offline**
 - **Predictable** (same behavior every time)
-- **Safe** (won't timeout hooks)
 
 ---
 
@@ -50,26 +53,51 @@
 
 ## Performance Comparison
 
-| Metric | Direct Script | Agent | Winner |
-|--------|---------------|-------|--------|
-| **Speed** | 2.7s | 14.6s | Script (5.4x) |
-| **Cost** | $0.00 | $0.02/run | Script ($144/yr savings) |
-| **Offline** | ✅ Yes | ❌ No | Script |
-| **Predictable** | ✅ Yes | ⚠️ Variable | Script |
-| **Timeout Risk** | ✅ Low | ⚠️ Medium | Script |
-| **Intelligence** | ❌ Low | ✅ High | Agent |
-| **Rich Output** | ❌ Minimal | ✅ Detailed | Agent |
+| Metric | Background Script (First-Prompt) | Sync Script (Post-Write) | Agent | Winner |
+|--------|----------------------------------|---------------------------|-------|--------|
+| **Session Start** | 0.5s (no blocking) | N/A | 14.6s | Background (29x) |
+| **Hook Overhead** | <100ms | 2.7s | 14.6s | Background (146x) |
+| **Completion Time** | 3-10 min (async) | 2.7s | 14.6s | Sync (5.4x) |
+| **Cost** | $0.00 | $0.00 | $0.02/run | Scripts ($144/yr savings) |
+| **Offline** | ✅ Yes | ✅ Yes | ❌ No | Scripts |
+| **Timeout Risk** | ✅ None | ✅ Low | ⚠️ Medium | Scripts |
+| **Intelligence** | ❌ Low | ❌ Low | ✅ High | Agent |
+| **Rich Output** | ❌ Minimal | ❌ Minimal | ✅ Detailed | Agent |
 
 ---
 
 ## Code Examples
 
-### Auto-Reindex (Direct Script) ✓
+### First-Prompt Background Reindex ✓
+
+```python
+# .claude/hooks/first-prompt-reindex.py
+def main():
+    if not reindex_manager.should_show_first_prompt_status():
+        sys.exit(0)
+
+    # Spawn detached background process
+    reindex_manager.spawn_background_reindex(project_root)
+    reindex_manager.mark_first_prompt_shown()
+    print("🔄 Checking for index updates in background...")
+```
+
+**User Experience:**
+```
+[Session starts in 0.5s]
+User: "show me the login code"
+🔄 Checking for index updates in background...
+[Hook exits in <100ms, background runs 3-10 min]
+```
+
+---
+
+### Post-Write Synchronous Reindex ✓
 
 ```python
 # .claude/utils/reindex_manager.py
 def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
-    """Fast, direct execution for automatic operations"""
+    """Fast, direct execution for post-write operations"""
     script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'incremental-reindex'
 
     result = subprocess.run(
@@ -84,7 +112,7 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
 
 **Output:**
 ```
-🔄 Updating semantic search index...
+🔄 Updating semantic search index (file modified: main.py)...
 ✅ Semantic search index updated
 ```
 
@@ -324,9 +352,10 @@ User can:
 - [ADR-001: Direct Script vs Agent for Auto-Reindex](./ADR-001-direct-script-vs-agent-for-auto-reindex.md)
 
 **Implementation:**
-- `.claude/utils/reindex_manager.py` - Direct script execution
+- `.claude/utils/reindex_manager.py` - Script execution (background + sync)
 - `.claude/agents/semantic-search-indexer.md` - Agent definition
-- `.claude/hooks/session-start-index.py` - Session start hook
+- `.claude/hooks/first-prompt-reindex.py` - First-prompt hook (background trigger)
+- `.claude/hooks/session-start.py` - Session start hook (state init only)
 - `.claude/hooks/post-tool-use-track-research.py` - Post-write hook
 
 **Testing:**

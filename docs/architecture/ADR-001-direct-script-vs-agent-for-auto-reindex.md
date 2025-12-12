@@ -1,9 +1,9 @@
 # ADR-001: Direct Script vs Agent for Auto-Reindex Operations
 
-**Status**: ✅ Accepted
-**Date**: 2025-12-03
+**Status**: ✅ Accepted (Updated 2025-12-11 for first-prompt architecture)
+**Date**: 2025-12-03 (Last Updated: 2025-12-11)
 **Decision Makers**: Architecture Review
-**Impact**: Core auto-reindex implementation (session-start, post-modification hooks)
+**Impact**: Core auto-reindex implementation (first-prompt trigger, post-modification hooks)
 
 ---
 
@@ -11,10 +11,10 @@
 
 The semantic search skill requires automatic reindexing in two scenarios:
 
-1. **Session Start**: When Claude Code starts, check for file changes and update index
+1. **First Prompt**: On first user prompt after session start, trigger background reindex to check for file changes and update index
 2. **Post-Modification**: After user creates or edits files (Write/Edit tools), update index to reflect changes
 
-These operations must run in hooks (60-second timeout) and execute frequently (potentially 10+ times per day).
+These operations must run in hooks with minimal user impact and execute frequently (potentially 10+ times per day).
 
 ### The Question
 
@@ -330,23 +330,25 @@ if result.failed and time_allows:
 │                                                              │
 │  AUTOMATIC OPERATIONS (Background)                          │
 │  ┌────────────────────────────────────────────────────┐    │
-│  │ Session Start Hook                                 │    │
-│  │ └─> reindex_manager.auto_reindex_on_session_start()│   │
-│  │     └─> run_incremental_reindex_sync()            │    │
-│  │         └─> DIRECT SCRIPT ✓                        │    │
-│  │             └─ scripts/incremental-reindex         │    │
+│  │ First-Prompt Hook (UserPromptSubmit)               │    │
+│  │ └─> reindex_manager.spawn_background_reindex()    │    │
+│  │     └─> subprocess.Popen (DETACHED)               │    │
+│  │         └─> BACKGROUND SCRIPT ✓                    │    │
+│  │             └─ scripts/incremental_reindex.py      │    │
+│  │                 └─ Full reindex (3-10 min)         │    │
 │  └────────────────────────────────────────────────────┘    │
 │                                                              │
 │  ┌────────────────────────────────────────────────────┐    │
-│  │ Post-Write Hook                                    │    │
+│  │ Post-Write Hook (ToolUse)                          │    │
 │  │ └─> reindex_manager.reindex_after_write()          │    │
 │  │     └─> run_incremental_reindex_sync()            │    │
-│  │         └─> DIRECT SCRIPT ✓                        │    │
+│  │         └─> DIRECT SCRIPT ✓ (synchronous)         │    │
 │  │             └─ scripts/incremental-reindex         │    │
 │  └────────────────────────────────────────────────────┘    │
 │                                                              │
 │  Characteristics:                                           │
-│  - Execution: 2.7 seconds                                  │
+│  - First-Prompt: <100ms hook, background completes async   │
+│  - Post-Write: 2.7 seconds (synchronous, kill-and-restart) │
 │  - Cost: $0.00                                             │
 │  - Reliability: High (deterministic)                       │
 │  - Works offline: Yes                                      │
@@ -376,16 +378,20 @@ if result.failed and time_allows:
 **Direct Script Path:**
 ```
 .claude/utils/reindex_manager.py
-  ├─ run_incremental_reindex_sync()     ← Direct subprocess.run()
+  ├─ spawn_background_reindex()         ← Background Popen (first-prompt)
+  ├─ run_incremental_reindex_sync()     ← Direct subprocess.run() (post-write)
   ├─ reindex_after_write()              ← Called by post-write hook
-  └─ auto_reindex_on_session_start()    ← Called by session-start hook
+  ├─ initialize_session_state()         ← Called by session-start hook
+  └─ auto_reindex_on_session_start()    ← ⚠️ DEPRECATED (not used)
 
 .claude/hooks/
-  ├─ session-start-index.py             ← Invokes reindex_manager
+  ├─ first-prompt-reindex.py            ← Spawns background reindex
+  ├─ session-start.py                   ← Initializes session state only
   └─ post-tool-use-track-research.py    ← Invokes reindex_manager
 
 .claude/skills/semantic-search/scripts/
-  └─ incremental-reindex                ← Bash script (auto-fallback, direct)
+  ├─ incremental_reindex.py             ← Python script (background + sync)
+  └─ incremental-reindex                ← Bash wrapper (legacy, still works)
 ```
 
 **Agent Path:**
@@ -465,7 +471,7 @@ Variance:           ±2.0s (variable based on agent)
 ### Use Direct Script ✓
 
 **Scenarios:**
-- ✅ Session start reindex (automatic)
+- ✅ First-prompt reindex (automatic, background)
 - ✅ Post-file-write reindex (automatic)
 - ✅ Any hook-based operation (timeout constraints)
 - ✅ Background maintenance (user not watching)
@@ -505,18 +511,27 @@ Variance:           ±2.0s (variable based on agent)
 
 ## Examples
 
-### Example 1: Session Start (Auto-Reindex)
+### Example 1: First Prompt (Background Auto-Reindex)
 
-**User Action:** Opens Claude Code
+**User Action:** Opens Claude Code, then sends first prompt
 
 **Implementation:**
 ```python
-# .claude/hooks/session-start-index.py
+# .claude/hooks/first-prompt-reindex.py
 def main():
     input_data = json.loads(sys.stdin.read())
 
-    # Direct script approach ✓
-    reindex_manager.auto_reindex_on_session_start(input_data)
+    # Check if this is first prompt
+    if not reindex_manager.should_show_first_prompt_status():
+        sys.exit(0)
+
+    # Spawn background reindex (non-blocking)
+    reindex_manager.spawn_background_reindex(project_root)
+
+    # Mark as processed
+    reindex_manager.mark_first_prompt_shown()
+
+    print("🔄 Checking for index updates in background...")
 
     # NOT using agent ❌
     # task_tool_spawn('semantic-search-indexer', ...)
@@ -524,16 +539,18 @@ def main():
 
 **Execution:**
 ```
-🔄 Updating semantic search index...
-[2.7s execution via direct script]
-✅ Semantic search index updated
+[Session starts in 0.5s]
+User sends first prompt
+🔄 Checking for index updates in background...
+[Hook exits in <100ms, background process continues 3-10 min]
 ```
 
-**Why Direct Script:**
-- User just opened IDE, wants to start working immediately
-- 2.7s barely noticeable
+**Why Background Script:**
+- User wants to start working immediately (0.5s session start)
+- Hook overhead imperceptible (<100ms)
+- Full reindex completes in background (3-10 minutes)
 - Background operation, no interaction needed
-- Happens multiple times per day (cost would accumulate)
+- Happens multiple times per day (cost would accumulate if using agent)
 
 ---
 
@@ -616,13 +633,17 @@ if tool_name in ['Write', 'Edit']:
 
 ### Performance Validation
 
-**Test 1: Session Start Reindex**
+**Test 1: First-Prompt Background Reindex**
 ```bash
-# Measure execution time
-time .claude/hooks/session-start-index.py < test_input.json
+# Test hook spawn (should exit in <100ms)
+time echo '{}' | .claude/hooks/first-prompt-reindex.py
 
-Result: 2.74 seconds ✓
-Expected: < 5 seconds ✓
+# Monitor background process
+ps aux | grep incremental_reindex.py
+
+Result: Hook exits in <100ms ✓
+Background process: Completes in 3-10 minutes ✓
+Expected: Hook < 1 second, no session blocking ✓
 Status: PASS
 ```
 
@@ -658,7 +679,7 @@ Status: PASS (safe)
 ```python
 # Simulate full work day
 day_events = [
-    'session_start',      # 1 reindex
+    'first_prompt',       # 1 background reindex
     'edit_file_1',        # Cooldown active, skip
     'edit_file_2',        # Cooldown active, skip
     # ... 15 more edits (cooldown)
@@ -794,9 +815,9 @@ if script_failed and not in_hook:
 ### Related Documentation
 
 - **Implementation**: `.claude/utils/reindex_manager.py`
-- **Hooks**: `.claude/hooks/session-start-index.py`, `post-tool-use-track-research.py`
+- **Hooks**: `.claude/hooks/first-prompt-reindex.py` (background), `.claude/hooks/session-start.py` (state init), `post-tool-use-track-research.py` (post-write)
 - **Agent**: `.claude/agents/semantic-search-indexer.md`
-- **Scripts**: `.claude/skills/semantic-search/scripts/incremental-reindex`
+- **Scripts**: `.claude/skills/semantic-search/scripts/incremental_reindex.py`, `incremental-reindex` (bash wrapper)
 - **Testing**: `docs/guides/incremental-reindex-validation.md`
 - **Architecture**: `docs/implementation/comprehensive-architecture-audit-20251201.md`
 
