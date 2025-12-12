@@ -65,6 +65,7 @@ docs/design-docs/
 .claude/skills/semantic-search/.code-search-index/
 .claude/skills/semantic-search/__pycache__/
 .claude/skills/semantic-search/scripts/logs/
+.claude/skills/semantic-search/logs/
 
 # User-specific working documents (verification reports, bug fixes)
 # Keep directory structure, ignore all contents
