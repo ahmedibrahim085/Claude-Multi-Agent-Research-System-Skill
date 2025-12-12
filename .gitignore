@@ -65,3 +65,10 @@ docs/design-docs/
 .claude/skills/semantic-search/.code-search-index/
 .claude/skills/semantic-search/__pycache__/
 .claude/skills/semantic-search/scripts/logs/
+
+# User-specific working documents (verification reports, bug fixes)
+# Keep directory structure, ignore all contents
+docs/testing/*
+!docs/testing/.gitkeep
+docs/fixes/*
+!docs/fixes/.gitkeep
