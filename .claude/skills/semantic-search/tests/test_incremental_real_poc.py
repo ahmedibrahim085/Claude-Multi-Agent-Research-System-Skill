@@ -369,6 +369,8 @@ def main():
     test_dir = Path(tempfile.mkdtemp(prefix="incremental_poc_"))
     print(f"\nTest directory: {test_dir}")
 
+    tester = None  # Track tester for cleanup
+
     try:
         # Create initial test files
         print("\nSetting up test files...")
@@ -415,7 +417,7 @@ def validate_email(email):
 
         print("  ✓ Created 3 initial Python files")
 
-        # Initialize tester
+        # Initialize tester (stored for cleanup)
         tester = IncrementalIndexTester(test_dir)
 
         # Run tests
@@ -535,7 +537,17 @@ def verify_hash(username, password_hash):
         return 1
 
     finally:
-        # Cleanup
+        # CRITICAL: Cleanup embedding model BEFORE directory cleanup
+        # to prevent multiprocessing leak and SIGSEGV crash
+        if tester is not None:
+            print("\nCleaning up embedding model...")
+            try:
+                tester.embedder.cleanup()
+                print("  ✓ Embedding model cleaned up")
+            except Exception as e:
+                print(f"  ⚠ Cleanup warning: {e}")
+
+        # Cleanup test directory
         print(f"\nCleaning up test directory: {test_dir}")
         shutil.rmtree(test_dir, ignore_errors=True)
 
