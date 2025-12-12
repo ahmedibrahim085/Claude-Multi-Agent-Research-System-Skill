@@ -390,7 +390,175 @@ def get_last_reindex_time(project_path: Path) -> Optional[datetime]:
 # SECTION 4: REINDEX EXECUTION
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _acquire_reindex_lock(project_path: Path) -> bool:
+def _kill_existing_reindex_process(project_path: Path) -> bool:
+    """Kill existing reindex process if found (parent-only operation, does NOT acquire lock).
+
+    Architectural Role:
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    This is a PARENT-ONLY function for implementing kill-if-held behavior.
+    - Used by run_incremental_reindex_sync when kill_if_held=True
+    - Kills existing process but does NOT acquire lock
+    - Subprocess will acquire lock after parent spawns it
+
+    Clean Separation of Concerns:
+    - Parent: Decides whether to kill (this function)
+    - Subprocess: Acquires lock, runs reindex, releases lock
+    - No shared lock ownership!
+
+    Args:
+        project_path: Path to project
+
+    Returns:
+        True if killed or no process found, False if failed to kill
+    """
+    storage_dir = get_project_storage_dir(project_path)
+    claim_file = storage_dir / '.reindex_claim'
+
+    # Check if claim file exists
+    if not claim_file.exists():
+        return True  # No process running
+
+    try:
+        # Check age
+        age = time.time() - claim_file.stat().st_mtime
+        if age > 60:
+            # Stale claim (process crashed or timed out) - remove it
+            try:
+                claim_file.unlink()
+            except FileNotFoundError:
+                pass
+            return True
+
+        # Recent claim - try to kill the process
+        # Step 1: Parse PID from claim file
+        try:
+            claim_content = claim_file.read_text().strip()
+            pid = int(claim_content.split(':')[0])
+        except (ValueError, IndexError, FileNotFoundError, OSError) as e:
+            # Corrupted or unreadable - remove and return success
+            print(f"DEBUG: Corrupted claim file, removing: {e}", file=sys.stderr)
+            try:
+                claim_file.unlink()
+            except FileNotFoundError:
+                pass
+            return True
+
+        # Step 2: Verify PID is running incremental-reindex
+        process_verified = False
+        try:
+            result = subprocess.run(
+                ['ps', '-p', str(pid), '-o', 'command='],
+                capture_output=True,
+                text=True,
+                timeout=1
+            )
+            if result.returncode == 0:
+                command = result.stdout.strip()
+                if 'incremental-reindex' in command or 'incremental_reindex.py' in command:
+                    process_verified = True
+                    print(f"DEBUG: Verified PID {pid} running incremental-reindex", file=sys.stderr)
+                else:
+                    # Not our process - don't kill it
+                    print(f"DEBUG: PID {pid} not incremental-reindex (cmd: {command[:80]}), not killing", file=sys.stderr)
+                    return False
+            else:
+                # Process doesn't exist - remove stale claim
+                try:
+                    claim_file.unlink()
+                except FileNotFoundError:
+                    pass
+                return True
+        except Exception as e:
+            print(f"DEBUG: ps command failed ({e}), removing claim file", file=sys.stderr)
+            try:
+                claim_file.unlink()
+            except:
+                pass
+            return True
+
+        # Step 3: Kill the verified process (max 3 retries)
+        if process_verified:
+            killed = False
+            for attempt in range(3):
+                print(f"DEBUG: Kill attempt {attempt + 1}/3 for PID {pid}", file=sys.stderr)
+                try:
+                    # Try process group kill first
+                    try:
+                        os.killpg(pid, signal.SIGTERM)
+                        time.sleep(0.5)
+                        os.killpg(pid, signal.SIGKILL)
+                        print(f"DEBUG: Sent SIGTERM+SIGKILL to process group {pid}", file=sys.stderr)
+                    except (ProcessLookupError, OSError) as e:
+                        # Try regular kill
+                        print(f"DEBUG: Process group kill failed ({e}), trying regular kill", file=sys.stderr)
+                        try:
+                            os.kill(pid, signal.SIGTERM)
+                            time.sleep(0.5)
+                            os.kill(pid, signal.SIGKILL)
+                            print(f"DEBUG: Sent SIGTERM+SIGKILL to process {pid}", file=sys.stderr)
+                        except ProcessLookupError:
+                            print(f"DEBUG: Process {pid} already dead", file=sys.stderr)
+                        except PermissionError:
+                            print(f"⚠️  Cannot kill reindex process {pid} (permission denied)", file=sys.stderr)
+                            return False
+                    except PermissionError:
+                        print(f"⚠️  Cannot kill reindex process group {pid} (permission denied)", file=sys.stderr)
+                        return False
+
+                    # Verify process died
+                    time.sleep(0.2)
+                    try:
+                        os.kill(pid, 0)  # Check if exists
+                        print(f"DEBUG: Process {pid} still alive after kill", file=sys.stderr)
+                        if attempt == 2:
+                            print(f"⚠️  Reindex process {pid} won't die after 3 attempts", file=sys.stderr)
+                            return False
+                        time.sleep(0.5)
+                        continue
+                    except ProcessLookupError:
+                        # Process dead!
+                        print(f"DEBUG: Process {pid} successfully killed", file=sys.stderr)
+                        killed = True
+
+                    # Remove claim file
+                    try:
+                        claim_file.unlink()
+                        print(f"DEBUG: Removed claim file", file=sys.stderr)
+                    except FileNotFoundError:
+                        pass
+                    except PermissionError as e:
+                        print(f"⚠️  Cannot remove claim file: {e}", file=sys.stderr)
+
+                    time.sleep(random.uniform(0.1, 0.5))
+                    break
+
+                except ProcessLookupError:
+                    # Already dead
+                    try:
+                        claim_file.unlink()
+                    except FileNotFoundError:
+                        pass
+                    killed = True
+                    break
+                except Exception as e:
+                    if attempt == 2:
+                        print(f"⚠️  Failed to kill reindex after 3 attempts: {e}", file=sys.stderr)
+                        return False
+                    time.sleep(random.uniform(0.1, 0.5))
+
+            return killed
+
+        return True
+
+    except FileNotFoundError:
+        # Claim file disappeared
+        return True
+    except Exception as e:
+        print(f"DEBUG: Unexpected error in kill process: {e}", file=sys.stderr)
+        return False
+
+
+def _acquire_reindex_lock(project_path: Path, kill_if_held: bool = True) -> bool:
     """Try to acquire reindex lock using atomic claim file.
 
     Concurrency Control (FIX: Issue #1 - Prevents index corruption):
@@ -444,7 +612,10 @@ def _acquire_reindex_lock(project_path: Path) -> bool:
                 except FileNotFoundError:
                     pass  # Another process removed it
             else:
-                # Recent claim - try to kill and restart (NEW: kill-and-restart architecture)
+                # Recent claim (<60s) - behavior depends on kill_if_held parameter
+                # kill_if_held=True: Kill and restart (synchronous hook context)
+                # kill_if_held=False: Skip if process running (background script context)
+
                 # Step 1: Parse PID from claim file
                 try:
                     claim_content = claim_file.read_text().strip()
@@ -471,10 +642,16 @@ def _acquire_reindex_lock(project_path: Path) -> bool:
                         if result.returncode == 0:
                             command = result.stdout.strip()
                             # Kill-and-restart ONLY for incremental-reindex processes
-                            if 'incremental-reindex' in command:
-                                # Production reindex process - mark for kill-and-restart
+                            # Check for both hyphen (bash script) and underscore (Python script)
+                            if 'incremental-reindex' in command or 'incremental_reindex.py' in command:
+                                # Production reindex process found
                                 process_verified = True
                                 print(f"DEBUG: Verified PID {pid} running incremental-reindex", file=sys.stderr)
+
+                                # If kill_if_held=False, just skip (don't kill)
+                                if not kill_if_held:
+                                    print(f"DEBUG: Another reindex running (PID {pid}), skipping (kill_if_held=False)", file=sys.stderr)
+                                    return False
                             else:
                                 # Process exists but is NOT incremental-reindex
                                 # This could be:
@@ -624,7 +801,7 @@ def _release_reindex_lock(project_path: Path) -> None:
         pass
 
 
-def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
+def run_incremental_reindex_sync(project_path: Path, kill_if_held: bool = True, trigger: str = 'unknown') -> Optional[bool]:
     """Run auto-reindex synchronously (IndexFlatIP auto-fallback: full reindex only, visible errors)
 
     Design Rationale:
@@ -647,12 +824,14 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
       * IndexFlatIP bug went undetected for hours
       * Current: User sees errors immediately, can take action
 
-    - Atomic claim file locking (FIX: Issue #1 - Restored for post-tool-use)
-      * Original: Had lock files, removed in commit 9dcd3c2 (no concurrency)
-      * That assumption broke with post-tool-use reindex (parallel Writes possible)
-      * Current: Lightweight atomic claim file prevents concurrent reindex
-      * Stale lock detection: 60s timeout (reindex timeout 50s + 10s buffer)
-      * Trade-off: Simple locking, handles 99.9% of cases, minimal complexity
+    - Clean Separation of Concerns (FIX: Double-locking bug)
+      * Parent (this function): Handles kill-if-held logic, spawns subprocess, waits for result
+      * Subprocess (incremental_reindex.py): Handles lock acquisition/release, runs reindex
+      * NO shared lock ownership - subprocess is sole lock owner!
+
+    - Lock modes (kill-if-held behavior)
+      * kill_if_held=True (default): Kill existing process before spawning new one (for Write hook)
+      * kill_if_held=False: Skip if process running (for stop hook - can't finish in 50s)
 
     Performance (IndexFlatIP auto-fallback behavior):
     - Change detection: <1 second (Merkle tree)
@@ -662,11 +841,17 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
 
     Args:
         project_path: Path to project
+        kill_if_held: If True (default), kill existing process before spawning.
+                     If False, skip if process running (used by stop hook).
+        trigger: Trigger source for logging (stop-hook, post-tool-use, etc.)
 
     Returns:
         True if successful, False if failed, None if skipped (another process reindexing)
         (FIX: Issue #15 - Return None to indicate "skipped, not failed")
     """
+    operation_id = None
+    start_time = None
+
     try:
         project_root = get_project_root()
         script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'incremental-reindex'
@@ -677,18 +862,94 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
             print(f"   Skill may not be installed correctly", file=sys.stderr)
             return False
 
-        # Acquire lock to prevent concurrent reindex (FIX: Issue #1)
-        print(f"DEBUG: Attempting to acquire lock for {project_path}", file=sys.stderr)
-        lock_acquired = _acquire_reindex_lock(project_path)
-        print(f"DEBUG: Lock acquired = {lock_acquired}", file=sys.stderr)
+        # Handle kill-if-held logic (parent responsibility, NO lock acquisition!)
+        storage_dir = get_project_storage_dir(project_path)
+        claim_file = storage_dir / '.reindex_claim'
 
-        if not lock_acquired:
-            # Another process is reindexing, skip silently
-            # FIX: Issue #15 - Return None to indicate "skipped" (not success/failure)
-            # Prevents misleading "index updated" message when we didn't do anything
-            print(f"DEBUG: Skipping - another process has lock", file=sys.stderr)
-            return None
+        if claim_file.exists():
+            if kill_if_held:
+                # Kill existing process (if found)
+                print(f"DEBUG: kill_if_held=True, killing existing process", file=sys.stderr)
+                killed = _kill_existing_reindex_process(project_path)
+                if not killed:
+                    print(f"DEBUG: Failed to kill existing process, skipping", file=sys.stderr)
+                    # Log skip event
+                    log_reindex_start(
+                        trigger=trigger,
+                        mode='sync',
+                        pid=None,
+                        kill_if_held=kill_if_held,
+                        skipped=True,
+                        skip_reason='failed_to_kill_existing'
+                    )
+                    return None
+                # Process killed, claim file removed, continue to spawn
+            else:
+                # Verify claim is valid by checking PID only (kill_if_held=False)
+                # FIX: No age-based timeout - only check if process is actually alive
+                # Prevents false "concurrent_reindex" from orphaned claims (crashed processes)
+                # while allowing long-running background reindex (200-350s) to complete safely
+                try:
+                    # Parse PID from claim file
+                    claim_content = claim_file.read_text().strip()
+                    pid = int(claim_content.split(':')[0])
 
+                    # Verify process exists and is incremental-reindex
+                    result = subprocess.run(
+                        ['ps', '-p', str(pid), '-o', 'command='],
+                        capture_output=True,
+                        text=True,
+                        timeout=1
+                    )
+
+                    if result.returncode == 0:
+                        # PID exists - verify it's our process
+                        command = result.stdout.strip()
+                        if 'incremental-reindex' in command or 'incremental_reindex.py' in command:
+                            # Process verified - truly concurrent reindex running
+                            print(f"DEBUG: Verified concurrent reindex PID {pid}", file=sys.stderr)
+                            # Log skip event
+                            log_reindex_start(
+                                trigger=trigger,
+                                mode='sync',
+                                pid=None,
+                                kill_if_held=kill_if_held,
+                                skipped=True,
+                                skip_reason='concurrent_reindex'
+                            )
+                            return None
+                        else:
+                            # PID exists but not our process - orphaned claim
+                            print(f"DEBUG: PID {pid} not reindex process (cmd: {command[:80]}), removing orphaned claim", file=sys.stderr)
+                            try:
+                                claim_file.unlink()
+                            except FileNotFoundError:
+                                pass
+                            # Don't return - continue to spawn reindex
+                    else:
+                        # Process doesn't exist - orphaned claim from crash/kill
+                        print(f"DEBUG: PID {pid} not running, removing orphaned claim", file=sys.stderr)
+                        try:
+                            claim_file.unlink()
+                        except FileNotFoundError:
+                            pass
+                        # Don't return - continue to spawn reindex
+
+                except (ValueError, IndexError) as e:
+                    # Corrupted claim file (invalid PID format)
+                    print(f"DEBUG: Corrupted claim file, removing: {e}", file=sys.stderr)
+                    try:
+                        claim_file.unlink()
+                    except FileNotFoundError:
+                        pass
+                    # Don't return - continue to spawn reindex
+
+                except (FileNotFoundError, OSError) as e:
+                    # Claim file disappeared or unreadable
+                    print(f"DEBUG: Claim file error: {e}", file=sys.stderr)
+                    # Don't return - continue to spawn reindex
+
+        # Spawn subprocess (subprocess will acquire lock, run reindex, release lock)
         proc = None
         try:
             # CRITICAL FIX: Use Popen with start_new_session to create process group
@@ -702,16 +963,75 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
                 start_new_session=True  # Create new process group for clean termination
             )
 
+            # Log operation start (NEW: Forensic diagnostics)
+            start_time = datetime.now(timezone.utc).isoformat()
+            operation_id = log_reindex_start(
+                trigger=trigger,
+                mode='sync',
+                pid=proc.pid,
+                kill_if_held=kill_if_held,
+                skipped=False
+            )
+
             try:
                 # Wait for completion with timeout
                 stdout, stderr = proc.communicate(timeout=50)
 
+                # FIX: Always show stderr for debugging visibility
+                if stderr:
+                    print(stderr, file=sys.stderr, end='')
+
                 if proc.returncode == 0:
+                    # FIX: Validate subprocess didn't skip work (double-lock prevention)
+                    try:
+                        result = json.loads(stdout) if stdout else {}
+                        if result.get('skipped'):
+                            # Subprocess skipped work but returned 0 (shouldn't happen with --skip-lock)
+                            print(f"⚠️  Subprocess skipped unexpectedly: {result.get('reason')}", file=sys.stderr)
+
+                            # Log end event - subprocess skipped
+                            if operation_id and start_time:
+                                log_reindex_end(
+                                    operation_id=operation_id,
+                                    start_timestamp=start_time,
+                                    status='completed',
+                                    exit_code=0,
+                                    index_updated=False,
+                                    files_changed=0
+                                )
+
+                            return None
+                    except json.JSONDecodeError:
+                        # No JSON output or malformed - assume success (backward compat)
+                        pass
+
+                    # Log end event - success
+                    if operation_id and start_time:
+                        log_reindex_end(
+                            operation_id=operation_id,
+                            start_timestamp=start_time,
+                            status='completed',
+                            exit_code=0,
+                            index_updated=True
+                        )
+
                     return True
                 else:
                     # Show error (not suppressed!)
                     error_msg = stderr.strip() if stderr else "Unknown error"
                     print(f"⚠️  Index update failed: {error_msg[:300]}", file=sys.stderr)
+
+                    # Log end event - failed
+                    if operation_id and start_time:
+                        log_reindex_end(
+                            operation_id=operation_id,
+                            start_timestamp=start_time,
+                            status='failed',
+                            exit_code=proc.returncode,
+                            index_updated=False,
+                            error_message=error_msg[:300]
+                        )
+
                     return False
             except subprocess.TimeoutExpired:
                 # CRITICAL: Kill ENTIRE PROCESS GROUP to terminate bash wrapper + Python subprocess
@@ -729,10 +1049,22 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
                 print(f"   Subprocess terminated to prevent index corruption", file=sys.stderr)
                 print(f"   Occurs when index >6 hours old (age-based refresh limitation)", file=sys.stderr)
                 print(f"   Run manual full reindex: {script} --full {project_path}", file=sys.stderr)
+
+                # Log end event - timeout
+                if operation_id and start_time:
+                    log_reindex_end(
+                        operation_id=operation_id,
+                        start_timestamp=start_time,
+                        status='timeout',
+                        exit_code=-1,
+                        index_updated=False,
+                        error_message="Timeout after 50 seconds"
+                    )
+
                 return False
         finally:
-            # Always release lock - safe now because subprocess killed in timeout handler
-            _release_reindex_lock(project_path)
+            # No lock release needed - subprocess owns the lock!
+            pass
 
     except subprocess.TimeoutExpired:
         # This should never be reached (handled in inner try), but keep for safety
@@ -758,9 +1090,416 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
         return False
 
 
+def spawn_background_reindex(project_path: Path, trigger: str = 'unknown') -> bool:
+    """Spawn background reindex using PROVEN pattern from OLD code (pre-9dcd3c2)
+
+    Design Rationale:
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    This function uses the EXACT pattern that worked in OLD session-start.py
+    and post-tool-use.py hooks before commit 9dcd3c2. Pattern proven to:
+    - Spawn truly detached background process
+    - Complete full reindex without blocking hook
+    - Work with kill-and-restart architecture for safety
+
+    Key Differences from Synchronous Version:
+    - stdout/stderr: DEVNULL (not PIPE) → no output buffering
+    - NO communicate() call → hook exits immediately
+    - NO timeout → process runs to completion
+    - Lock managed BY SCRIPT (not by this function)
+
+    Lock Management:
+    - incremental_reindex.py manages its own locks
+    - Script acquires lock at start, releases at end
+    - If lock held, script exits immediately (skipped)
+    - Hook just spawns unconditionally
+
+    Performance:
+    - Hook overhead: <100ms (just spawn, no waiting)
+    - Full reindex: 3-10 minutes (completes in background)
+    - User experience: Hook exits immediately, index updates silently
+
+    Args:
+        project_path: Path to project
+        trigger: Trigger source for logging (first-prompt, stop-hook, etc.)
+
+    Returns:
+        True if process spawned successfully, False if script not found
+    """
+    try:
+        project_root = get_project_root()
+        script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'incremental-reindex'
+
+        # Pre-flight check: Script exists?
+        if not script.exists():
+            print(f"⚠️  Reindex script not found: {script}", file=sys.stderr)
+            print(f"   Skill may not be installed correctly", file=sys.stderr)
+            return False
+
+        # PROVEN PATTERN: Popen + DEVNULL + start_new_session + NO communicate()
+        # This is the EXACT pattern from OLD session-start.py (commit 9dcd3c2^)
+        proc = subprocess.Popen(
+            [str(script), str(project_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True  # Create new process group (detach from parent)
+        )
+        # DO NOT call communicate() - hook exits immediately, process continues
+
+        # Log operation start (NEW: Forensic diagnostics)
+        log_reindex_start(
+            trigger=trigger,
+            mode='background',
+            pid=proc.pid,
+            kill_if_held=False,  # Background mode doesn't use kill-if-held
+            skipped=False
+        )
+
+        return True
+
+    except Exception as e:
+        # Unexpected errors during spawn
+        print(f"⚠️  Failed to spawn background reindex: {type(e).__name__}: {e}", file=sys.stderr)
+        if os.environ.get('DEBUG'):
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+        return False
+
+
+def reindex_on_stop_background(cooldown_seconds: Optional[int] = None) -> dict:
+    """Auto-reindex on stop hook using background pattern (follows first-prompt architecture)
+
+    NEW Architecture: Background spawn (no timeout) instead of synchronous (50s timeout)
+    - OLD: Synchronous with 50s timeout → fails for reindexes > 50s
+    - NEW: Background spawn → completes 200-350s reindexes successfully
+    - BENEFIT: No timeout failures, matches first-prompt's proven pattern
+
+    Trigger Behavior (from official docs at code.claude.com/docs/en/hooks):
+    - Fires when "main Claude Code agent has finished responding"
+    - Does NOT fire "if stoppage occurred due to a user interrupt"
+    - Fires ONCE per conversation turn (NOT after each spawned agent)
+
+    Business Logic (Gate Checks):
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    1. Prerequisites FALSE → Skip (manual setup not done yet)
+    2. Cooldown active → Skip (prevents spam on rapid conversation turns)
+    3. Concurrent reindex running → Skip (prevents orphaned START events)
+    4. All checks pass → Spawn background reindex
+
+    Differences from First-Prompt:
+    - ADDS prerequisites check (first-prompt has no prerequisites gate)
+    - ADDS cooldown check (first-prompt has one-time gate instead)
+    - ADDS concurrent PID check (prevents orphaned START events in forensic logs)
+    - KEEPS decision dict return (stop.py needs it for session logging)
+
+    Differences from Old reindex_on_stop():
+    - REMOVES index exists check (script creates index if missing - TRUE redundancy)
+    - REPLACES synchronous call with background spawn
+    - REMOVES 50s timeout (background mode has no timeout)
+    - CHANGES decision codes (reindex_spawned vs reindex_success/failed)
+
+    Args:
+        cooldown_seconds: Optional cooldown override (None = use config, default 300s)
+
+    Returns:
+        dict: Decision data with keys:
+            - decision: "skip" or "run"
+            - reason: Human-readable reason code
+            - details: Additional context (structured dict)
+            - timestamp: ISO timestamp of decision
+    """
+
+    # ═══════════════════════════════════════════════════════════════════
+    # SECTION 1: Initialize (KEEP - stop.py needs timestamp in dict)
+    # ═══════════════════════════════════════════════════════════════════
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    try:
+        # ═══════════════════════════════════════════════════════════════
+        # SECTION 2: Gate Check - Prerequisites (KEEP - unique to stop-hook)
+        # ═══════════════════════════════════════════════════════════════
+        # REASON: Prevents spawning doomed reindex when skill not installed
+        if not read_prerequisites_state():
+            return {
+                "decision": "skip",
+                "reason": "prerequisites_not_ready",
+                "details": {
+                    "trigger": "stop_hook",
+                    "state_file": "logs/state/semantic-search-prerequisites.json"
+                },
+                "timestamp": timestamp
+            }
+
+        # ═══════════════════════════════════════════════════════════════
+        # SECTION 3: Gate Check - Cooldown (KEEP - unique to stop-hook)
+        # ═══════════════════════════════════════════════════════════════
+        # REASON: Prevents spam spawning on rapid session restarts
+        project_path = get_project_root()
+        config = get_reindex_config()
+        cooldown = cooldown_seconds if cooldown_seconds is not None else config['cooldown_seconds']
+
+        if not should_reindex_after_cooldown(project_path, cooldown):
+            last_reindex = get_last_reindex_time(project_path)
+            elapsed = 0
+            if last_reindex:
+                now = datetime.now(timezone.utc)
+                if last_reindex.tzinfo is None:
+                    last_reindex = last_reindex.replace(tzinfo=timezone.utc)
+                elapsed = (now - last_reindex).total_seconds()
+
+            return {
+                "decision": "skip",
+                "reason": "cooldown_active",
+                "details": {
+                    "trigger": "stop_hook",
+                    "cooldown_seconds": cooldown,
+                    "elapsed_seconds": int(elapsed),
+                    "remaining_seconds": int(cooldown - elapsed)
+                },
+                "timestamp": timestamp
+            }
+
+        # ═══════════════════════════════════════════════════════════════
+        # SECTION 4: Gate Check - Concurrent PID (ADD - prevents orphaned events)
+        # ═══════════════════════════════════════════════════════════════
+        # CRITICAL: Script exits at line 690 BEFORE finally block at line 703
+        # If script detects concurrent, NO END event logged (orphaned START)
+        # Parent check logs START with skipped=True, preventing orphaned events
+        storage_dir = get_project_storage_dir(project_path)
+        claim_file = storage_dir / '.reindex_claim'  # underscore, not dash!
+
+        if claim_file.exists():
+            try:
+                # Parse PID from claim file
+                claim_content = claim_file.read_text().strip()
+                pid = int(claim_content.split(':')[0])
+
+                # Verify process exists and is incremental-reindex
+                result = subprocess.run(
+                    ['ps', '-p', str(pid), '-o', 'command='],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+
+                if result.returncode == 0:
+                    # PID exists - verify it's our process
+                    command = result.stdout.strip()
+                    if 'incremental-reindex' in command or 'incremental_reindex.py' in command:
+                        # Process verified - truly concurrent reindex running
+                        # Log START event with skipped=True (prevents orphaned event)
+                        log_reindex_start(
+                            trigger='stop-hook',
+                            mode='background',
+                            pid=None,
+                            skipped=True,
+                            skip_reason='concurrent_reindex'
+                        )
+                        return {
+                            "decision": "skip",
+                            "reason": "concurrent_reindex",
+                            "details": {
+                                "trigger": "stop_hook",
+                                "concurrent_pid": pid
+                            },
+                            "timestamp": timestamp
+                        }
+                    else:
+                        # PID alive but wrong process - orphaned claim
+                        claim_file.unlink()
+                else:
+                    # PID dead - orphaned claim from crash/kill
+                    claim_file.unlink()
+
+            except (ValueError, IndexError, FileNotFoundError, OSError):
+                # Corrupted/invalid claim - remove and continue
+                try:
+                    claim_file.unlink()
+                except FileNotFoundError:
+                    pass
+
+        # ═══════════════════════════════════════════════════════════════
+        # SECTION 5: Show Message (COPY from first-prompt)
+        # ═══════════════════════════════════════════════════════════════
+        # REASON: User wants visibility, message shows even if spawn fails
+        print("🔄 Checking for index updates in background...", flush=True)
+
+        # ═══════════════════════════════════════════════════════════════
+        # SECTION 6: Spawn Background (COPY from first-prompt)
+        # ═══════════════════════════════════════════════════════════════
+        # NO index exists check - script handles missing index (TRUE redundancy)
+        # Script creates empty index (line 88), loads existing (line 103),
+        # populates via full reindex (line 548)
+        spawned = spawn_background_reindex(project_path, trigger='stop-hook')
+
+        # ═══════════════════════════════════════════════════════════════
+        # SECTION 7: Return Decision Dict (KEEP structure, MODIFY codes)
+        # ═══════════════════════════════════════════════════════════════
+        # REASON: stop.py session logging needs dict (lines 119-141)
+        # MODIFIED: Decision codes for background mode (can't know success/failure)
+
+        if spawned:
+            # Process spawned successfully
+            # ✅ FORENSIC LOGGING: spawn_background_reindex already logged START event (line 1149-1155)
+            # ⏳ END EVENT: Will be logged by script's finally block when done (line 735-754)
+            return {
+                "decision": "run",
+                "reason": "reindex_spawned",  # MODIFIED: was reindex_success/failed
+                "details": {"trigger": "stop_hook"},
+                "timestamp": timestamp
+            }
+        else:
+            # Script not found (rare - installation issue)
+            return {
+                "decision": "skip",
+                "reason": "script_not_found",
+                "details": {"trigger": "stop_hook"},
+                "timestamp": timestamp
+            }
+
+    except Exception as e:
+        # ═══════════════════════════════════════════════════════════════
+        # SECTION 8: Exception Handling (KEEP - stop.py expects dict)
+        # ═══════════════════════════════════════════════════════════════
+        # REASON: Hook must not crash, stop.py expects dict return
+        print(f"⚠️  Auto-indexing error: {e}\n", file=sys.stderr)
+        return {
+            "decision": "skip",
+            "reason": "exception",
+            "details": {"trigger": "stop_hook", "error": str(e)},
+            "timestamp": timestamp
+        }
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # SECTION 5: COOLDOWN LOGIC
 # ═══════════════════════════════════════════════════════════════════════════
+
+def get_reindex_timing_analysis(project_path: Path, cooldown_seconds: Optional[int] = None) -> dict:
+    """Get formatted timing analysis for reindex operations
+
+    Returns structured data with explicit timezone labels to prevent
+    timezone confusion in analysis. Use this function's output directly
+    for reporting - NEVER calculate timestamps mentally.
+
+    Args:
+        project_path: Path to project
+        cooldown_seconds: Cooldown period in seconds (None = load from config)
+
+    Returns:
+        dict with keys:
+            - has_previous_reindex: bool
+            - last_reindex_utc: str (HH:MM:SS UTC) or None
+            - last_reindex_local: str (HH:MM:SS TZ) or None
+            - current_utc: str (HH:MM:SS UTC)
+            - current_local: str (HH:MM:SS TZ)
+            - elapsed_seconds: float or None
+            - elapsed_minutes: float or None
+            - elapsed_display: str or None
+            - cooldown_seconds: int
+            - cooldown_expired: bool
+            - cooldown_status: str (human-readable)
+    """
+    if cooldown_seconds is None:
+        config = get_reindex_config()
+        cooldown_seconds = config['cooldown_seconds']
+
+    try:
+        last_reindex = get_last_reindex_time(project_path)
+        now_utc = datetime.now(timezone.utc)
+
+        # No previous reindex
+        if last_reindex is None:
+            return {
+                'has_previous_reindex': False,
+                'last_reindex_utc': None,
+                'last_reindex_local': None,
+                'current_utc': now_utc.strftime("%H:%M:%S UTC"),
+                'current_local': now_utc.astimezone().strftime("%H:%M:%S %Z"),
+                'elapsed_seconds': None,
+                'elapsed_minutes': None,
+                'elapsed_display': 'Never indexed',
+                'cooldown_seconds': cooldown_seconds,
+                'cooldown_expired': True,
+                'cooldown_status': 'No previous reindex (cooldown N/A)'
+            }
+
+        # Handle timezone-naive timestamps
+        if last_reindex.tzinfo is None:
+            last_reindex = last_reindex.replace(tzinfo=timezone.utc)
+
+        # Calculate elapsed
+        elapsed_seconds = (now_utc - last_reindex).total_seconds()
+        elapsed_minutes = elapsed_seconds / 60
+
+        # Format elapsed time
+        if elapsed_seconds < 0:
+            elapsed_display = f"{-elapsed_seconds:.0f} sec in future (clock skew)"
+            cooldown_expired = True  # Allow reindex
+            cooldown_status = 'Future timestamp (clock skew) - cooldown bypassed'
+        elif elapsed_seconds < 60:
+            elapsed_display = f"{elapsed_seconds:.0f} sec"
+            cooldown_expired = elapsed_seconds >= cooldown_seconds
+            if cooldown_expired:
+                cooldown_status = f'Cooldown expired ({elapsed_seconds:.0f}s >= {cooldown_seconds}s)'
+            else:
+                remaining = cooldown_seconds - elapsed_seconds
+                cooldown_status = f'Cooldown active ({remaining:.0f}s remaining)'
+        elif elapsed_seconds < 3600:
+            minutes = int(elapsed_seconds // 60)
+            secs = int(elapsed_seconds % 60)
+            elapsed_display = f"{minutes} min {secs} sec"
+            cooldown_expired = elapsed_seconds >= cooldown_seconds
+            if cooldown_expired:
+                cooldown_status = f'Cooldown expired ({elapsed_minutes:.1f} min >= {cooldown_seconds / 60:.1f} min)'
+            else:
+                remaining = cooldown_seconds - elapsed_seconds
+                cooldown_status = f'Cooldown active ({remaining / 60:.1f} min remaining)'
+        else:
+            hours = int(elapsed_seconds // 3600)
+            minutes = int((elapsed_seconds % 3600) // 60)
+            elapsed_display = f"{hours} hr {minutes} min"
+            cooldown_expired = elapsed_seconds >= cooldown_seconds
+            if cooldown_expired:
+                cooldown_status = f'Cooldown expired ({elapsed_minutes:.1f} min >= {cooldown_seconds / 60:.1f} min)'
+            else:
+                remaining = cooldown_seconds - elapsed_seconds
+                cooldown_status = f'Cooldown active ({remaining / 60:.1f} min remaining)'
+
+        # Convert to local timezone for display
+        last_reindex_local = last_reindex.astimezone()
+        now_local = now_utc.astimezone()
+
+        return {
+            'has_previous_reindex': True,
+            'last_reindex_utc': last_reindex.strftime("%H:%M:%S UTC"),
+            'last_reindex_local': last_reindex_local.strftime("%H:%M:%S %Z"),
+            'current_utc': now_utc.strftime("%H:%M:%S UTC"),
+            'current_local': now_local.strftime("%H:%M:%S %Z"),
+            'elapsed_seconds': elapsed_seconds,
+            'elapsed_minutes': elapsed_minutes,
+            'elapsed_display': elapsed_display,
+            'cooldown_seconds': cooldown_seconds,
+            'cooldown_expired': cooldown_expired,
+            'cooldown_status': cooldown_status
+        }
+
+    except Exception as e:
+        # Graceful fallback
+        now_utc = datetime.now(timezone.utc)
+        return {
+            'has_previous_reindex': False,
+            'last_reindex_utc': None,
+            'last_reindex_local': None,
+            'current_utc': now_utc.strftime("%H:%M:%S UTC"),
+            'current_local': now_utc.astimezone().strftime("%H:%M:%S %Z"),
+            'elapsed_seconds': None,
+            'elapsed_minutes': None,
+            'elapsed_display': f'Error: {str(e)}',
+            'cooldown_seconds': cooldown_seconds or 300,
+            'cooldown_expired': True,  # Allow reindex on error
+            'cooldown_status': f'Error checking timing: {str(e)}'
+        }
+
 
 def should_reindex_after_cooldown(project_path: Path, cooldown_seconds: Optional[int] = None) -> bool:
     """Check if cooldown period has expired since last reindex
@@ -784,38 +1523,9 @@ def should_reindex_after_cooldown(project_path: Path, cooldown_seconds: Optional
     Returns:
         True if cooldown expired or never indexed, False if still in cooldown
     """
-    if cooldown_seconds is None:
-        config = get_reindex_config()
-        cooldown_seconds = config['cooldown_seconds']
-
-    try:
-        last_reindex = get_last_reindex_time(project_path)
-
-        # Never indexed → allow reindex
-        if last_reindex is None:
-            return True
-
-        # Calculate time since last reindex
-        now = datetime.now(timezone.utc)
-
-        # Handle timezone-aware and naive datetimes (FIX from hybrid)
-        if last_reindex.tzinfo is None:
-            last_reindex = last_reindex.replace(tzinfo=timezone.utc)
-
-        elapsed = (now - last_reindex).total_seconds()
-
-        # FIX: Issue #14 - Handle future timestamps (clock skew or tampering)
-        if elapsed < 0:
-            # Timestamp is in future - likely clock skew or manual state file edit
-            # Treat as stale, allow reindex (safer than blocking forever)
-            return True
-
-        # Cooldown expired?
-        return elapsed >= cooldown_seconds
-
-    except Exception:
-        # If anything fails, allow reindex (graceful degradation)
-        return True
+    # Use new timing analysis function for consistent behavior
+    timing = get_reindex_timing_analysis(project_path, cooldown_seconds)
+    return timing['cooldown_expired']
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -933,56 +1643,6 @@ def should_reindex_after_write(file_path: str, cooldown_seconds: Optional[int] =
 # SECTION 7: HOOK WRAPPERS (SIMPLE INTERFACES - PRESERVED FROM ORIGINAL)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def auto_reindex_on_session_start(input_data: dict) -> None:
-    """Auto-reindex on session start (hook wrapper - ORIGINAL interface preserved)
-
-    Design Rationale (PRESERVED - DO NOT DELETE THIS CONTEXT):
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    - Synchronous execution: No background processes (avoids Claude Code Bug #1481)
-      * Bug #1481: Popen with start_new_session=True still blocks Claude Code
-      * Root cause: Claude Code waits for ALL child processes (even detached)
-      * Discovery: User research into GitHub issues revealed Bug #1481
-      * Solution: Use subprocess.run() synchronously within 60s timeout
-
-    - 50-second timeout: Leaves 10s buffer from hook's 60s hard limit
-      * Change detection: <1 second (Merkle tree, well under limit)
-      * Full reindex (IndexFlatIP auto-fallback): 3-10 minutes (EXCEEDS timeout)
-      * Age check: 360 minutes (6 hours) - timeout occurs only when index very stale
-      * Result: Timeout aborts full reindex if index >6 hours old
-      * Buffer accounts for: hook overhead, state file I/O, error handling
-
-    - Visible errors: capture_output=True (not DEVNULL)
-      * Previous version: DEVNULL caused silent failures
-      * IndexFlatIP bug went undetected for hours
-      * Current: User sees errors immediately, can take action
-
-    - No lock files: Simplified from previous over-engineering
-      * Previous: PID-based lock files, stale lock cleanup, concurrency logic
-      * Removed: 128 lines of complexity
-      * Current: Simple synchronous execution (no concurrency)
-      * Commit: 9dcd3c2 - "REFACTOR: Simplify auto-reindex to synchronous execution"
-
-    Interface Design (HYBRID):
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    - ORIGINAL: Takes full input_data dict (simple for caller)
-    - NEW: Delegates to _core() with clean signature (testable)
-    - Best of both: Simple interface + clean testing
-
-    Why Keep Full input_data?
-    - Future extensibility: Hook input may contain more context
-    - Simple caller code: Just pass input_data (one line)
-    - Backward compatible: No breaking changes
-
-    Args:
-        input_data: Full hook input dict (contains source, context, etc.)
-
-    Returns:
-        None (prints messages directly, never raises)
-    """
-    source = input_data.get('source', 'unknown')
-    _reindex_on_session_start_core(source)
-
-
 def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) -> dict:
     """Auto-reindex after file modification operations (Write/Edit/NotebookEdit)
 
@@ -1057,7 +1717,7 @@ def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) 
 
         # Step 4: Run auto-reindex (IndexFlatIP auto-fallback: will timeout if changes detected)
         print(f"🔄 Updating semantic search index (file modified: {file_name})...")
-        result = run_incremental_reindex_sync(project_path)
+        result = run_incremental_reindex_sync(project_path, trigger='post-tool-use')
 
         # FIX: Issue #15 - Handle None (skipped), True (success), False (failed)
         if result is True:
@@ -1095,212 +1755,79 @@ def reindex_after_write(file_path: str, cooldown_seconds: Optional[int] = None) 
         }
 
 
-def reindex_on_stop(cooldown_seconds: Optional[int] = None) -> dict:
-    """Auto-reindex on stop hook (batches all changes from conversation turn)
-
-    NEW Architecture: Stop hook replaces post-tool-use hook for reindexing.
-    - OLD: Post-tool-use triggered after EVERY Write/Edit operation
-    - NEW: Stop hook triggers ONCE per conversation turn (when Claude finishes responding)
-    - BENEFIT: Batches multiple file changes into single reindex (50% reduction in trigger frequency)
-
-    Trigger Behavior (from official docs at code.claude.com/docs/en/hooks):
-    - Fires when "main Claude Code agent has finished responding"
-    - Does NOT fire "if stoppage occurred due to a user interrupt"
-    - Fires ONCE per conversation turn (NOT after each spawned agent)
-
-    Business Logic:
-    ━━━━━━━━━━━━━━━━
-    1. Prerequisites FALSE → Skip (manual setup not done yet)
-    2. Cooldown active → Skip (prevents rapid reindex on rapid conversation turns)
-    3. Index doesn't exist → Skip (run initial setup first)
-    4. All checks pass → Run auto-reindex with kill-and-restart
-
-    Differences from reindex_after_write():
-    - NO file filtering (stop hook doesn't have file_path context)
-    - KEEPS cooldown (prevents rapid reindex on rapid turns)
-    - KEEPS prerequisites check
-    - KEEPS index exists check
-
-    Args:
-        cooldown_seconds: Optional cooldown override (None = use config, default 300s)
-
-    Returns:
-        dict: Decision data with keys:
-            - decision: "skip" or "run"
-            - reason: Human-readable reason code
-            - details: Additional context
-            - timestamp: ISO timestamp of decision
-    """
-    timestamp = datetime.now(timezone.utc).isoformat()
-
-    try:
-        # Step 1: Check prerequisites
-        if not read_prerequisites_state():
-            return {
-                "decision": "skip",
-                "reason": "prerequisites_not_ready",
-                "details": {
-                    "trigger": "stop_hook",
-                    "state_file": "logs/state/semantic-search-prerequisites.json"
-                },
-                "timestamp": timestamp
-            }
-
-        # Step 2: Check cooldown (prevents rapid reindex on rapid conversation turns)
-        project_path = get_project_root()
-        config = get_reindex_config()
-        cooldown = cooldown_seconds if cooldown_seconds is not None else config['cooldown_seconds']
-
-        if not should_reindex_after_cooldown(project_path, cooldown):
-            last_reindex = get_last_reindex_time(project_path)
-            elapsed = 0
-            if last_reindex:
-                now = datetime.now(timezone.utc)
-                if last_reindex.tzinfo is None:
-                    last_reindex = last_reindex.replace(tzinfo=timezone.utc)
-                elapsed = (now - last_reindex).total_seconds()
-
-            return {
-                "decision": "skip",
-                "reason": "cooldown_active",
-                "details": {
-                    "trigger": "stop_hook",
-                    "cooldown_seconds": cooldown,
-                    "elapsed_seconds": int(elapsed),
-                    "remaining_seconds": int(cooldown - elapsed)
-                },
-                "timestamp": timestamp
-            }
-
-        # Step 3: Check if index exists
-        if not check_index_exists(project_path):
-            storage_dir = get_project_storage_dir(project_path)
-            return {
-                "decision": "skip",
-                "reason": "index_not_found",
-                "details": {
-                    "trigger": "stop_hook",
-                    "expected_index": str(storage_dir / "index" / "code.index")
-                },
-                "timestamp": timestamp
-            }
-
-        # Step 4: Run auto-reindex (with kill-and-restart)
-        print(f"🔄 Updating semantic search index (conversation turn ended)...")
-        result = run_incremental_reindex_sync(project_path)
-
-        # Handle None (skipped), True (success), False (failed)
-        if result is True:
-            print("✅ Semantic search index updated\n")
-            return {
-                "decision": "run",
-                "reason": "reindex_success",
-                "details": {"trigger": "stop_hook"},
-                "timestamp": timestamp
-            }
-        elif result is None:
-            # Skipped (another process is reindexing via kill-and-restart)
-            return {
-                "decision": "skip",
-                "reason": "concurrent_reindex",
-                "details": {"trigger": "stop_hook"},
-                "timestamp": timestamp
-            }
-        else:  # False
-            return {
-                "decision": "run",
-                "reason": "reindex_failed",
-                "details": {"trigger": "stop_hook"},
-                "timestamp": timestamp
-            }
-
-    except Exception as e:
-        # Don't fail hook if auto-indexing fails
-        print(f"⚠️  Auto-indexing error: {e}\n", file=sys.stderr)
-        return {
-            "decision": "skip",
-            "reason": "exception",
-            "details": {"trigger": "stop_hook", "error": str(e)},
-            "timestamp": timestamp
-        }
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # SECTION 8: INTERNAL CORE LOGIC (CLEAN FOR TESTING)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _reindex_on_session_start_core(trigger: str) -> None:
-    """Core reindex logic for session start (internal - clean signature for testing)
-
-    Business Logic:
-    ━━━━━━━━━━━━━━━━
-    1. Prerequisites FALSE → Skip (manual setup not done yet)
-    2. Trigger is 'clear' or 'compact' → Skip (no code changes)
-    3. Trigger is 'startup' or 'resume' + no index → Skip with message
-    4. Trigger is 'startup' or 'resume' + index exists → Run auto-reindex (IndexFlatIP auto-fallback: will timeout if changes detected)
-
-    Trigger Sources:
-    - 'startup': Fresh Claude Code launch
-    - 'resume': Session restored after context compaction
-    - 'clear': User cleared conversation (no file changes)
-    - 'compact': Context compacted (no file changes)
-
-    Why Skip on 'clear'/'compact'?
-    - No code changes occurred
-    - Reindex would find no changes (Merkle tree detects this quickly)
-    - Avoids unnecessary change detection overhead
-
-    Args:
-        trigger: Session start trigger source
-
-    Returns:
-        None (prints messages directly, never raises)
-    """
-    try:
-        # Step 1: Check prerequisites (fast - just read state file)
-        if not read_prerequisites_state():
-            # Prerequisites not ready → skip indexing (manual setup not done)
-            return
-
-        # Step 2: Check trigger source
-        if trigger in ['clear', 'compact']:
-            # No code changes → skip indexing
-            return
-
-        # Step 3: Only auto-index on startup/resume
-        if trigger not in ['startup', 'resume']:
-            return
-
-        # Step 4: Check if index exists (require manual first-time setup)
-        project_path = get_project_root()
-
-        if not check_index_exists(project_path):
-            # No index yet → user needs to run manual setup
-            print("ℹ️  Semantic search not yet indexed")
-            print("   Run: .claude/skills/semantic-search/scripts/incremental-reindex <project_path> --full")
-            print("   (First-time setup: ~3 minutes)\n")
-            return
-
-        # Step 5: Run auto-reindex (IndexFlatIP auto-fallback: will timeout if changes detected)
-        print("🔄 Updating semantic search index...")
-        result = run_incremental_reindex_sync(project_path)
-
-        # FIX: Issue #15 - Handle None (skipped), True (success), False (failed)
-        if result is True:
-            print("✅ Semantic search index updated\n")
-        elif result is None:
-            # Skipped (another process is reindexing) - no message needed
-            pass
-        # If False: Errors already printed by run_incremental_reindex_sync
-
-    except Exception as e:
-        # Don't fail hook if auto-indexing fails
-        print(f"⚠️  Auto-indexing error: {e}\n", file=sys.stderr)
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # SECTION 9: SESSION REINDEX STATE TRACKING (PHASE 3)
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def initialize_session_state(source: str = 'unknown') -> None:
+    """Initialize session state for new session (resets first-prompt tracking)
+
+    Called by session-start hook to ensure clean state for new session.
+    Resets first_semantic_search_shown to False so first-prompt hook can trigger.
+
+    FIX: Compaction Bug - Only reset on FRESH restart, not on compaction
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Problem: Context compaction creates new session_id, causing first-prompt
+    to incorrectly trigger reindex on continuation sessions.
+
+    Solution: Check SessionStart 'source' parameter to differentiate:
+    - source='startup' → Fresh Claude Code launch → RESET flag
+    - source='clear'   → User cleared conversation → RESET flag
+    - source='resume'  → Compaction/continuation → PRESERVE flag
+    - source='unknown' → Unknown (safe default) → PRESERVE flag
+
+    Critical for first-prompt reindex architecture:
+    - Session-start: Initializes state (this function)
+    - First-prompt: Checks state, triggers reindex if not shown yet
+    - Must reset on fresh restart, preserve on compaction
+
+    Args:
+        source: SessionStart source ('startup', 'clear', 'resume', 'unknown')
+    """
+    try:
+        import session_logger
+        state_file = Path("logs/state/session-reindex-tracking.json")
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+
+        session_id = session_logger.get_session_id()
+
+        # Load existing state or create new
+        if state_file.exists():
+            try:
+                state = json.loads(state_file.read_text())
+            except (json.JSONDecodeError, OSError):
+                state = {}
+        else:
+            state = {}
+
+        # Check if this is a new session
+        old_session_id = state.get("session_id")
+        is_new_session = old_session_id != session_id
+
+        # CRITICAL FIX: If session_id changed, ALWAYS reset flag
+        # - New session = fresh start, regardless of source parameter
+        # - source='resume' just means "context continuation", but if session_id changed,
+        #   it's still a NEW session that should trigger first-prompt reindex
+        # - Only SAME session_id can be true continuation (shouldn't happen with is_new_session check)
+        if is_new_session:
+            # New session detected - ALWAYS reset flag
+            state["session_id"] = session_id
+            state["first_semantic_search_shown"] = False
+            print(f"DEBUG: Session state reset - NEW SESSION (source={source}, old={old_session_id}, new={session_id})", file=sys.stderr)
+
+            # Preserve last_reindex info from previous session (useful for status display)
+            # state["last_reindex"] is kept as-is
+
+            state_file.write_text(json.dumps(state, indent=2))
+
+    except Exception as e:
+        # Don't fail session start if state init fails
+        print(f"DEBUG: Failed to initialize session state: {e}", file=sys.stderr)
 
 
 def record_session_reindex_event(trigger: str, result: str, details: dict = None) -> None:
@@ -1434,27 +1961,36 @@ def get_session_reindex_info() -> dict:
 
 
 def should_show_first_prompt_status() -> bool:
-    """Check if we should show reindex status on first semantic-search use
+    """Check if this is the first prompt of the session
+
+    Used by:
+    1. first-prompt-reindex.py: Decides whether to trigger background reindex
+    2. user-prompt-submit.py: Decides whether to check for/display reindex status
 
     Returns:
-        True if this is first semantic-search use in session and we have reindex info
+        True if this is the first time being checked in this session.
+        Returns True in fresh sessions (no previous reindex required).
+
+    Note: Despite the name "show status", this is primarily used to trigger
+    first-prompt actions. The second caller (user-prompt-submit) has a secondary
+    check (get_session_reindex_info) that verifies if status info actually exists.
     """
     try:
         state_file = Path("logs/state/session-reindex-tracking.json")
 
         if not state_file.exists():
-            return False
+            # File missing - treat as first prompt (safe default: trigger actions)
+            return True
 
         state = json.loads(state_file.read_text())
 
-        # Show if NOT yet shown AND we have reindex info
-        return (
-            not state.get("first_semantic_search_shown", False) and
-            bool(state.get("last_reindex"))
-        )
+        # Return True if we haven't shown/triggered yet this session
+        # REMOVED: bool(state.get("last_reindex")) check (was causing bug in fresh sessions)
+        return not state.get("first_semantic_search_shown", False)
 
     except Exception:
-        return False
+        # On error, return True (safe default: trigger reindex rather than skip)
+        return True
 
 
 def mark_first_prompt_shown() -> None:
@@ -1487,3 +2023,237 @@ def clear_session_reindex_state() -> None:
     except Exception as e:
         # Don't fail Stop hook if cleanup fails
         print(f"DEBUG: Failed to clear session reindex state: {e}", file=sys.stderr)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 10: REINDEX OPERATION LOGGING (FORENSIC DIAGNOSTICS)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _get_reindex_log_path() -> Path:
+    """Get path to reindex operations log file
+
+    Returns:
+        Path to logs/reindex-operations.jsonl
+    """
+    project_root = get_project_root()
+    logs_dir = config_loader.get_path('logs') if config_loader else 'logs'
+    log_file = project_root / logs_dir / 'reindex-operations.jsonl'
+
+    # Ensure logs directory exists
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    return log_file
+
+
+def _get_session_id() -> str:
+    """Get current session ID (with fallback)
+
+    Returns:
+        Session ID string or 'unknown' if not available
+    """
+    try:
+        import session_logger
+        return session_logger.get_session_id()
+    except Exception:
+        return 'unknown'
+
+
+def _generate_operation_id(trigger: str, pid: Optional[int] = None) -> str:
+    """Generate unique operation ID for reindex operation
+
+    Args:
+        trigger: Trigger source (first-prompt, stop-hook, etc.)
+        pid: Process ID (optional)
+
+    Returns:
+        Unique operation ID string
+
+    Format: reindex_{YYYYMMDD_HHMMSS}_{trigger}_{pid}
+    Example: reindex_20251211_205800_first-prompt_12345
+    """
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    pid_str = str(pid) if pid else str(os.getpid())
+    return f"reindex_{timestamp}_{trigger}_{pid_str}"
+
+
+def _log_reindex_event(event_data: Dict[str, Any]) -> None:
+    """Append reindex event to operation log (JSONL format)
+
+    Args:
+        event_data: Event data dictionary
+
+    Log Format (JSONL):
+        Each line is a JSON object with event data
+        Follows pattern from session_logger.py for JSONL append
+    """
+    try:
+        log_path = _get_reindex_log_path()
+
+        # Ensure timestamp is present
+        if 'timestamp' not in event_data:
+            event_data['timestamp'] = datetime.now(timezone.utc).isoformat()
+
+        # Append to JSONL file (pattern from session_logger.py)
+        with log_path.open('a', encoding='utf-8') as f:
+            f.write(json.dumps(event_data) + '\n')
+
+    except Exception as e:
+        # Log to stderr but don't fail the operation
+        print(f"WARNING: Failed to log reindex event: {e}", file=sys.stderr)
+
+
+def log_reindex_start(
+    trigger: str,
+    mode: str,
+    pid: Optional[int] = None,
+    kill_if_held: bool = True,
+    skipped: bool = False,
+    skip_reason: Optional[str] = None
+) -> str:
+    """Log reindex operation start event
+
+    Args:
+        trigger: Trigger source (first-prompt, stop-hook, post-tool-use, manual)
+        mode: Execution mode (background, sync)
+        pid: Process ID (None if not started yet)
+        kill_if_held: Kill-if-held mode flag
+        skipped: Whether operation was skipped
+        skip_reason: Reason for skipping (if skipped=True)
+
+    Returns:
+        Generated operation ID
+
+    Example Log Entry:
+        {
+          "timestamp": "2025-12-11T20:58:00.123456+00:00",
+          "event": "start",
+          "operation_id": "reindex_20251211_205800_first-prompt_12345",
+          "trigger": "first-prompt",
+          "session_id": "session_20251211_205800",
+          "pid": 12345,
+          "ppid": 12344,
+          "mode": "background",
+          "kill_if_held": false,
+          "skipped": false,
+          "skip_reason": null
+        }
+    """
+    operation_id = _generate_operation_id(trigger, pid)
+    session_id = _get_session_id()
+
+    event_data = {
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'event': 'start',
+        'operation_id': operation_id,
+        'trigger': trigger,
+        'session_id': session_id,
+        'pid': pid or os.getpid(),
+        'ppid': os.getppid(),
+        'mode': mode,
+        'kill_if_held': kill_if_held,
+        'skipped': skipped,
+        'skip_reason': skip_reason
+    }
+
+    _log_reindex_event(event_data)
+    return operation_id
+
+
+def log_reindex_end(
+    operation_id: str,
+    start_timestamp: str,
+    status: str,
+    exit_code: Optional[int] = None,
+    index_updated: bool = False,
+    files_changed: Optional[int] = None,
+    error_message: Optional[str] = None
+) -> None:
+    """Log reindex operation end event
+
+    Args:
+        operation_id: Operation ID from log_reindex_start()
+        start_timestamp: ISO timestamp when operation started
+        status: Final status (completed, failed, timeout, killed)
+        exit_code: Process exit code (0=success, 1=error, -1=killed)
+        index_updated: Whether index was successfully updated
+        files_changed: Number of files changed (if available)
+        error_message: Error message (if status=failed)
+
+    Example Log Entry:
+        {
+          "timestamp": "2025-12-11T21:05:00.123456+00:00",
+          "event": "end",
+          "operation_id": "reindex_20251211_205800_first-prompt_12345",
+          "session_id": "session_20251211_210500",
+          "start_timestamp": "2025-12-11T20:58:00.123456+00:00",
+          "duration_seconds": 420.5,
+          "status": "completed",
+          "exit_code": 0,
+          "index_updated": true,
+          "files_changed": 68
+        }
+    """
+    end_time = datetime.now(timezone.utc)
+    session_id = _get_session_id()
+
+    # Calculate duration
+    try:
+        start_dt = datetime.fromisoformat(start_timestamp.replace('Z', '+00:00'))
+        duration = (end_time - start_dt).total_seconds()
+    except Exception:
+        duration = None
+
+    event_data = {
+        'timestamp': end_time.isoformat(),
+        'event': 'end',
+        'operation_id': operation_id,
+        'session_id': session_id,
+        'start_timestamp': start_timestamp,
+        'duration_seconds': duration,
+        'status': status,
+        'exit_code': exit_code,
+        'index_updated': index_updated,
+        'files_changed': files_changed,
+        'error_message': error_message
+    }
+
+    _log_reindex_event(event_data)
+
+
+def get_active_reindex_operations() -> list:
+    """Get currently active (running) reindex operations
+
+    Returns:
+        List of active operation dicts with 'start' event but no matching 'end'
+
+    Usage:
+        Check if any reindex operations are currently running
+    """
+    try:
+        log_path = _get_reindex_log_path()
+
+        if not log_path.exists():
+            return []
+
+        # Parse JSONL log
+        operations = {}
+        with log_path.open('r', encoding='utf-8') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    event = json.loads(line)
+                    op_id = event.get('operation_id')
+
+                    if event.get('event') == 'start' and not event.get('skipped'):
+                        operations[op_id] = event
+                    elif event.get('event') == 'end':
+                        operations.pop(op_id, None)
+                except json.JSONDecodeError:
+                    continue
+
+        return list(operations.values())
+
+    except Exception as e:
+        print(f"WARNING: Failed to get active operations: {e}", file=sys.stderr)
+        return []

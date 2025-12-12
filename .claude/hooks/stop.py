@@ -88,13 +88,76 @@ def has_completion_pattern(transcript_path: str, skill_name: str) -> bool:
 
 
 def main():
+    # DIAGNOSTIC: File-based logging to verify hook execution
+    debug_log = Path("logs/stop-hook-debug.log")
+    debug_log.parent.mkdir(parents=True, exist_ok=True)
+    with open(debug_log, 'a') as f:
+        f.write(f"[{datetime.now().isoformat()}] Stop hook STARTED\n")
+
     # Read input from stdin
     try:
         data = json.loads(sys.stdin.read())
+        with open(debug_log, 'a') as f:
+            f.write(f"[{datetime.now().isoformat()}] stdin read successfully\n")
     except json.JSONDecodeError as e:
+        with open(debug_log, 'a') as f:
+            f.write(f"[{datetime.now().isoformat()}] JSON error: {e}\n")
         print(f"Invalid JSON input: {e}", file=sys.stderr)
         sys.exit(0)
 
+    # ═════════════════════════════════════════════════════════════════════════════
+    # SECTION 1: Auto-reindex on stop (runs ALWAYS, regardless of skill state)
+    # ═════════════════════════════════════════════════════════════════════════════
+    with open(debug_log, 'a') as f:
+        f.write(f"[{datetime.now().isoformat()}] Starting auto-reindex section\n")
+    # Trigger auto-reindex on stop (batches all file changes from conversation turn)
+    # NEW Architecture: Replaces post-tool-use hook for better efficiency
+    # Stop hook fires once per conversation turn vs after every Write/Edit operation
+    try:
+        decision = reindex_manager.reindex_on_stop_background()
+
+        # DIAGNOSTIC: Log decision
+        with open(debug_log, 'a') as f:
+            f.write(f"[{datetime.now().isoformat()}] reindex_on_stop_background() returned: {decision.get('decision')} - {decision.get('reason')}\n")
+
+        # Log the decision to session logs for visibility and debugging
+        try:
+            session_id = session_logger.get_session_id()
+            session_logger.log_auto_reindex_decision(session_id, decision)
+
+            # Add human-readable output to transcript
+            if decision.get('decision') == 'run':
+                reason = decision.get('reason', 'unknown')
+                if reason == 'reindex_spawned':
+                    # Background mode - process spawned but outcome unknown
+                    print(f"✅ Stop hook: Index update spawned in background", flush=True)
+                else:
+                    # Unexpected reason for 'run' decision
+                    print(f"✅ Stop hook: Auto-reindex {reason}", flush=True)
+            elif decision.get('decision') == 'skip':
+                reason = decision.get('reason', 'unknown')
+                # Only show important skip reasons (not verbose for every cooldown)
+                if reason not in ['cooldown_active', 'no_changes']:
+                    print(f"⏭️  Stop hook: Auto-reindex skipped ({reason})", flush=True)
+        except Exception as log_error:
+            # Logging failure shouldn't fail the hook
+            print(f"Failed to log reindex decision: {log_error}", file=sys.stderr)
+    except Exception as e:
+        # Don't fail hook if reindexing fails
+        print(f"Auto-reindex on stop failed: {e}", file=sys.stderr)
+
+
+    # ═════════════════════════════════════════════════════════════════════════════
+    # SECTION 2: Logging (runs ALWAYS, before skill completion tracking)
+    # ═════════════════════════════════════════════════════════════════════════════
+
+    # DIAGNOSTIC: Log hook completion (ALWAYS, before early exits)
+    with open(debug_log, 'a') as f:
+        f.write(f"[{datetime.now().isoformat()}] Stop hook COMPLETED\n\n")
+
+    # ═════════════════════════════════════════════════════════════════════════════
+    # SECTION 3: Skill completion tracking (runs ONLY when skill is active)
+    # ═════════════════════════════════════════════════════════════════════════════
     current_skill = state_manager.get_current_skill()
 
     if not current_skill:
@@ -128,22 +191,6 @@ def main():
                     print(f"Failed to write skill to session state: {e}", file=sys.stderr)
         except Exception as e:
             print(f"Failed to end skill: {e}", file=sys.stderr)
-
-    # Trigger auto-reindex on stop (batches all file changes from conversation turn)
-    # NEW Architecture: Replaces post-tool-use hook for better efficiency
-    # Stop hook fires once per conversation turn vs after every Write/Edit operation
-    try:
-        reindex_manager.reindex_on_stop()
-    except Exception as e:
-        # Don't fail hook if reindexing fails
-        print(f"Auto-reindex on stop failed: {e}", file=sys.stderr)
-
-    # Phase 3: Clear session reindex state (prepares for next session)
-    try:
-        reindex_manager.clear_session_reindex_state()
-    except Exception as e:
-        # Don't fail hook if cleanup fails
-        print(f"DEBUG: Failed to clear session reindex state: {e}", file=sys.stderr)
 
     sys.exit(0)
 
