@@ -241,7 +241,8 @@ def reindex_on_stop_background(cooldown_seconds: Optional[int] = None) -> dict:
         # CRITICAL: Script exits at line 690 BEFORE finally block at line 703
         # If script detects concurrent, NO END event logged (orphaned START)
         # Parent check logs START with skipped=True, preventing orphaned events
-        claim_file = project_path / '.claude' / 'skills' / 'semantic-search' / '.reindex-claim'
+        storage_dir = get_project_storage_dir(project_path)
+        claim_file = storage_dir / '.reindex_claim'  # underscore, not dash!
 
         if claim_file.exists():
             try:
