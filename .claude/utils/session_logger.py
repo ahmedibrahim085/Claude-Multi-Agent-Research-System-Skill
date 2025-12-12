@@ -317,7 +317,8 @@ def log_auto_reindex_decision(session_id: str, decision_data: Dict[str, Any]) ->
     decision = decision_data['decision'].upper()
     reason = decision_data['reason']
     details = decision_data['details']
-    file_name = details.get('file', 'unknown')
+    # Use trigger if no file (e.g., stop_hook vs post_write_hook with file)
+    file_name = details.get('file') or details.get('trigger', 'unknown')
 
     # Format human-readable message based on reason
     if reason == "prerequisites_not_ready":

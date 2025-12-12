@@ -262,6 +262,10 @@ def main():
     except json.JSONDecodeError:
         sys.exit(0)
 
+    # Extract source parameter (FIX: Compaction bug)
+    # Used to differentiate fresh restart vs compaction/resume
+    source = input_data.get('source', 'unknown')
+
     # Step 1: Auto-setup (first-time only operations)
     check_and_setup_settings()  # Copy template if needed
     check_config()              # Verify config exists
@@ -279,7 +283,6 @@ def main():
             timestamp = datetime.now(timezone.utc).isoformat()
             skill_name = current_skill['name']
             invocation = current_skill.get('invocationNumber', 1)
-            source = input_data.get('source', 'unknown')
 
             # End it with CrashRecovery trigger
             ended_skill = state_manager.end_current_skill(timestamp, 'CrashRecovery')
@@ -292,21 +295,23 @@ def main():
         # Don't fail entire hook if crash recovery fails
         print(f"⚠️  Skill crash recovery failed: {e}", file=sys.stderr)
 
-    # Step 3: Auto-reindex semantic search (if prerequisites met)
-    # Phase 3: Record reindex event for session tracking
-    source = input_data.get('source', 'unknown')
-
-    # Capture reindex result by calling the function and checking what happened
-    # We can't directly get return value, so we'll rely on the function's success/failure
-    try:
-        reindex_manager.auto_reindex_on_session_start(input_data)
-        # If we get here, reindex didn't raise an exception
-        # It may have succeeded, skipped, or failed gracefully
-        # For now, record as "completed" (actual result tracked internally)
-        reindex_manager.record_session_reindex_event("session_start", "completed", {})
-    except Exception as e:
-        # Reindex raised an exception
-        reindex_manager.record_session_reindex_event("session_start", "failed", {"error": str(e)})
+    # Step 3: Initialize session state for first-prompt reindex trigger
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # Auto-reindex REMOVED from session-start (was causing 50s timeout)
+    # NEW ARCHITECTURE: First-prompt triggers background reindex (proven pattern)
+    # - Session starts fast (0.5s, no blocking)
+    # - Session-start initializes state (resets first_prompt flag ONLY on fresh restart)
+    # - First prompt spawns background reindex (<100ms hook overhead)
+    # - Background process completes full reindex (3-10 minutes)
+    # - Kill-and-restart architecture provides safety (prevents orphans)
+    #
+    # FIX: Compaction Bug - Pass source parameter to differentiate:
+    #   - source='startup' → Fresh restart → Reset flag (trigger reindex)
+    #   - source='resume'  → Compaction → Preserve flag (no reindex)
+    #
+    # See: .claude/hooks/first-prompt-reindex.py for trigger logic
+    # See: reindex_manager.py spawn_background_reindex() for proven pattern
+    reindex_manager.initialize_session_state(source=source)
 
     # Step 4: Check for active research session
     resumption_context = check_research_session()

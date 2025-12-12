@@ -87,6 +87,56 @@ For detailed workflows, trigger keywords, examples, configuration reference, and
 
 ---
 
+## CRITICAL: Timestamp Analysis Rules
+
+**MANDATORY for ALL timestamp operations to prevent timezone confusion errors.**
+
+### NEVER Do Mental Math on Timestamps
+
+❌ **WRONG**: "Last index 11:10, now 12:18, so ~68 minutes"
+✅ **CORRECT**: Use utility script or code function
+
+### Three-Layer Prevention System
+
+**Layer 1: Use Utility Script for Ad-Hoc Analysis**
+```bash
+python .claude/utils/verify_timestamp.py <file_path> <field_name>
+python .claude/utils/verify_timestamp.py --raw "2025-12-11T11:10:21+00:00" "Event"
+```
+
+**Layer 2: Use Built-In Function for Code Analysis**
+```python
+from reindex_manager import get_reindex_timing_analysis
+
+timing = get_reindex_timing_analysis(project_path)
+print(f"Last reindex: {timing['last_reindex_utc']} ({timing['last_reindex_local']})")
+print(f"Current time: {timing['current_utc']} ({timing['current_local']})")
+print(f"Elapsed: {timing['elapsed_display']}")
+print(f"Status: {timing['cooldown_status']}")
+```
+
+**Layer 3: Always Label Timezones Explicitly**
+- ✅ "11:10 UTC (12:10 CET)"
+- ✅ "Current: 12:18 CET (11:18 UTC)"
+- ❌ "11:10" (missing timezone)
+- ❌ "now 12:18" (which timezone?)
+
+### Mandatory Rules
+
+1. **NEVER calculate elapsed time mentally** - Always use Python code
+2. **ALWAYS show both UTC and local** when reporting times
+3. **ALWAYS label timezone** - Never write time without UTC/CET/local annotation
+4. **USE utility script** for any ad-hoc timestamp analysis
+5. **USE get_reindex_timing_analysis()** for reindex timing in code
+
+### Why This Matters
+
+**Past Error**: Reported "~68 minutes elapsed" when actual elapsed was 8 minutes
+**Root Cause**: Mixed UTC timestamp (11:10) with local time (12:18) in mental calculation
+**Prevention**: These mandatory rules + utility tools
+
+---
+
 ## Architecture Decision Records
 
 **Auto-Reindex Design**: Direct Script vs Agent

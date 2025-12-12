@@ -61,6 +61,14 @@ def main():
     except Exception as e:
         print(f"Failed to finalize session state: {e}", file=sys.stderr)
 
+    # Clear session reindex state to prepare for next session
+    # This ensures first-prompt reindex will trigger on next session start
+    try:
+        import reindex_manager
+        reindex_manager.clear_session_reindex_state()
+    except Exception as e:
+        print(f"Failed to clear session reindex state: {e}", file=sys.stderr)
+
     sys.exit(0)
 
 

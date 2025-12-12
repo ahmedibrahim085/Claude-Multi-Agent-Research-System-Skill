@@ -853,6 +853,9 @@ def build_semantic_search_enforcement_message(triggers: dict) -> str:
         import reindex_manager
 
         if reindex_manager.should_show_first_prompt_status():
+            # Check if there's status info from previous session to display
+            # NOTE: First-prompt reindex trigger moved to dedicated hook (first-prompt-reindex.py)
+            # That hook runs in PARALLEL with this one for better separation of concerns
             info = reindex_manager.get_session_reindex_info()
 
             if info['has_info']:
@@ -875,6 +878,10 @@ def build_semantic_search_enforcement_message(triggers: dict) -> str:
                 reindex_manager.mark_first_prompt_shown()
 
                 return status_msg + base_message
+            else:
+                # No previous status to show, but we spawned background reindex
+                # Mark as shown to prevent repeated triggers
+                reindex_manager.mark_first_prompt_shown()
 
     except Exception as e:
         # Don't fail hook if status display fails
