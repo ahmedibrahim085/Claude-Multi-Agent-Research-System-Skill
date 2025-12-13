@@ -73,3 +73,4 @@ docs/testing/*
 !docs/testing/.gitkeep
 docs/fixes/*
 !docs/fixes/.gitkeep
+.claude/skills/semantic-search/tests/logs/
