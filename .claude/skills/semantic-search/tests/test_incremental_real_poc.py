@@ -100,12 +100,14 @@ class IncrementalIndexTester:
                 full_path = self.test_dir / file_path
                 chunks = self.chunker.chunk_file(str(full_path))
                 if chunks:
-                    all_chunks.extend([(file_path, chunk) for chunk in chunks])
+                    # FIXED: Store per-file chunk index (not global index)
+                    all_chunks.extend([(file_path, chunk_idx, chunk)
+                                      for chunk_idx, chunk in enumerate(chunks)])
             print(f"  Created {len(all_chunks)} chunks from {len(supported_files)} files")
 
             # Embed chunks
             print("\n[3/5] Generating embeddings...")
-            chunk_objs = [chunk for _, chunk in all_chunks]
+            chunk_objs = [chunk for _, _, chunk in all_chunks]  # Extract from 3-tuple
             embeddings = self.embedder.embed_chunks(chunk_objs, batch_size=32)
             print(f"  Generated {len(embeddings)} embeddings")
 
@@ -118,8 +120,9 @@ class IncrementalIndexTester:
             self.file_to_ids = {}
             all_ids = []
 
-            for idx, (file_path, chunk) in enumerate(all_chunks):
-                chunk_id = self._generate_chunk_id(file_path, idx)
+            # FIXED: Use per-file chunk_idx directly (not global enumerate)
+            for file_path, chunk_idx, chunk in all_chunks:
+                chunk_id = self._generate_chunk_id(file_path, chunk_idx)
                 all_ids.append(chunk_id)
 
                 if file_path not in self.file_to_ids:
@@ -139,12 +142,12 @@ class IncrementalIndexTester:
             elapsed = time.time() - start_time
             self.stats['full_index_time'] = elapsed
 
-            print(f"\n✓ TEST 1 PASSED")
-            print(f"  Files indexed: {len(supported_files)}")
-            print(f"  Chunks created: {len(all_chunks)}")
-            print(f"  Index size: {self.index.ntotal}")
-            print(f"  Time: {elapsed:.2f}s")
-            print(f"  File-to-IDs mapping: {len(self.file_to_ids)} files tracked")
+            print(f"\n✓ TEST 1 PASSED", flush=True)
+            print(f"  Files indexed: {len(supported_files)}", flush=True)
+            print(f"  Chunks created: {len(all_chunks)}", flush=True)
+            print(f"  Index size: {self.index.ntotal}", flush=True)
+            print(f"  Time: {elapsed:.2f}s", flush=True)
+            print(f"  File-to-IDs mapping: {len(self.file_to_ids)} files tracked", flush=True)
 
             return True
 
@@ -191,10 +194,10 @@ class IncrementalIndexTester:
             elapsed = time.time() - start_time
             self.stats['incremental_add_time'] = elapsed
 
-            print(f"\n✓ TEST 2 PASSED")
-            print(f"  Chunks added: {len(chunks)}")
-            print(f"  Index size: {self.index.ntotal}")
-            print(f"  Time: {elapsed:.2f}s")
+            print(f"\n✓ TEST 2 PASSED", flush=True)
+            print(f"  Chunks added: {len(chunks)}", flush=True)
+            print(f"  Index size: {self.index.ntotal}", flush=True)
+            print(f"  Time: {elapsed:.2f}s", flush=True)
 
             return True
 
@@ -253,11 +256,11 @@ class IncrementalIndexTester:
             elapsed = time.time() - start_time
             self.stats['incremental_edit_time'] = elapsed
 
-            print(f"\n✓ TEST 3 PASSED")
-            print(f"  Old chunks removed: {len(old_ids)}")
-            print(f"  New chunks added: {len(chunks)}")
-            print(f"  Index size: {self.index.ntotal}")
-            print(f"  Time: {elapsed:.2f}s")
+            print(f"\n✓ TEST 3 PASSED", flush=True)
+            print(f"  Old chunks removed: {len(old_ids)}", flush=True)
+            print(f"  New chunks added: {len(chunks)}", flush=True)
+            print(f"  Index size: {self.index.ntotal}", flush=True)
+            print(f"  Time: {elapsed:.2f}s", flush=True)
 
             return True
 
@@ -302,10 +305,10 @@ class IncrementalIndexTester:
             elapsed = time.time() - start_time
             self.stats['incremental_delete_time'] = elapsed
 
-            print(f"\n✓ TEST 4 PASSED")
-            print(f"  Chunks removed: {len(old_ids)}")
-            print(f"  Index size: {self.index.ntotal}")
-            print(f"  Time: {elapsed:.2f}s")
+            print(f"\n✓ TEST 4 PASSED", flush=True)
+            print(f"  Chunks removed: {len(old_ids)}", flush=True)
+            print(f"  Index size: {self.index.ntotal}", flush=True)
+            print(f"  Time: {elapsed:.2f}s", flush=True)
 
             return True
 
@@ -317,13 +320,20 @@ class IncrementalIndexTester:
 
     def search_quality_test(self, query: str):
         """Test 5: Search quality"""
-        print("\n" + "="*70)
-        print("TEST 5: Search Quality")
-        print("="*70)
+        print("\n" + "="*70, flush=True)
+        print("TEST 5: Search Quality", flush=True)
+        print("="*70, flush=True)
 
         try:
-            print(f"\n[1/2] Embedding query: '{query}'")
-            query_embedding = self.embedder.embed_query(query)
+            print(f"\n[1/2] Embedding query: '{query}'", flush=True)
+            try:
+                query_embedding = self.embedder.embed_query(query)
+                print(f"  ✓ Query embedded successfully", flush=True)
+            except Exception as embed_error:
+                print(f"  ✗ Embedder crashed: {embed_error}", flush=True)
+                print("  Skipping Test 5 due to embedder multiprocessing issue", flush=True)
+                return False
+
             query_vector = np.array([query_embedding], dtype=np.float32)
             faiss.normalize_L2(query_vector)
 
@@ -346,11 +356,11 @@ class IncrementalIndexTester:
 
             invalid_count = sum(1 for idx in indices[0] if idx not in valid_ids and idx != -1)
             if invalid_count > 0:
-                print(f"  ⚠ Warning: {invalid_count} invalid IDs in results")
+                print(f"  ⚠ Warning: {invalid_count} invalid IDs in results", flush=True)
             else:
-                print(f"  ✓ All result IDs are valid")
+                print(f"  ✓ All result IDs are valid", flush=True)
 
-            print(f"\n✓ TEST 5 PASSED")
+            print(f"\n✓ TEST 5 PASSED", flush=True)
             return True
 
         except Exception as e:
@@ -469,9 +479,12 @@ def verify_hash(username, password_hash):
 
         # Test 4: Delete file
         results['delete_file'] = tester.delete_file("utils.py")
+        print(f"\n[DEBUG] Test 4 returned: {results['delete_file']}", flush=True)
 
         # Test 5: Search quality
+        print("[DEBUG] About to run Test 5...", flush=True)
         results['search'] = tester.search_quality_test("authentication")
+        print(f"\n[DEBUG] Test 5 returned: {results['search']}", flush=True)
 
         # Print summary
         print("\n" + "="*70)
@@ -508,25 +521,25 @@ def verify_hash(username, password_hash):
         # Overall result
         all_passed = all(results.values())
 
-        print("\n" + "="*70)
+        print("\n" + "="*70, flush=True)
         if all_passed:
-            print("✓ POC SUCCESS: Incremental indexing works with real MCP components!")
-            print("="*70)
-            print("\nConclusion:")
-            print("  - IndexIDMap2 + IndexIVFFlat is stable")
-            print("  - Full index workflow works")
-            print("  - Incremental add/edit/delete all work")
-            print("  - Search quality maintained")
-            print("  - Performance improvement verified")
-            print("\nRECOMMENDATION: Proceed with implementation")
+            print("✓ POC SUCCESS: Incremental indexing works with real MCP components!", flush=True)
+            print("="*70, flush=True)
+            print("\nConclusion:", flush=True)
+            print("  - IndexIDMap2 + IndexFlatIP is stable", flush=True)
+            print("  - Full index workflow works", flush=True)
+            print("  - Incremental add/edit/delete all work", flush=True)
+            print("  - Search quality maintained", flush=True)
+            print("  - Performance improvement verified", flush=True)
+            print("\nRECOMMENDATION: Proceed with implementation", flush=True)
         else:
-            print("✗ POC FAILED: Incremental indexing has issues")
-            print("="*70)
-            print("\nConclusion:")
-            print("  - One or more tests failed")
-            print("  - Review errors above")
-            print("\nRECOMMENDATION: Fix issues before implementing")
-        print("="*70 + "\n")
+            print("✗ POC FAILED: Incremental indexing has issues", flush=True)
+            print("="*70, flush=True)
+            print("\nConclusion:", flush=True)
+            print("  - One or more tests failed", flush=True)
+            print("  - Review errors above", flush=True)
+            print("\nRECOMMENDATION: Fix issues before implementing", flush=True)
+        print("="*70 + "\n", flush=True)
 
         return 0 if all_passed else 1
 
