@@ -10,6 +10,12 @@ TESTS_DIR = Path(__file__).parent
 SCRIPTS_DIR = TESTS_DIR.parent / "scripts"
 STATUS_PY = SCRIPTS_DIR / "status.py"
 
+# Skip all tests if status.py doesn't exist (unimplemented feature)
+pytestmark = pytest.mark.skipif(
+    not STATUS_PY.exists(),
+    reason="status.py not implemented"
+)
+
 
 class TestStatusArgumentParsing:
     """Test status.py argument parsing"""

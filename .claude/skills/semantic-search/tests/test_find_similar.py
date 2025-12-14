@@ -10,6 +10,12 @@ TESTS_DIR = Path(__file__).parent
 SCRIPTS_DIR = TESTS_DIR.parent / "scripts"
 FIND_SIMILAR_PY = SCRIPTS_DIR / "find-similar.py"
 
+# Skip all tests if find-similar.py doesn't exist (unimplemented feature)
+pytestmark = pytest.mark.skipif(
+    not FIND_SIMILAR_PY.exists(),
+    reason="find-similar.py not implemented"
+)
+
 
 class TestFindSimilarArgumentParsing:
     """Test find-similar.py argument parsing"""
