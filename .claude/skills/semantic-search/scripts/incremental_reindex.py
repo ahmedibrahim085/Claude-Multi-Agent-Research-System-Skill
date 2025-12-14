@@ -220,6 +220,57 @@ class FixedCodeIndexManager:
 
         return primary_trigger or fallback_trigger
 
+    def rebuild_from_cache(self):
+        """
+        Rebuild FAISS index from cached embeddings, removing stale vectors.
+
+        This operation:
+        1. Creates a new empty FAISS index
+        2. Adds only active chunks (in metadata_db) from cache
+        3. Resets bloat to 0% (removes all stale vectors)
+        4. Updates faiss_ids to be sequential again
+
+        Used when bloat exceeds thresholds or manual cleanup is needed.
+        """
+        print(f"Rebuilding index from cache ({len(self.metadata_db)} active chunks)...")
+
+        # Create new empty index
+        self.index = faiss.IndexFlatIP(768)  # Inner product for cosine similarity
+        self.chunk_ids = []
+
+        # Collect active chunks from cache
+        vectors = []
+        chunk_ids_to_add = []
+
+        for chunk_id, entry in self.metadata_db.items():
+            # Get embedding from cache
+            if chunk_id not in self.embedding_cache:
+                raise ValueError(f"Chunk {chunk_id} missing from cache - cannot rebuild")
+
+            embedding = self.embedding_cache[chunk_id]
+            vectors.append(embedding)
+            chunk_ids_to_add.append(chunk_id)
+
+        if not vectors:
+            print("No active chunks to rebuild")
+            return
+
+        # Add all vectors to new index
+        vectors_array = np.array(vectors, dtype=np.float32)
+
+        # FIX: Explicitly copy to CPU memory (Apple Silicon MPS compatibility)
+        vectors_array = np.ascontiguousarray(vectors_array.copy())
+
+        faiss.normalize_L2(vectors_array)  # Normalize for cosine similarity
+        self.index.add(vectors_array)
+        self.chunk_ids.extend(chunk_ids_to_add)
+
+        # Update faiss_ids in metadata to be sequential (0, 1, 2, ...)
+        for i, chunk_id in enumerate(chunk_ids_to_add):
+            self.metadata_db[chunk_id]['faiss_id'] = i
+
+        print(f"Rebuild complete: {len(chunk_ids_to_add)} vectors in clean index")
+
     def save_index(self):
         """
         Save index to disk - SIMPLIFIED for IndexFlatIP.
