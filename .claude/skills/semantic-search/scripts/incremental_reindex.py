@@ -405,6 +405,9 @@ class FixedCodeIndexManager:
             # Copy embedding to avoid GPU memory references
             self.embedding_cache[chunk_id] = result.embedding.copy()
 
+        # Save cache to disk (Feature 1: Embedding Cache)
+        self._save_cache()
+
     def clear_index(self):
         """Clear entire index - SIMPLIFIED for IndexFlatIP"""
         self.index = faiss.IndexFlatIP(self.dimension)
