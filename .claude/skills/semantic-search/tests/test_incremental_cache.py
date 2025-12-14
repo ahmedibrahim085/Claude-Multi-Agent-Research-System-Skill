@@ -57,9 +57,14 @@ class TestEmbeddingCache:
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = FixedCodeIndexManager(tmpdir)
 
-            # Add embedding to cache
+            # Add embedding to cache AND metadata (cache cleanup requires metadata entry)
             embedding = np.random.rand(768).astype(np.float32)
             manager.embedding_cache['chunk_123'] = embedding
+            manager.metadata_db['chunk_123'] = {
+                'metadata': {'file_path': 'test.py'},
+                'chunk_id': 'chunk_123',
+                'faiss_id': 0
+            }
 
             # Save cache to disk
             manager._save_cache()
@@ -91,6 +96,11 @@ class TestEmbeddingCache:
             manager1 = FixedCodeIndexManager(tmpdir)
             embedding = np.random.rand(768).astype(np.float32)
             manager1.embedding_cache['chunk_123'] = embedding
+            manager1.metadata_db['chunk_123'] = {
+                'metadata': {'file_path': 'test.py'},
+                'chunk_id': 'chunk_123',
+                'faiss_id': 0
+            }
             manager1._save_cache()
 
             # Session 2: Load cache (simulates restart)
@@ -155,9 +165,14 @@ class TestEmbeddingCache:
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = FixedCodeIndexManager(tmpdir)
 
-            # Add embedding with correct dimensions
+            # Add embedding with correct dimensions AND metadata
             embedding = np.random.rand(768).astype(np.float32)
             manager.embedding_cache['chunk_123'] = embedding
+            manager.metadata_db['chunk_123'] = {
+                'metadata': {'file_path': 'test.py'},
+                'chunk_id': 'chunk_123',
+                'faiss_id': 0
+            }
 
             # Verify dimensions
             assert manager.embedding_cache['chunk_123'].shape == (768,), \
@@ -653,3 +668,51 @@ class TestRebuildSafety:
             assert backup_index.exists(), "Backup should contain code.index"
             assert backup_metadata.exists(), "Backup should contain metadata.db"
             assert backup_chunk_ids.exists(), "Backup should contain chunk_ids.pkl"
+
+
+class TestCacheCleanup:
+    """High Priority: Cache Cleanup - Prevent cache bloat from deleted chunks"""
+
+    def test_save_cache_prunes_deleted_chunks(self):
+        """
+        Test 1: save_cache() prunes deleted chunks (RED phase)
+
+        When chunks are deleted from metadata_db, their embeddings should
+        be removed from cache during save. This prevents cache bloat.
+
+        Expected failure: Cache cleanup not implemented yet
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Add 100 chunks
+            from types import SimpleNamespace
+            for i in range(100):
+                result = SimpleNamespace(
+                    chunk_id=f'chunk_{i}',
+                    embedding=np.random.rand(768).astype(np.float32),
+                    metadata={'file_path': f'file_{i}.py'}
+                )
+                manager.add_embeddings([result])
+
+            # Verify all 100 in cache
+            assert len(manager.embedding_cache) == 100, "Should have 100 embeddings in cache"
+
+            # Delete 20 chunks from metadata (simulate file deletion)
+            for i in range(20):
+                del manager.metadata_db[f'chunk_{i}']
+
+            # Save cache (should prune deleted chunks)
+            manager._save_cache()
+
+            # Reload to verify pruning persisted
+            manager2 = FixedCodeIndexManager(tmpdir)
+            assert len(manager2.embedding_cache) == 80, "Cache should only have 80 embeddings after pruning"
+
+            # Verify deleted chunks not in cache
+            for i in range(20):
+                assert f'chunk_{i}' not in manager2.embedding_cache, f"Deleted chunk_{i} should not be in cache"
+
+            # Verify remaining chunks still in cache
+            for i in range(20, 100):
+                assert f'chunk_{i}' in manager2.embedding_cache, f"Active chunk_{i} should be in cache"

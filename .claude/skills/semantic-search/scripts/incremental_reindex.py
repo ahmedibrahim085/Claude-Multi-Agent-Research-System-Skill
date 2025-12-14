@@ -155,10 +155,22 @@ class FixedCodeIndexManager:
         }
 
         Versioning prevents using stale embeddings after model changes.
+        Cache cleanup prevents bloat from deleted chunks.
         Atomic write prevents corruption if process crashes during write.
         """
         import os
         temp_path = str(self.cache_path) + '.tmp'
+
+        # CLEANUP: Prune deleted chunks from cache (High Priority Feature)
+        # Only save embeddings for chunks that exist in metadata_db
+        active_embeddings = {
+            chunk_id: embedding
+            for chunk_id, embedding in self.embedding_cache.items()
+            if chunk_id in self.metadata_db
+        }
+
+        # Update in-memory cache to pruned version
+        self.embedding_cache = active_embeddings
 
         # Create versioned cache structure
         cache_data = {
