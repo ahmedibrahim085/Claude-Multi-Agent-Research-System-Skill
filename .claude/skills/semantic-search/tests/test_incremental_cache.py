@@ -554,3 +554,59 @@ class TestCacheVersioning:
             # Verify embeddings are stored correctly
             assert 'chunk_1' in cache_data['embeddings'], "Embedding should be in cache"
             np.testing.assert_array_equal(cache_data['embeddings']['chunk_1'], embedding)
+
+    def test_cache_rejects_incompatible_versions(self):
+        """
+        Test 2: Cache rejects incompatible versions (RED phase)
+
+        When cache version/model/dimension mismatches, cache should be cleared
+        and warning printed. This prevents using stale embeddings.
+
+        Expected: Should pass immediately (validation already implemented)
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Scenario 1: Wrong cache version
+            manager1 = FixedCodeIndexManager(tmpdir)
+            embedding = np.random.rand(768).astype(np.float32)
+            manager1.embedding_cache['chunk_1'] = embedding
+            manager1._save_cache()
+
+            # Manually corrupt cache version
+            import pickle
+            with open(manager1.cache_path, 'rb') as f:
+                cache_data = pickle.load(f)
+            cache_data['version'] = 999  # Incompatible version
+            with open(manager1.cache_path, 'wb') as f:
+                pickle.dump(cache_data, f)
+
+            # Reload should clear cache
+            manager2 = FixedCodeIndexManager(tmpdir)
+            assert manager2.embedding_cache == {}, "Cache should be cleared on version mismatch"
+
+            # Scenario 2: Wrong dimension
+            manager3 = FixedCodeIndexManager(tmpdir)
+            manager3.embedding_cache['chunk_1'] = embedding
+            manager3._save_cache()
+
+            with open(manager3.cache_path, 'rb') as f:
+                cache_data = pickle.load(f)
+            cache_data['embedding_dimension'] = 384  # Wrong dimension
+            with open(manager3.cache_path, 'wb') as f:
+                pickle.dump(cache_data, f)
+
+            manager4 = FixedCodeIndexManager(tmpdir)
+            assert manager4.embedding_cache == {}, "Cache should be cleared on dimension mismatch"
+
+            # Scenario 3: Wrong model name
+            manager5 = FixedCodeIndexManager(tmpdir)
+            manager5.embedding_cache['chunk_1'] = embedding
+            manager5._save_cache()
+
+            with open(manager5.cache_path, 'rb') as f:
+                cache_data = pickle.load(f)
+            cache_data['model_name'] = 'different-model'  # Wrong model
+            with open(manager5.cache_path, 'wb') as f:
+                pickle.dump(cache_data, f)
+
+            manager6 = FixedCodeIndexManager(tmpdir)
+            assert manager6.embedding_cache == {}, "Cache should be cleared on model mismatch"
