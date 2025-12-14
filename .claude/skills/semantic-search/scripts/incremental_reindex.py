@@ -13,10 +13,13 @@ Architecture:
 - Full reindex only (same as MCP, no incremental updates)
 """
 
-# FIX: Disable tokenizer parallelism to prevent Apple Silicon MPS + multiprocessing crashes
-# Must be set BEFORE importing any huggingface/transformers code
+# FIX: Disable ALL parallelism to prevent Apple Silicon MPS + multiprocessing crashes
+# Must be set BEFORE importing any libraries
 import os
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
 import sys
 import json
@@ -166,6 +169,34 @@ class FixedCodeIndexManager:
                 print(f"Warning: Failed to load embedding cache: {e}", file=sys.stderr)
                 # Keep cache empty on load failure
 
+    def _calculate_bloat(self) -> Dict:
+        """
+        Calculate index bloat from lazy deletion.
+
+        Bloat occurs when vectors remain in FAISS but their metadata is deleted (lazy deletion).
+        This is cheaper than rebuilding the index for every delete, but accumulates stale vectors.
+
+        Returns:
+            Dict with bloat metrics:
+            - total_vectors: Total vectors in FAISS index
+            - active_chunks: Number of chunks in metadata (valid results)
+            - stale_vectors: Vectors in FAISS without metadata (bloat)
+            - bloat_percentage: (stale_vectors / total_vectors) * 100
+        """
+        total_vectors = self.index.ntotal
+        active_chunks = len(self.metadata_db)
+        stale_vectors = total_vectors - active_chunks
+
+        # Calculate percentage (avoid division by zero)
+        bloat_percentage = (stale_vectors / total_vectors * 100) if total_vectors > 0 else 0.0
+
+        return {
+            'total_vectors': total_vectors,
+            'active_chunks': active_chunks,
+            'stale_vectors': stale_vectors,
+            'bloat_percentage': bloat_percentage
+        }
+
     def save_index(self):
         """
         Save index to disk - SIMPLIFIED for IndexFlatIP.
@@ -198,9 +229,8 @@ class FixedCodeIndexManager:
         with open(chunk_id_path, 'wb') as f:
             pickle.dump(chunk_ids_ordered, f)
 
-        # TEMPORARILY DISABLED for debugging segfault
         # Save embedding cache (AFTER all FAISS operations complete)
-        # self._save_cache()
+        self._save_cache()
 
         # Save stats.json
         self._update_stats()
@@ -286,12 +316,11 @@ class FixedCodeIndexManager:
         # Append chunk_ids to maintain order
         self.chunk_ids.extend(chunk_ids_to_add)
 
-        # TEMPORARILY DISABLED for debugging segfault
         # Build embedding cache AFTER FAISS operations complete (avoids memory conflicts)
-        # for result in embedding_results:
-        #     chunk_id = result.chunk_id
-        #     # Copy embedding to avoid GPU memory references
-        #     self.embedding_cache[chunk_id] = result.embedding.copy()
+        for result in embedding_results:
+            chunk_id = result.chunk_id
+            # Copy embedding to avoid GPU memory references
+            self.embedding_cache[chunk_id] = result.embedding.copy()
 
     def clear_index(self):
         """Clear entire index - SIMPLIFIED for IndexFlatIP"""
