@@ -668,6 +668,44 @@ class FixedIncrementalIndexer:
         self.snapshot_manager = SnapshotManager()
         self.change_detector = ChangeDetector(self.snapshot_manager)
 
+    def _delete_chunks_for_file(self, file_path: str) -> int:
+        """
+        Delete all chunks for a specific file from metadata and cache.
+
+        This is used during incremental reindex to remove old chunks
+        for modified or deleted files before re-embedding.
+
+        Args:
+            file_path: Absolute path to the file
+
+        Returns:
+            Number of chunks deleted
+        """
+        deleted_count = 0
+        chunks_to_delete = []
+
+        # Find all chunks for this file
+        for chunk_id, entry in self.indexer.metadata_db.items():
+            metadata = entry['metadata']
+            chunk_file_path = metadata.get('file_path', '')
+
+            # Normalize paths for comparison (resolve to absolute)
+            if Path(chunk_file_path).resolve() == Path(file_path).resolve():
+                chunks_to_delete.append(chunk_id)
+
+        # Delete chunks from metadata and cache
+        for chunk_id in chunks_to_delete:
+            # Delete from metadata
+            if chunk_id in self.indexer.metadata_db:
+                del self.indexer.metadata_db[chunk_id]
+                deleted_count += 1
+
+            # Delete from cache
+            if chunk_id in self.indexer.embedding_cache:
+                del self.indexer.embedding_cache[chunk_id]
+
+        return deleted_count
+
     def needs_reindex(self, max_age_minutes: float = 360) -> bool:
         """Check if reindex is needed based on age"""
         if not self.snapshot_manager.has_snapshot(self.project_path):
