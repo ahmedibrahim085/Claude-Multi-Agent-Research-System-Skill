@@ -706,6 +706,135 @@ class FixedIncrementalIndexer:
 
         return deleted_count
 
+    def _incremental_index(self, changes):
+        """
+        Perform incremental reindex using cache for unchanged files.
+
+        This is the KEY method that makes incremental indexing work with IndexFlatIP.
+        Instead of re-embedding all files, we:
+        1. Delete chunks for modified/deleted files
+        2. Re-embed ONLY changed files
+        3. Rebuild FAISS index from ALL cached embeddings (fast!)
+
+        Args:
+            changes: FileChanges object from change detector
+
+        Returns:
+            Result dict with success, reembedded_files, cached_files
+        """
+        start_time = time.time()
+        timings = {}
+
+        try:
+            print("Starting incremental reindex...", file=sys.stderr)
+
+            # Build current DAG
+            phase_start = time.time()
+            dag = MerkleDAG(self.project_path)
+            dag.build()
+            timings['dag_build'] = time.time() - phase_start
+
+            # Step 1: Delete chunks for modified/removed files
+            phase_start = time.time()
+            files_to_reembed = list(changes.modified) + list(changes.added)
+            files_to_delete = list(changes.removed) + list(changes.modified)
+
+            for file_path in files_to_delete:
+                deleted_count = self._delete_chunks_for_file(file_path)
+                print(f"Deleted {deleted_count} chunks for {Path(file_path).name}", file=sys.stderr)
+
+            timings['delete_chunks'] = time.time() - phase_start
+
+            # Step 2: Embed ONLY changed files
+            phase_start = time.time()
+            all_embedding_results = []
+
+            for file_path in files_to_reembed:
+                print(f"Re-embedding {Path(file_path).name}...", file=sys.stderr)
+
+                # Chunk the file
+                chunks = self.chunker.chunk_file(str(file_path))
+
+                if chunks:
+                    # Embed the chunks
+                    results = self.embedder.embed_chunks(chunks, batch_size=64)
+
+                    # Add metadata
+                    for result in results:
+                        result.metadata['project_name'] = self.project_name
+                        result.metadata['content'] = chunks[0].content if chunks else ""
+
+                    all_embedding_results.extend(results)
+
+            print(f"Re-embedded {len(all_embedding_results)} chunks from {len(files_to_reembed)} files", file=sys.stderr)
+            timings['embedding'] = time.time() - phase_start
+
+            # Step 3: Add new embeddings (this updates cache)
+            phase_start = time.time()
+            if all_embedding_results:
+                self.indexer.add_embeddings(all_embedding_results)
+            timings['add_embeddings'] = time.time() - phase_start
+
+            # Step 4: Rebuild index from ALL cached embeddings (fast!)
+            phase_start = time.time()
+            print("Rebuilding index from cache...", file=sys.stderr)
+            self.indexer.rebuild_from_cache()
+            timings['rebuild'] = time.time() - phase_start
+
+            # Step 5: Check bloat and rebuild if needed
+            phase_start = time.time()
+            bloat_stats = self.indexer._calculate_bloat()
+            if bloat_stats['bloat_percentage'] > 0:
+                print(f"Bloat: {bloat_stats['bloat_percentage']:.1f}% ({bloat_stats['stale_vectors']} stale)", file=sys.stderr)
+            timings['bloat_check'] = time.time() - phase_start
+
+            # Step 6: Save snapshot
+            phase_start = time.time()
+            print("Saving Merkle DAG snapshot...", file=sys.stderr)
+            self.snapshot_manager.save_snapshot(dag, {
+                'project_name': self.project_name,
+                'full_index': False,
+                'incremental': True,
+                'files_reembedded': len(files_to_reembed),
+                'chunks_added': len(all_embedding_results)
+            })
+            timings['snapshot_save'] = time.time() - phase_start
+
+            # Step 7: Save index
+            phase_start = time.time()
+            print("Saving FAISS index to disk...", file=sys.stderr)
+            self.indexer.save_index()
+            timings['index_save'] = time.time() - phase_start
+
+            # Record timestamp
+            self._record_index_timestamp(is_full_index=False)
+
+            # Calculate total files
+            total_files = len(list(Path(self.project_path).rglob('*.py')))  # Quick estimate
+            cached_files = total_files - len(files_to_reembed)
+
+            print(f"\n✓ Incremental reindex complete: {len(all_embedding_results)} chunks from {len(files_to_reembed)} files", file=sys.stderr)
+            print(f"  Cached: {cached_files} files, Re-embedded: {len(files_to_reembed)} files", file=sys.stderr)
+
+            return {
+                'success': True,
+                'incremental': True,
+                'reembedded_files': len(files_to_reembed),
+                'cached_files': cached_files,
+                'chunks_added': len(all_embedding_results),
+                'total_chunks': self.indexer.get_index_size(),
+                'time_taken': round(time.time() - start_time, 2),
+                'timing_breakdown': timings
+            }
+
+        except Exception as e:
+            print(f"Error during incremental reindex: {e}", file=sys.stderr)
+            return {
+                'success': False,
+                'error': str(e),
+                'time_taken': round(time.time() - start_time, 2)
+            }
+
     def needs_reindex(self, max_age_minutes: float = 360) -> bool:
         """Check if reindex is needed based on age"""
         if not self.snapshot_manager.has_snapshot(self.project_path):
