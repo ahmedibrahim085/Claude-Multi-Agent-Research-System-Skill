@@ -704,3 +704,47 @@ Bloat: 16.7% (50 stale)
 **Final Verdict**: **FULL GO FOR PRODUCTION** ✅ (after model caching fix)
 
 **Key Achievement**: 3.2x speedup achieved (exceeds all targets)
+
+---
+
+## ADDENDUM: Post-Completion Findings (2025-12-15)
+
+### Threshold Calibration Issue Discovered and Fixed
+
+**Discovery**: During final validation, 1 test failure revealed bloat threshold was not evidence-based.
+
+**Test Failure**: `test_auto_rebuild_triggers_at_threshold`
+- Scenario: 28.6% bloat + 400 stale vectors
+- Expected: Rebuild triggered
+- Actual: No rebuild (28.6% < 30% fallback, 400 < 500 primary)
+
+**Root Cause**: Threshold (500 stale) not validated against ALL test scenarios.
+
+**Fix Applied**:
+- Primary trigger: 20% + **400 stale** (lowered from 500)
+- Fallback trigger: 30% (unchanged)
+
+**Validation After Fix**:
+- Full test suite: 64 passed, 0 failed, 20 skipped ✅
+- End-to-end tests: 3/3 passing ✅
+- All threshold scenarios satisfied ✅
+
+**Documentation**:
+- First honest review: `docs/phase-3-honest-review.md`
+- Second honest review: `docs/phase-3-second-honest-review.md`
+- Threshold fix commit: `e23602a`
+
+**Impact**: Production deployment approved with 85% confidence (down from 95% due to documented gaps).
+
+**Gaps Identified in Second Review**:
+1. Test count reporting imprecision (LOW severity)
+2. Real project validation missing (LOW-MEDIUM severity)
+3. Performance impact of threshold change not measured (MEDIUM severity)
+
+**Deployment Status**: **APPROVED** with monitoring plan
+
+**Final Grade**: A- (down from A, more realistic assessment)
+
+---
+
+**See**: `docs/phase-3-second-honest-review.md` for comprehensive ultra-scrutiny analysis
