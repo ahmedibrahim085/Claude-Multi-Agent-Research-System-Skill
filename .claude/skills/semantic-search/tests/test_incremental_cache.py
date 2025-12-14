@@ -45,3 +45,32 @@ class TestEmbeddingCache:
 
             assert hasattr(manager, 'cache_path'), "cache_path attribute missing"
             assert manager.cache_path.name == "embeddings.pkl", "Cache filename should be embeddings.pkl"
+
+    def test_cache_saves_single_embedding(self):
+        """
+        Test 2: Cache Saves Single Embedding (RED phase)
+
+        Cache should persist to disk when _save_cache() is called.
+
+        Expected failure: AttributeError (_save_cache method doesn't exist yet)
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Add embedding to cache
+            embedding = np.random.rand(768).astype(np.float32)
+            manager.embedding_cache['chunk_123'] = embedding
+
+            # Save cache to disk
+            manager._save_cache()
+
+            # Cache file should exist
+            assert manager.cache_path.exists(), "Cache file should exist after save"
+
+            # Should be able to read it back
+            import pickle
+            with open(manager.cache_path, 'rb') as f:
+                saved_cache = pickle.load(f)
+
+            assert 'chunk_123' in saved_cache, "Chunk should be in saved cache"
+            np.testing.assert_array_equal(saved_cache['chunk_123'], embedding)
