@@ -258,6 +258,9 @@ class FixedCodeIndexManager:
             vectors.append(result.embedding)
             chunk_ids_to_add.append(chunk_id)
 
+            # NEW: Cache embedding for rebuild without re-embedding
+            self.embedding_cache[chunk_id] = result.embedding
+
             # Store metadata with sequential index
             self.metadata_db[chunk_id] = {
                 'metadata': result.metadata,
@@ -272,6 +275,9 @@ class FixedCodeIndexManager:
 
         # Append chunk_ids to maintain order
         self.chunk_ids.extend(chunk_ids_to_add)
+
+        # NEW: Save cache after adding embeddings
+        self._save_cache()
 
     def clear_index(self):
         """Clear entire index - SIMPLIFIED for IndexFlatIP"""
