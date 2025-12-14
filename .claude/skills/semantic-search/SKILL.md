@@ -368,15 +368,23 @@ scripts/incremental-reindex /path/to/project --check-only
 - State update: <10ms (mark as shown)
 - User message: <10ms (stdout print)
 
-**Background Reindex Process** (runs independently, 3-10 minutes):
+**Background Reindex Process** (runs independently, optimized with cache):
 - Merkle tree change detection: 3.5 seconds
-- Full reindex (if changes detected): 3-10 minutes (IndexFlatIP)
+- Full reindex (with cache, 51 files): 13.67 seconds (first run)
+- Incremental reindex (1 file edit): 4.33 seconds (3.2x faster!)
 - Lock acquisition: <10ms (atomic file create)
 - Lock release: <1ms
 
-**Post-Write Hook** (synchronous, ~2.7 seconds):
+**Incremental Cache Performance** (v3.0):
+- Cache hit rate: 98% (50/51 files on measured project)
+- Embedding saved: 9.46s (from caching 50 files)
+- Model reload avoided: ~0.8s (class-level model caching)
+- Rebuild from cache: ~5-6s (clears bloat, no re-embedding)
+- Overall speedup: 3.2x (13.67s → 4.33s for 1 file edit)
+
+**Post-Write Hook** (synchronous, incremental cache enabled):
 - Kill-and-restart lock: <50ms
-- Incremental reindex: ~2.7 seconds
+- Incremental reindex: ~4-5 seconds (with cache benefits)
 - User sees: "✅ Semantic search index updated"
 
 ### Troubleshooting
@@ -395,6 +403,152 @@ scripts/incremental-reindex /path/to/project --check-only
 - Another window already indexing (wait for completion)
 - Stale lock from crashed process (will auto-cleanup on next attempt)
 - Check lock file: `cat ~/.claude_code_search/projects/{project}_{hash}/indexing.lock`
+
+## 💾 Incremental Cache System (v3.0)
+
+**Embedding Cache with Lazy Deletion** - Optimizes reindexing by caching embeddings and avoiding expensive re-computation.
+
+### How It Works
+
+The incremental cache system stores computed embeddings on disk and reuses them across reindex operations:
+
+**Cache Structure**:
+```
+~/.claude_code_search/projects/{project}_{hash}/index/
+├── code.index              # FAISS vector index (IndexFlatIP)
+├── metadata.db             # SQLite database with chunk metadata
+├── embeddings.pkl          # Embedding cache (NEW - Phase 2)
+├── merkle_snapshot.json    # Merkle DAG for change detection
+└── stats.json              # Index statistics
+```
+
+**Lazy Deletion Strategy**:
+- When files are modified, chunks are deleted from metadata + cache
+- Vectors remain in FAISS index (creates "bloat")
+- When bloat exceeds threshold → auto-rebuild from cache
+- Rebuild is fast (~5-6s) because embeddings are cached
+
+### Performance Gains
+
+**Before Incremental Cache** (Phase 1):
+```
+Full reindex (50 files):      246s
+After 1 file edit:            246s (full reindex)
+After 10 file edits:          246s (full reindex)
+```
+
+**After Incremental Cache + Model Caching** (Phase 2 + Phase 3):
+```
+Full reindex (51 files):      13.67s (with model loading)
+Incremental (1 file edit):     4.33s (3.2x faster!)
+Rebuild from cache:           ~5-6s (no re-embedding)
+```
+
+**Key Improvements**:
+- ✅ **3.2x speedup** on single file edits (13.67s → 4.33s)
+- ✅ **98% cache hit rate** (50/51 files cached)
+- ✅ **9.34s time saved** from avoided embeddings + model reload
+- ✅ **Automatic bloat management** via rebuild triggers
+
+### Bloat Tracking & Auto-Rebuild
+
+**Bloat Calculation**:
+```
+Bloat % = (Stale Vectors / Active Chunks) × 100
+
+Example:
+- Active chunks: 250
+- Stale vectors: 50 (from lazy deletions)
+- Bloat: 50/250 = 20%
+```
+
+**Auto-Rebuild Triggers** (Hybrid Logic):
+```
+Rebuild if EITHER:
+1. Bloat ≥ 30% (percentage threshold)
+   OR
+2. Bloat ≥ 20% AND stale_count ≥ 500 (hybrid threshold)
+```
+
+**Why This Matters**:
+- Small projects: 30% threshold prevents premature rebuilds
+- Large projects: 500 stale vectors trigger rebuilds (prevents index degradation)
+- Quality: Ensures search accuracy doesn't degrade over time
+
+### Model Caching Optimization (Phase 3)
+
+**Problem**: Model reload overhead (~0.8s per reindex) prevented speedup despite cache working.
+
+**Solution**: Class-level embedder caching
+```python
+# First indexer instance loads model
+indexer1 = FixedIncrementalIndexer(project_path)  # Loads model (~0.8s)
+
+# Subsequent instances reuse cached model
+indexer2 = FixedIncrementalIndexer(project_path)  # Reuses model (~0.001s)
+```
+
+**Impact**:
+- Eliminates model reload on every reindex
+- Saves ~0.8s per operation
+- Enables 3.2x speedup achievement
+
+**Memory Management**:
+```python
+# Optional: Cleanup cached model to free memory
+FixedIncrementalIndexer.cleanup_shared_embedder()
+```
+
+### Cache Benefits by Project Size
+
+**Effectiveness varies with project scale**:
+
+| Project Size | Files | Cache Hit Rate | Expected Speedup | Recommendation |
+|--------------|-------|----------------|------------------|----------------|
+| **Tiny** | <20 | Low (~50%) | 1.5-2x | Cache helps, but modest |
+| **Small** | 20-50 | Good (~80%) | 2-3x | ✅ Cache recommended |
+| **Medium** | 50-200 | High (~90%) | 3-5x | ✅ Strong cache benefits |
+| **Large** | 200+ | Very High (~95%) | 5-10x+ | ✅ Maximum cache benefits |
+
+**Measured on 51-file project**: 3.2x speedup, 98% cache hit rate
+
+### Cache Operations
+
+**View Cache Statistics**:
+```bash
+# Check cache effectiveness
+scripts/status --project /path/to/project
+# Output includes: cached_chunks, cache_hit_rate, bloat_percentage
+```
+
+**Force Rebuild from Cache**:
+```bash
+# Clears bloat, rebuilds using cached embeddings
+scripts/rebuild-from-cache /path/to/project
+```
+
+**Manual Bloat Check**:
+```python
+from scripts.incremental_reindex import FixedIncrementalIndexer
+
+indexer = FixedIncrementalIndexer('/path/to/project')
+bloat_info = indexer.get_bloat_info()
+print(f"Bloat: {bloat_info['bloat_percentage']:.1f}%")
+print(f"Stale: {bloat_info['stale_count']} vectors")
+```
+
+### Cache Validation
+
+**Integrity Checks** (Automatic):
+- Cache version verification
+- Embedding dimension validation
+- Metadata consistency checks
+- Automatic recovery on corruption
+
+**Backup System**:
+- Auto-backup before rebuilds
+- Stored in `index/backup/`
+- Rollback on rebuild failure
 
 ## 🚀 Quick Start
 

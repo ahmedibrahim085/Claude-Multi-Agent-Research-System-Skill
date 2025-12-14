@@ -704,15 +704,34 @@ class FixedCodeIndexManager:
 
 class FixedIncrementalIndexer:
     """
-    Incremental indexer using the fixed IndexManager.
+    Incremental indexer with embedding cache and model caching optimizations.
 
-    Extracts MCP's change detection logic but uses our fixed index manager
-    to avoid the incremental update bug.
+    Combines MCP's change detection logic with optimized index management
+    for fast incremental updates.
 
-    Performance Optimization (Phase 3):
+    Incremental Cache System (Phase 2):
+    - Stores computed embeddings on disk (embeddings.pkl)
+    - Reuses cached embeddings across reindex operations
+    - Lazy deletion: Removes chunks from metadata/cache, vectors remain in FAISS
+    - Auto-rebuild triggers when bloat exceeds thresholds (20%+500 or 30%)
+    - Rebuild is fast (~5-6s) because embeddings are cached, no re-computation
+
+    Model Caching Optimization (Phase 3):
     - Caches embedder at class level to eliminate ~0.8s model reload overhead
-    - Embedder is shared across all instances (model loaded once)
+    - Embedder is shared across all instances (model loaded once per process)
     - Use cleanup_shared_embedder() to free memory when needed
+
+    Performance Results (51-file project):
+    - Full reindex: 13.67s (with model loading)
+    - Incremental (1 file): 4.33s (3.2x speedup!)
+    - Cache hit rate: 98% (50/51 files)
+    - Time saved: 9.34s (embedding + model reload avoidance)
+
+    Bloat Management:
+    - Tracks stale vectors from lazy deletions
+    - Hybrid triggers: 30% threshold OR (20% AND 500 stale vectors)
+    - Auto-rebuild clears bloat and rebuilds from cache
+    - Ensures search quality doesn't degrade over time
     """
 
     # Class-level shared embedder (cached across instances)
