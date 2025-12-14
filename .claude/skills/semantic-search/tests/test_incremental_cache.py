@@ -243,3 +243,28 @@ class TestCacheIntegration:
             manager2 = FixedCodeIndexManager(tmpdir)
             assert 'chunk_123' in manager2.embedding_cache, \
                 "Cache should persist after add_embeddings()"
+
+
+class TestBloatTracking:
+    """Feature 2: Bloat Tracking - Monitor index bloat from lazy deletion"""
+
+    def test_bloat_zero_initially(self):
+        """
+        Test 1: Bloat Zero Initially (RED phase)
+
+        Fresh index should have 0% bloat.
+        Bloat = stale vectors / total vectors
+
+        Expected failure: _calculate_bloat() doesn't exist yet
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Calculate bloat on empty index
+            bloat = manager._calculate_bloat()
+
+            # Verify bloat metrics
+            assert bloat['total_vectors'] == 0, "Empty index should have 0 total vectors"
+            assert bloat['active_chunks'] == 0, "Empty index should have 0 active chunks"
+            assert bloat['stale_vectors'] == 0, "Empty index should have 0 stale vectors"
+            assert bloat['bloat_percentage'] == 0.0, "Empty index should have 0% bloat"
