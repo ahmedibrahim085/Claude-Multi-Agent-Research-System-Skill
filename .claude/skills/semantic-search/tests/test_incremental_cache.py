@@ -610,3 +610,46 @@ class TestCacheVersioning:
 
             manager6 = FixedCodeIndexManager(tmpdir)
             assert manager6.embedding_cache == {}, "Cache should be cleared on model mismatch"
+
+
+class TestRebuildSafety:
+    """Critical Feature: Rebuild Safety - Prevent data loss during rebuild operations"""
+
+    def test_rebuild_creates_backup_before_starting(self):
+        """
+        Test 1: Rebuild creates backup (RED phase)
+
+        rebuild_from_cache() must backup old index files before destructive operations.
+        This prevents data loss if rebuild fails.
+
+        Expected failure: No backup mechanism implemented yet
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Add initial data and save
+            from types import SimpleNamespace
+            for i in range(10):
+                result = SimpleNamespace(
+                    chunk_id=f'chunk_{i}',
+                    embedding=np.random.rand(768).astype(np.float32),
+                    metadata={'file_path': f'file_{i}.py'}
+                )
+                manager.add_embeddings([result])
+            manager.save_index()
+
+            # Verify backup files are created during rebuild
+            manager.rebuild_from_cache()
+
+            # Check for backup directory
+            backup_dir = manager.index_dir / "backup"
+            assert backup_dir.exists(), "Backup directory should exist after rebuild"
+
+            # Verify backup contains index files
+            backup_index = backup_dir / "code.index"
+            backup_metadata = backup_dir / "metadata.db"
+            backup_chunk_ids = backup_dir / "chunk_ids.pkl"
+
+            assert backup_index.exists(), "Backup should contain code.index"
+            assert backup_metadata.exists(), "Backup should contain metadata.db"
+            assert backup_chunk_ids.exists(), "Backup should contain chunk_ids.pkl"

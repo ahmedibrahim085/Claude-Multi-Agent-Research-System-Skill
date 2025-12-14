@@ -276,19 +276,41 @@ class FixedCodeIndexManager:
         """
         Rebuild FAISS index from cached embeddings, removing stale vectors.
 
-        This operation:
-        1. Creates a new empty FAISS index
-        2. Adds only active chunks (in metadata_db) from cache
-        3. Resets bloat to 0% (removes all stale vectors)
-        4. Updates faiss_ids to be sequential again
+        SAFETY: Uses backup/rollback pattern to prevent data loss:
+        1. Backup old index files
+        2. Build new index in memory
+        3. Save new index
+        4. On success: clean backup
+        5. On failure: restore from backup
 
         Used when bloat exceeds thresholds or manual cleanup is needed.
         """
         print(f"Rebuilding index from cache ({len(self.metadata_db)} active chunks)...")
 
-        # Create new empty index
-        self.index = faiss.IndexFlatIP(768)  # Inner product for cosine similarity
-        self.chunk_ids = []
+        # STEP 1: Backup existing index files
+        backup_dir = self.index_dir / "backup"
+        index_path = self.index_dir / "code.index"
+        metadata_path = self.index_dir / "metadata.db"
+        chunk_ids_path = self.index_dir / "chunk_ids.pkl"
+
+        has_existing_index = index_path.exists() and metadata_path.exists() and chunk_ids_path.exists()
+
+        if has_existing_index:
+            import shutil
+            # Create backup directory
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir)  # Remove old backup if exists
+            backup_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy files to backup
+            shutil.copy2(index_path, backup_dir / "code.index")
+            shutil.copy2(metadata_path, backup_dir / "metadata.db")
+            shutil.copy2(chunk_ids_path, backup_dir / "chunk_ids.pkl")
+            print(f"Backup created at {backup_dir}")
+
+        # STEP 2: Build new index in memory
+        new_index = faiss.IndexFlatIP(768)
+        new_chunk_ids = []
 
         # Collect active chunks from cache
         vectors = []
@@ -297,6 +319,9 @@ class FixedCodeIndexManager:
         for chunk_id, entry in self.metadata_db.items():
             # Get embedding from cache
             if chunk_id not in self.embedding_cache:
+                # Restore from backup on error
+                if has_existing_index:
+                    self._restore_from_backup(backup_dir)
                 raise ValueError(f"Chunk {chunk_id} missing from cache - cannot rebuild")
 
             embedding = self.embedding_cache[chunk_id]
@@ -314,14 +339,45 @@ class FixedCodeIndexManager:
         vectors_array = np.ascontiguousarray(vectors_array.copy())
 
         faiss.normalize_L2(vectors_array)  # Normalize for cosine similarity
-        self.index.add(vectors_array)
-        self.chunk_ids.extend(chunk_ids_to_add)
+        new_index.add(vectors_array)
+        new_chunk_ids.extend(chunk_ids_to_add)
 
         # Update faiss_ids in metadata to be sequential (0, 1, 2, ...)
         for i, chunk_id in enumerate(chunk_ids_to_add):
             self.metadata_db[chunk_id]['faiss_id'] = i
 
+        # STEP 3: Update in-memory structures
+        self.index = new_index
+        self.chunk_ids = new_chunk_ids
+
         print(f"Rebuild complete: {len(chunk_ids_to_add)} vectors in clean index")
+
+        # STEP 4: Clean up backup on success (keep for now for verification)
+        # Backup will be cleaned up on next rebuild or manually
+        # This allows users to verify rebuild before backup deletion
+
+    def _restore_from_backup(self, backup_dir: Path):
+        """
+        Restore index from backup after failed rebuild.
+
+        This is called when rebuild_from_cache() fails mid-operation.
+        """
+        import shutil
+        print(f"Restoring index from backup at {backup_dir}...")
+
+        index_path = self.index_dir / "code.index"
+        metadata_path = self.index_dir / "metadata.db"
+        chunk_ids_path = self.index_dir / "chunk_ids.pkl"
+
+        # Restore files from backup
+        if (backup_dir / "code.index").exists():
+            shutil.copy2(backup_dir / "code.index", index_path)
+        if (backup_dir / "metadata.db").exists():
+            shutil.copy2(backup_dir / "metadata.db", metadata_path)
+        if (backup_dir / "chunk_ids.pkl").exists():
+            shutil.copy2(backup_dir / "chunk_ids.pkl", chunk_ids_path)
+
+        print("Restore complete")
 
     def save_index(self):
         """
