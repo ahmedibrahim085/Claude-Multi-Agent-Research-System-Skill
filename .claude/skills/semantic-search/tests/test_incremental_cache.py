@@ -100,3 +100,42 @@ class TestEmbeddingCache:
                 embedding,
                 err_msg="Loaded embedding should match saved embedding"
             )
+
+    def test_cache_atomic_write(self):
+        """
+        Test 4: Cache Atomic Write (RED phase)
+
+        Cache writes should use atomic pattern (temp file + rename) to prevent
+        corruption if process crashes during write.
+
+        Expected failure: _save_cache() doesn't use temp file pattern yet
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Add embedding to cache
+            embedding = np.random.rand(768).astype(np.float32)
+            manager.embedding_cache['chunk_123'] = embedding
+
+            # Mock os.rename to verify it's called with temp file
+            import os
+            original_rename = os.rename
+            rename_calls = []
+
+            def mock_rename(src, dst):
+                rename_calls.append((src, dst))
+                original_rename(src, dst)
+
+            # Patch rename and save
+            import unittest.mock as mock
+            with mock.patch('os.rename', side_effect=mock_rename):
+                manager._save_cache()
+
+            # Verify atomic write pattern: temp file -> final file
+            assert len(rename_calls) == 1, "Should have exactly one rename call"
+            src, dst = rename_calls[0]
+            assert src.endswith('.tmp'), f"Source should be temp file (.tmp), got: {src}"
+            assert dst == str(manager.cache_path), f"Destination should be cache_path, got: {dst}"
+
+            # Cache file should exist (renamed from temp)
+            assert manager.cache_path.exists(), "Cache file should exist after atomic write"
