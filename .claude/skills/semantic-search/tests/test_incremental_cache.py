@@ -365,3 +365,53 @@ class TestBloatTracking:
                 del manager.metadata_db[f'chunk_{i}']
 
             assert manager._needs_rebuild(), "30% bloat → YES rebuild (fallback)"
+
+    def test_small_project_rebuild_trigger(self):
+        """
+        Test 4: Small Project 30% Trigger (RED phase)
+
+        Small projects (<1667 vectors) use 30% fallback trigger.
+        This prevents primary trigger (20% + 500 stale) from being too strict for small projects.
+
+        Expected: Should pass immediately (fallback logic already implemented)
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Small project: 1000 total, 700 active, 300 stale = 30% bloat
+            # Should trigger despite stale_count < 500
+            from types import SimpleNamespace
+            for i in range(1000):
+                result = SimpleNamespace(
+                    chunk_id=f'chunk_{i}',
+                    embedding=np.random.rand(768).astype(np.float32),
+                    metadata={'file_path': f'file_{i}.py'}
+                )
+                manager.add_embeddings([result])
+
+            # Delete 300 (30% bloat, but only 300 stale < 500)
+            for i in range(300):
+                del manager.metadata_db[f'chunk_{i}']
+
+            # Should trigger via 30% fallback (despite stale < 500)
+            assert manager._needs_rebuild(), "30% bloat → YES rebuild (fallback trigger)"
+
+            # Verify 30% is the threshold
+            # 29% bloat (290 stale) → NO rebuild
+            manager2 = FixedCodeIndexManager(tmpdir)
+            for i in range(1000):
+                result = SimpleNamespace(
+                    chunk_id=f'chunk_{i}',
+                    embedding=np.random.rand(768).astype(np.float32),
+                    metadata={'file_path': f'file_{i}.py'}
+                )
+                manager2.add_embeddings([result])
+
+            # Delete 290 (29% bloat)
+            for i in range(290):
+                del manager2.metadata_db[f'chunk_{i}']
+
+            bloat = manager2._calculate_bloat()
+            # Verify it's ~29% (floating point tolerance)
+            assert 28.9 <= bloat['bloat_percentage'] < 29.5, f"Should be ~29% bloat, got {bloat['bloat_percentage']}"
+            assert not manager2._needs_rebuild(), "29% bloat → NO rebuild (below threshold)"
