@@ -67,13 +67,16 @@ class TestEmbeddingCache:
             # Cache file should exist
             assert manager.cache_path.exists(), "Cache file should exist after save"
 
-            # Should be able to read it back
+            # Should be able to read it back (versioned format)
             import pickle
             with open(manager.cache_path, 'rb') as f:
-                saved_cache = pickle.load(f)
+                cache_data = pickle.load(f)
 
-            assert 'chunk_123' in saved_cache, "Chunk should be in saved cache"
-            np.testing.assert_array_equal(saved_cache['chunk_123'], embedding)
+            # Verify versioned structure
+            assert 'version' in cache_data, "Cache should have version"
+            assert 'embeddings' in cache_data, "Cache should have embeddings"
+            assert 'chunk_123' in cache_data['embeddings'], "Chunk should be in saved cache"
+            np.testing.assert_array_equal(cache_data['embeddings']['chunk_123'], embedding)
 
     def test_cache_loads_after_restart(self):
         """
@@ -503,3 +506,51 @@ class TestBloatTracking:
             assert stats['stale_vectors'] == 20, f"Expected 20 stale vectors, got {stats['stale_vectors']}"
             assert stats['total_vectors'] == 100, f"Expected 100 total vectors, got {stats['total_vectors']}"
             assert stats['active_chunks'] == 80, f"Expected 80 active chunks, got {stats['active_chunks']}"
+
+
+class TestCacheVersioning:
+    """Critical Feature: Cache Versioning - Prevent stale embedding usage after model changes"""
+
+    def test_cache_saves_with_version_metadata(self):
+        """
+        Test 1: Cache saves with version metadata (RED phase)
+
+        Cache must include: version number, model_name, embedding_dimension
+        This prevents using incompatible cached embeddings after model changes.
+
+        Expected failure: Cache doesn't have version metadata yet
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Add one embedding
+            from types import SimpleNamespace
+            embedding = np.random.rand(768).astype(np.float32)
+            result = SimpleNamespace(
+                chunk_id='chunk_1',
+                embedding=embedding,
+                metadata={'file_path': 'test.py'}
+            )
+            manager.add_embeddings([result])
+
+            # Load cache file directly and check structure
+            import pickle
+            with open(manager.cache_path, 'rb') as f:
+                cache_data = pickle.load(f)
+
+            # Should be a dict with metadata keys
+            assert isinstance(cache_data, dict), "Cache should be a dict"
+            assert 'version' in cache_data, "Cache must have version field"
+            assert 'model_name' in cache_data, "Cache must have model_name field"
+            assert 'embedding_dimension' in cache_data, "Cache must have embedding_dimension field"
+            assert 'embeddings' in cache_data, "Cache must have embeddings field"
+
+            # Verify values
+            assert cache_data['version'] == 1, "Version should be 1"
+            assert cache_data['embedding_dimension'] == 768, "Dimension should be 768"
+            assert isinstance(cache_data['model_name'], str), "Model name should be string"
+            assert len(cache_data['model_name']) > 0, "Model name should not be empty"
+
+            # Verify embeddings are stored correctly
+            assert 'chunk_1' in cache_data['embeddings'], "Embedding should be in cache"
+            np.testing.assert_array_equal(cache_data['embeddings']['chunk_1'], embedding)

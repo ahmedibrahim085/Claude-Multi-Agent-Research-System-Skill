@@ -57,6 +57,10 @@ except ImportError as e:
     }, indent=2), file=sys.stderr)
     sys.exit(1)
 
+# Cache versioning constants (Critical Feature: Prevent stale embeddings after model changes)
+CACHE_VERSION = 1
+DEFAULT_MODEL_NAME = "google/embeddinggemma-300m"  # Default embedding model
+
 # Import lock management from reindex_manager
 try:
     import reindex_manager
@@ -76,7 +80,7 @@ class FixedCodeIndexManager:
     Works on Apple Silicon, simpler code, same as MCP. Full reindex only.
     """
 
-    def __init__(self, project_path: str):
+    def __init__(self, project_path: str, model_name: str = DEFAULT_MODEL_NAME):
         self.project_path = Path(project_path)
         self.project_name = self.project_path.name
 
@@ -94,8 +98,11 @@ class FixedCodeIndexManager:
         self.embedding_cache = {}  # chunk_id -> embedding vector (numpy array)
         self.cache_path = self.index_dir / "embeddings.pkl"
 
-        # FAISS index - IndexFlatIP (same as MCP, works on Apple Silicon)
+        # Model configuration (Critical: Cache versioning)
+        self.model_name = model_name
         self.dimension = 768  # embeddinggemma-300m dimension
+
+        # FAISS index - IndexFlatIP (same as MCP, works on Apple Silicon)
         self.index = faiss.IndexFlatIP(self.dimension)
 
         # Load existing index and cache if available
@@ -139,35 +146,80 @@ class FixedCodeIndexManager:
         """
         Save embedding cache to disk using atomic write pattern.
 
-        Cache format: pickle file with dict mapping chunk_id -> numpy array (768-dim float32).
-        Used for rebuilding index without re-embedding.
+        Cache format (VERSIONED - Critical Feature):
+        {
+            'version': 1,
+            'model_name': 'google/embeddinggemma-300m',
+            'embedding_dimension': 768,
+            'embeddings': {chunk_id: numpy_array, ...}
+        }
 
-        Atomic write: Write to temp file, then rename to final path.
-        This prevents corruption if process crashes during write.
+        Versioning prevents using stale embeddings after model changes.
+        Atomic write prevents corruption if process crashes during write.
         """
         import os
         temp_path = str(self.cache_path) + '.tmp'
 
+        # Create versioned cache structure
+        cache_data = {
+            'version': CACHE_VERSION,
+            'model_name': self.model_name,
+            'embedding_dimension': self.dimension,
+            'embeddings': self.embedding_cache
+        }
+
         # Write to temp file
         with open(temp_path, 'wb') as f:
-            pickle.dump(self.embedding_cache, f)
+            pickle.dump(cache_data, f)
 
         # Atomic rename (POSIX guarantees atomicity)
         os.rename(temp_path, str(self.cache_path))
 
     def _load_cache(self):
         """
-        Load embedding cache from disk.
+        Load embedding cache from disk with version validation.
 
         If cache file doesn't exist, cache remains empty (graceful degradation).
+        If cache is incompatible (version/model/dimension mismatch), cache is cleared.
         """
-        if self.cache_path.exists():
-            try:
-                with open(self.cache_path, 'rb') as f:
-                    self.embedding_cache = pickle.load(f)
-            except Exception as e:
-                print(f"Warning: Failed to load embedding cache: {e}", file=sys.stderr)
-                # Keep cache empty on load failure
+        if not self.cache_path.exists():
+            return  # No cache file, stay empty
+
+        try:
+            with open(self.cache_path, 'rb') as f:
+                cache_data = pickle.load(f)
+
+            # Handle old unversioned format (backward compatibility)
+            if not isinstance(cache_data, dict) or 'version' not in cache_data:
+                print("Warning: Old cache format detected, clearing cache", file=sys.stderr)
+                self.embedding_cache = {}
+                return
+
+            # Validate version
+            if cache_data.get('version') != CACHE_VERSION:
+                print(f"Warning: Cache version mismatch (expected {CACHE_VERSION}, got {cache_data.get('version')}), clearing cache", file=sys.stderr)
+                self.embedding_cache = {}
+                return
+
+            # Validate dimension
+            if cache_data.get('embedding_dimension') != self.dimension:
+                print(f"Warning: Dimension mismatch (expected {self.dimension}, got {cache_data.get('embedding_dimension')}), clearing cache", file=sys.stderr)
+                self.embedding_cache = {}
+                return
+
+            # Validate model name (warn if different, but allow)
+            if cache_data.get('model_name') != self.model_name:
+                print(f"Warning: Model name mismatch (expected '{self.model_name}', got '{cache_data.get('model_name')}'), clearing cache", file=sys.stderr)
+                self.embedding_cache = {}
+                return
+
+            # Load embeddings
+            self.embedding_cache = cache_data.get('embeddings', {})
+
+        except Exception as e:
+            print(f"Warning: Failed to load embedding cache: {e}", file=sys.stderr)
+            # Keep cache empty on load failure
+            self.embedding_cache = {}
 
     def _calculate_bloat(self) -> Dict:
         """
