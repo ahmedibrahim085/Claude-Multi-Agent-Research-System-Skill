@@ -307,3 +307,61 @@ class TestBloatTracking:
             assert bloat_after['active_chunks'] == 80, "Metadata has 80 chunks (deleted 20)"
             assert bloat_after['stale_vectors'] == 20, "20 stale vectors from deletion"
             assert bloat_after['bloat_percentage'] == 20.0, "Bloat should be 20%"
+
+    def test_rebuild_trigger_hybrid_logic(self):
+        """
+        Test 3: Rebuild Trigger Hybrid Logic (RED phase)
+
+        Rebuild triggers: (20% bloat AND 500 stale) OR (30% bloat)
+
+        This prevents rebuilding small projects with low absolute bloat count.
+
+        Expected failure: _needs_rebuild() doesn't exist yet
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Scenario 1: 20% bloat but only 100 stale → NO rebuild
+            # (simulate 500 total, 400 active, 100 stale = 20%)
+            from types import SimpleNamespace
+            for i in range(500):
+                result = SimpleNamespace(
+                    chunk_id=f'chunk_{i}',
+                    embedding=np.random.rand(768).astype(np.float32),
+                    metadata={'file_path': f'file_{i}.py'}
+                )
+                manager.add_embeddings([result])
+
+            # Delete 100 (20% bloat, but <500 stale)
+            for i in range(100):
+                del manager.metadata_db[f'chunk_{i}']
+
+            assert not manager._needs_rebuild(), "20% + 100 stale → NO rebuild"
+
+            # Scenario 2: 20% bloat AND 500 stale → YES rebuild
+            # Delete 400 more (total 500 deleted = 500 stale, still 20%)
+            for i in range(100, 500):
+                del manager.metadata_db[f'chunk_{i}']
+
+            assert manager._needs_rebuild(), "20% + 500 stale → YES rebuild"
+
+            # Scenario 3: 30% bloat regardless of count → YES rebuild
+            # Add 100 more, delete 30 (30% of 100)
+            for i in range(500, 600):
+                result = SimpleNamespace(
+                    chunk_id=f'chunk_{i}',
+                    embedding=np.random.rand(768).astype(np.float32),
+                    metadata={'file_path': f'file_{i}.py'}
+                )
+                manager.add_embeddings([result])
+
+            # Clear previous state
+            manager.metadata_db = {}
+            for i in range(500, 600):
+                manager.metadata_db[f'chunk_{i}'] = {'metadata': {}, 'chunk_id': f'chunk_{i}', 'faiss_id': i}
+
+            # Delete 30 out of 100 (30% bloat, but only 30 stale)
+            for i in range(570, 600):
+                del manager.metadata_db[f'chunk_{i}']
+
+            assert manager._needs_rebuild(), "30% bloat → YES rebuild (fallback)"

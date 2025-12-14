@@ -197,6 +197,29 @@ class FixedCodeIndexManager:
             'bloat_percentage': bloat_percentage
         }
 
+    def _needs_rebuild(self) -> bool:
+        """
+        Determine if index needs rebuild based on bloat metrics.
+
+        Hybrid trigger logic prevents rebuilding small projects with low absolute bloat:
+        - Primary trigger: 20% bloat AND 500+ stale vectors (prevents small project rebuilds)
+        - Fallback trigger: 30% bloat (regardless of count - critical bloat level)
+
+        Returns:
+            True if rebuild needed, False otherwise
+        """
+        bloat = self._calculate_bloat()
+        bloat_percentage = bloat['bloat_percentage']
+        stale_vectors = bloat['stale_vectors']
+
+        # Primary: 20% bloat AND 500+ stale vectors
+        primary_trigger = (bloat_percentage >= 20.0 and stale_vectors >= 500)
+
+        # Fallback: 30% bloat (regardless of count)
+        fallback_trigger = (bloat_percentage >= 30.0)
+
+        return primary_trigger or fallback_trigger
+
     def save_index(self):
         """
         Save index to disk - SIMPLIFIED for IndexFlatIP.
