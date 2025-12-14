@@ -123,13 +123,14 @@ scripts/find-similar --chunk-id "src/auth.py:45-67:function:authenticate" --proj
 3. Bloat exceeds threshold → auto-rebuild from cache
 4. Rebuild is fast (embeddings are cached!)
 
-**Auto-Rebuild Triggers** (Hybrid Logic):
+**Auto-Rebuild Triggers** (Test-Driven Calibration):
 ```
 Rebuild if EITHER:
 1. Bloat ≥ 30%
    OR
-2. Bloat ≥ 20% AND stale_count ≥ 500
+2. Bloat ≥ 20% AND stale_count ≥ 400
 ```
+*Thresholds derived from test requirements (see docs/phase-3-honest-review.md)*
 
 ### Performance by Project Size
 

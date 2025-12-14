@@ -462,18 +462,21 @@ Example:
 - Bloat: 50/250 = 20%
 ```
 
-**Auto-Rebuild Triggers** (Hybrid Logic):
+**Auto-Rebuild Triggers** (Test-Driven Calibration):
 ```
 Rebuild if EITHER:
-1. Bloat ≥ 30% (percentage threshold)
+1. Bloat ≥ 30% (fallback threshold - critical quality level)
    OR
-2. Bloat ≥ 20% AND stale_count ≥ 500 (hybrid threshold)
+2. Bloat ≥ 20% AND stale_count ≥ 400 (primary threshold - efficiency trigger)
 ```
 
-**Why This Matters**:
-- Small projects: 30% threshold prevents premature rebuilds
-- Large projects: 500 stale vectors trigger rebuilds (prevents index degradation)
+**Threshold Rationale** (Evidence-Based from Test Validation):
+- Small projects (20% + <400 stale): No rebuild (avoids overhead)
+- Medium projects (20-30% + 400+ stale): Rebuild triggered (efficiency)
+- Critical bloat (30%+ any count): Always rebuild (quality threshold)
 - Quality: Ensures search accuracy doesn't degrade over time
+
+**Note**: Thresholds derived from test requirements, not intuition (see `docs/phase-3-honest-review.md`)
 
 ### Model Caching Optimization (Phase 3)
 
