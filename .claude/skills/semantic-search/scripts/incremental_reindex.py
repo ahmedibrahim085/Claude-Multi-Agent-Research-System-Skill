@@ -13,10 +13,14 @@ Architecture:
 - Full reindex only (same as MCP, no incremental updates)
 """
 
+# FIX: Disable tokenizer parallelism to prevent Apple Silicon MPS + multiprocessing crashes
+# Must be set BEFORE importing any huggingface/transformers code
+import os
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
 import sys
 import json
 import hashlib
-import os
 import pickle
 from pathlib import Path
 from typing import Dict, List, Optional
