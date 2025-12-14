@@ -262,6 +262,85 @@ class TestAutoReindexIncremental:
             print(f"✓ No-change handling verified: {result2}")
 
 
+class TestAutoReindexEdgeCases:
+    """Test edge cases and fallback scenarios"""
+
+    def test_first_time_indexing_no_snapshot(self):
+        """Test that first-time indexing does full reindex (no snapshot exists)"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_project = Path(tmpdir) / "test_project"
+            test_project.mkdir()
+
+            # Create files
+            (test_project / "file1.py").write_text("def foo(): pass")
+
+            # First reindex - no snapshot exists
+            indexer = FixedIncrementalIndexer(project_path=str(test_project))
+            result = indexer.auto_reindex()
+
+            # Should do full reindex (not incremental or skip)
+            assert result['success'], "First reindex should succeed"
+            assert result.get('full_index') == True, "Should do full reindex when no snapshot"
+            assert 'incremental' not in result or not result['incremental'], \
+                "Should NOT be incremental on first run"
+
+    def test_force_full_flag_overrides_incremental(self):
+        """Test that force_full=True always does full reindex"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_project = Path(tmpdir) / "test_project"
+            test_project.mkdir()
+
+            # Create and index
+            (test_project / "file1.py").write_text("def foo(): pass")
+            indexer1 = FixedIncrementalIndexer(project_path=str(test_project))
+            result1 = indexer1.auto_reindex()
+            assert result1['success']
+
+            # Modify file
+            import time
+            time.sleep(0.1)
+            (test_project / "file1.py").write_text("def bar(): pass")
+
+            # Force full (should NOT use incremental even though file changed)
+            indexer2 = FixedIncrementalIndexer(project_path=str(test_project))
+            result2 = indexer2.auto_reindex(force_full=True)
+
+            assert result2['success'], "Force full should succeed"
+            assert result2.get('full_index') == True, "Should do full reindex with force_full=True"
+            assert 'incremental' not in result2 or not result2['incremental'], \
+                "Should NOT be incremental when forced full"
+
+    def test_multiple_files_changed(self):
+        """Test incremental reindex when multiple files changed"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_project = Path(tmpdir) / "test_project"
+            test_project.mkdir()
+
+            # Create initial files
+            (test_project / "file1.py").write_text("def foo(): pass")
+            (test_project / "file2.py").write_text("def bar(): pass")
+            (test_project / "file3.py").write_text("def baz(): pass")
+
+            indexer1 = FixedIncrementalIndexer(project_path=str(test_project))
+            result1 = indexer1.auto_reindex()
+            assert result1['success']
+
+            # Modify multiple files
+            import time
+            time.sleep(0.1)
+            (test_project / "file1.py").write_text("def foo(): return 1")
+            (test_project / "file2.py").write_text("def bar(): return 2")
+
+            # Should use incremental for multiple files
+            indexer2 = FixedIncrementalIndexer(project_path=str(test_project))
+            result2 = indexer2.auto_reindex()
+
+            assert result2['success'], "Incremental should succeed"
+            assert result2.get('incremental') == True, "Should use incremental path"
+            assert result2.get('reembedded_files') >= 2, \
+                f"Should re-embed >=2 files, got {result2.get('reembedded_files')}"
+
+
 if __name__ == "__main__":
     print("Running incremental operations tests...")
     import pytest
