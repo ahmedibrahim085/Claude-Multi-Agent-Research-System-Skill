@@ -130,13 +130,23 @@ class FixedCodeIndexManager:
 
     def _save_cache(self):
         """
-        Save embedding cache to disk.
+        Save embedding cache to disk using atomic write pattern.
 
         Cache format: pickle file with dict mapping chunk_id -> numpy array (768-dim float32).
         Used for rebuilding index without re-embedding.
+
+        Atomic write: Write to temp file, then rename to final path.
+        This prevents corruption if process crashes during write.
         """
-        with open(self.cache_path, 'wb') as f:
+        import os
+        temp_path = str(self.cache_path) + '.tmp'
+
+        # Write to temp file
+        with open(temp_path, 'wb') as f:
             pickle.dump(self.embedding_cache, f)
+
+        # Atomic rename (POSIX guarantees atomicity)
+        os.rename(temp_path, str(self.cache_path))
 
     def _load_cache(self):
         """
