@@ -263,15 +263,17 @@ def validate_card(card_number, cvv):
         # ============================================
         print("\n=== PHASE 5: Rebuild to Clear Bloat ===")
 
-        # Rebuild using production entry point (creates new instance)
+        # Use force_full=True to force a rebuild even without file changes
+        # This simulates a maintenance rebuild to clear accumulated bloat
         indexer3 = FixedIncrementalIndexer(project_path=str(test_project))
 
         # Measure rebuild time
         start_time = time.time()
-        indexer3.auto_reindex()
+        result = indexer3.auto_reindex(force_full=True)
         rebuild_bloat_time = time.time() - start_time
 
         print(f"Bloat cleanup rebuild time: {rebuild_bloat_time:.3f}s")
+        assert result['success'], f"Rebuild should succeed: {result.get('error', '')}"
 
         # ============================================
         # PHASE 6: Verify Bloat Cleared
