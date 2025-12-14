@@ -127,6 +127,16 @@ class FixedCodeIndexManager:
             except Exception as e:
                 print(f"Warning: Failed to load existing index: {e}", file=sys.stderr)
 
+    def _save_cache(self):
+        """
+        Save embedding cache to disk.
+
+        Cache format: pickle file with dict mapping chunk_id -> numpy array (768-dim float32).
+        Used for rebuilding index without re-embedding.
+        """
+        with open(self.cache_path, 'wb') as f:
+            pickle.dump(self.embedding_cache, f)
+
     def save_index(self):
         """
         Save index to disk - SIMPLIFIED for IndexFlatIP.
