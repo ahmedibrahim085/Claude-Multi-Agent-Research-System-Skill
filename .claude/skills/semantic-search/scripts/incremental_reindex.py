@@ -708,7 +708,15 @@ class FixedIncrementalIndexer:
 
     Extracts MCP's change detection logic but uses our fixed index manager
     to avoid the incremental update bug.
+
+    Performance Optimization (Phase 3):
+    - Caches embedder at class level to eliminate ~0.8s model reload overhead
+    - Embedder is shared across all instances (model loaded once)
+    - Use cleanup_shared_embedder() to free memory when needed
     """
+
+    # Class-level shared embedder (cached across instances)
+    _shared_embedder = None
 
     def __init__(self, project_path: str):
         project_path_obj = Path(project_path).resolve()
@@ -717,10 +725,35 @@ class FixedIncrementalIndexer:
 
         # Initialize components
         self.indexer = FixedCodeIndexManager(self.project_path)
-        self.embedder = CodeEmbedder()
+
+        # Performance optimization: Reuse shared embedder to avoid model reload
+        # Creates embedder only once, reuses across instances (~0.8s savings per reindex)
+        if FixedIncrementalIndexer._shared_embedder is None:
+            FixedIncrementalIndexer._shared_embedder = CodeEmbedder()
+
+        self.embedder = FixedIncrementalIndexer._shared_embedder
+
         self.chunker = MultiLanguageChunker(self.project_path)
         self.snapshot_manager = SnapshotManager()
         self.change_detector = ChangeDetector(self.snapshot_manager)
+
+    @classmethod
+    def cleanup_shared_embedder(cls):
+        """
+        Cleanup the shared embedder to free memory.
+
+        Call this when you need to free GPU/CPU memory used by the model.
+        Next FixedIncrementalIndexer instance will create a new embedder.
+        """
+        if cls._shared_embedder is not None:
+            # Try to cleanup the model if the embedder has a cleanup method
+            if hasattr(cls._shared_embedder, 'cleanup'):
+                try:
+                    cls._shared_embedder.cleanup()
+                except Exception:
+                    pass  # Best effort cleanup
+
+            cls._shared_embedder = None
 
     def _delete_chunks_for_file(self, file_path: str) -> int:
         """
