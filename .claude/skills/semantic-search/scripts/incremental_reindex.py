@@ -198,6 +198,10 @@ class FixedCodeIndexManager:
         with open(chunk_id_path, 'wb') as f:
             pickle.dump(chunk_ids_ordered, f)
 
+        # TEMPORARILY DISABLED for debugging segfault
+        # Save embedding cache (AFTER all FAISS operations complete)
+        # self._save_cache()
+
         # Save stats.json
         self._update_stats()
 
@@ -262,9 +266,6 @@ class FixedCodeIndexManager:
             vectors.append(result.embedding)
             chunk_ids_to_add.append(chunk_id)
 
-            # NEW: Cache embedding for rebuild without re-embedding
-            self.embedding_cache[chunk_id] = result.embedding
-
             # Store metadata with sequential index
             self.metadata_db[chunk_id] = {
                 'metadata': result.metadata,
@@ -274,14 +275,23 @@ class FixedCodeIndexManager:
 
         # Add to FAISS - auto-assigns sequential IDs (start_index, start_index+1, ...)
         vectors_array = np.array(vectors, dtype=np.float32)
+
+        # FIX: Explicitly copy to CPU memory to avoid MPS device memory references
+        # Apple Silicon MPS embeddings can have device memory references that conflict with FAISS (CPU-only)
+        vectors_array = np.ascontiguousarray(vectors_array.copy())
+
         faiss.normalize_L2(vectors_array)  # Normalize for cosine similarity
         self.index.add(vectors_array)
 
         # Append chunk_ids to maintain order
         self.chunk_ids.extend(chunk_ids_to_add)
 
-        # NEW: Save cache after adding embeddings
-        self._save_cache()
+        # TEMPORARILY DISABLED for debugging segfault
+        # Build embedding cache AFTER FAISS operations complete (avoids memory conflicts)
+        # for result in embedding_results:
+        #     chunk_id = result.chunk_id
+        #     # Copy embedding to avoid GPU memory references
+        #     self.embedding_cache[chunk_id] = result.embedding.copy()
 
     def clear_index(self):
         """Clear entire index - SIMPLIFIED for IndexFlatIP"""
