@@ -160,6 +160,89 @@ class TestIncrementalIndex:
             assert file2_chunks > 0, "Should have chunks for unchanged file2.py"
 
 
+class TestAutoReindexIncremental:
+    """Test auto_reindex() uses incremental path in production"""
+
+    def test_auto_reindex_uses_incremental_path(self):
+        """Test that auto_reindex() actually uses cache for unchanged files"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_project = Path(tmpdir) / "test_project"
+            test_project.mkdir()
+
+            # Create initial files
+            (test_project / "file1.py").write_text("def foo(): pass")
+            (test_project / "file2.py").write_text("def bar(): pass")
+            (test_project / "file3.py").write_text("def baz(): pass")
+
+            # Initial reindex (full)
+            indexer = FixedIncrementalIndexer(project_path=str(test_project))
+            result1 = indexer.auto_reindex()
+
+            assert result1['success'], "Initial reindex should succeed"
+            assert result1.get('full_index') == True, "First reindex should be full"
+            initial_chunks = result1['chunks_added']
+
+            # Modify one file
+            import time
+            time.sleep(0.1)
+            (test_project / "file2.py").write_text("def bar(): return 42")
+
+            # Second reindex - should use incremental path
+            indexer2 = FixedIncrementalIndexer(project_path=str(test_project))
+            result2 = indexer2.auto_reindex()
+
+            # CRITICAL ASSERTIONS - this is what we're testing!
+            assert result2['success'], f"Incremental reindex should succeed: {result2.get('error', '')}"
+            assert result2.get('incremental') == True, "Should use incremental path"
+            assert 'reembedded_files' in result2, "Should report re-embedded files"
+            assert result2['reembedded_files'] == 1, f"Should re-embed 1 file, got {result2.get('reembedded_files')}"
+            assert 'cached_files' in result2, "Should report cached files"
+            assert result2['cached_files'] >= 2, f"Should cache >=2 files, got {result2.get('cached_files')}"
+
+            # Verify time is much faster (should be <5s vs full reindex)
+            # Note: For small projects, speedup may be modest due to overhead
+            # but the incremental flag proves the cache path was used
+            assert result2['time_taken'] < 10, f"Incremental should be fast, got {result2['time_taken']}s"
+
+            print(f"\n✓ Incremental path verified:")
+            print(f"  - Re-embedded: {result2['reembedded_files']} files")
+            print(f"  - Cached: {result2['cached_files']} files")
+            print(f"  - Time: {result2['time_taken']}s")
+
+    def test_auto_reindex_skips_when_no_changes(self):
+        """Test that auto_reindex() handles no source file changes efficiently"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_project = Path(tmpdir) / "test_project"
+            test_project.mkdir()
+
+            # Create and index files
+            (test_project / "file1.py").write_text("def foo(): pass")
+
+            indexer = FixedIncrementalIndexer(project_path=str(test_project))
+            result1 = indexer.auto_reindex()
+            assert result1['success'], "Initial reindex should succeed"
+
+            # Reindex again with NO source file changes
+            # Note: May detect metadata file changes (prerequisites.json)
+            # but should do incremental with 0 files to re-embed
+            indexer2 = FixedIncrementalIndexer(project_path=str(test_project))
+            result2 = indexer2.auto_reindex()
+
+            # Should either skip OR do incremental with 0 files
+            assert result2['success'], "Should succeed"
+
+            if result2.get('skipped'):
+                # Perfect case: detected no changes
+                assert result2.get('reason') == 'No changes detected'
+            else:
+                # Valid case: incremental with 0 files to re-embed (metadata changes only)
+                assert result2.get('incremental') == True, "Should use incremental path"
+                assert result2.get('reembedded_files') == 0, \
+                    f"Should re-embed 0 files, got {result2.get('reembedded_files')}"
+
+            print(f"✓ No-change handling verified: {result2}")
+
+
 if __name__ == "__main__":
     print("Running incremental operations tests...")
     import pytest

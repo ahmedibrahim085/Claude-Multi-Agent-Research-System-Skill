@@ -972,42 +972,61 @@ class FixedIncrementalIndexer:
             print(f"Warning: Failed to update prerequisites state: {e}", file=sys.stderr)
 
     def auto_reindex(self, force_full: bool = False):
-        """Auto-reindex with IndexFlatIP (always full reindex when called)
+        """
+        Auto-reindex with INCREMENTAL support via cache + rebuild strategy.
 
-        IndexFlatIP Limitation:
-        - Uses sequential IDs (0, 1, 2...) - no selective deletion supported
-        - Only full reindex possible (clear entire index + rebuild)
+        NEW DESIGN (Phase 2.4):
+        - Detects file changes using Merkle tree
+        - Re-embeds ONLY changed files
+        - Rebuilds FAISS index from ALL cached embeddings (fast!)
+        - Falls back to full reindex if cache incomplete or first time
 
-        Design:
-        - ALWAYS does full reindex when called (3-10 minutes for ~6,000 chunks)
-        - Change detection happens in needs_reindex(), not here
-        - This function is called only when reindex is needed
+        Incremental Strategy with IndexFlatIP:
+        - IndexFlatIP uses sequential IDs - can't delete individual vectors
+        - SOLUTION: Re-embed changed files, rebuild entire index from cache
+        - Rebuild from cache is FAST (<0.01s vs 246s full reindex)
 
         Logic:
-        1. If IndexFlatIP detected → force full reindex (always true in current implementation)
-        2. If no snapshot exists → force full reindex (first time)
-        3. Execute full reindex (clear entire index + rebuild)
-
-        Note: The IndexFlatIP check (line 427-428) makes this function always do full reindex,
-        regardless of force_full parameter. Change detection to skip unnecessary reindex
-        happens at the caller level (needs_reindex()).
+        1. Load previous snapshot and detect changes
+        2. If no changes and not forced → skip reindex
+        3. If force_full or no snapshot or cache incomplete → full reindex
+        4. Otherwise → incremental reindex (re-embed changed + rebuild from cache)
         """
         start_time = time.time()
 
         try:
-            # IndexFlatIP only supports full reindex (no selective deletion)
-            # Auto-fallback: Detect this and force full reindex
-            if isinstance(self.indexer.index, faiss.IndexFlatIP):
-                force_full = True
-
-            # If no snapshot exists, must do full reindex (first time)
+            # Step 1: Check if snapshot exists (first time = full reindex)
             if not self.snapshot_manager.has_snapshot(self.project_path):
-                force_full = True
-
-            # If force_full requested, do full reindex immediately
-            # Note: With IndexFlatIP, this is always True (lines 427-428), so we always reach here
-            if force_full:
+                print("No snapshot found - performing full reindex...", file=sys.stderr)
                 return self._full_index(start_time)
+
+            # Step 2: Detect changes
+            print("Detecting changes...", file=sys.stderr)
+            dag = MerkleDAG(self.project_path)
+            dag.build()
+
+            prev_snapshot = self.snapshot_manager.load_snapshot(self.project_path)
+            changes = self.change_detector.detect_changes(dag, prev_snapshot)
+
+            # Step 3: If no changes and not forced, skip reindex
+            if not changes.has_changes() and not force_full:
+                print("No changes detected - skipping reindex", file=sys.stderr)
+                return {
+                    'success': True,
+                    'skipped': True,
+                    'reason': 'No changes detected',
+                    'time_taken': round(time.time() - start_time, 2)
+                }
+
+            # Step 4: Check if cache is complete (if not, must do full reindex)
+            if force_full or not self._cache_is_complete():
+                reason = "Forced full reindex" if force_full else "Cache incomplete"
+                print(f"{reason} - performing full reindex...", file=sys.stderr)
+                return self._full_index(start_time)
+
+            # Step 5: INCREMENTAL PATH - use cache for unchanged files!
+            print(f"Changes detected: {changes.total_changed()} files", file=sys.stderr)
+            return self._incremental_index(changes)
 
         except Exception as e:
             return {
@@ -1015,6 +1034,29 @@ class FixedIncrementalIndexer:
                 'error': str(e),
                 'time_taken': round(time.time() - start_time, 2)
             }
+
+    def _cache_is_complete(self) -> bool:
+        """
+        Check if cache contains embeddings for all chunks in metadata.
+
+        Returns True if cache is complete, False if any chunks are missing.
+        """
+        try:
+            # Check if cache file exists
+            if not self.indexer.cache_path.exists():
+                return False
+
+            # Check if every chunk in metadata has a cached embedding
+            for chunk_id in self.indexer.metadata_db.keys():
+                if chunk_id not in self.indexer.embedding_cache:
+                    print(f"Cache incomplete: missing embedding for chunk {chunk_id}", file=sys.stderr)
+                    return False
+
+            return True
+
+        except Exception as e:
+            print(f"Error checking cache completeness: {e}", file=sys.stderr)
+            return False
 
     def _full_index(self, start_time: float):
         """Perform full indexing"""
