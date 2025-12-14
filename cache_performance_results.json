@@ -1,0 +1,27 @@
+{
+  "project_path": "/Users/ahmedmaged/ai_storage/projects/Claude-Multi-Agent-Research-System-Skill",
+  "full_reindex": {
+    "time_seconds": 21.53,
+    "total_chunks": 372,
+    "cache_size_before": 0,
+    "cache_size_after": 372,
+    "chunks_per_second": 17.28
+  },
+  "rebuild_from_cache": {
+    "time_seconds": 0.0,
+    "total_chunks": 372,
+    "cache_hits": 372,
+    "cache_hit_rate": 100.0,
+    "chunks_per_second": 111044.13
+  },
+  "speedup": {
+    "baseline_time": 21.53,
+    "cached_time": 0.0,
+    "speedup_factor": 0,
+    "time_saved": 21.53,
+    "time_saved_percentage": 100.0,
+    "target_speedup": 8.0,
+    "meets_target": false
+  },
+  "timestamp": "2025-12-14 17:44:10 UTC"
+}
