@@ -455,3 +455,51 @@ class TestBloatTracking:
             assert bloat_after['total_vectors'] == 80, "FAISS should only have 80 vectors (active chunks)"
             assert bloat_after['active_chunks'] == 80, "Metadata should still have 80 chunks"
             assert bloat_after['stale_vectors'] == 0, "No stale vectors after rebuild"
+
+    def test_stats_json_includes_bloat(self):
+        """
+        Test 6: Stats.json Bloat Metrics (RED phase)
+
+        stats.json should include bloat metrics when index is saved.
+
+        Expected failure: stats.json doesn't include bloat fields yet
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Add 100 chunks
+            from types import SimpleNamespace
+            for i in range(100):
+                result = SimpleNamespace(
+                    chunk_id=f'chunk_{i}',
+                    embedding=np.random.rand(768).astype(np.float32),
+                    metadata={'file_path': f'file_{i}.py'}
+                )
+                manager.add_embeddings([result])
+
+            # Delete 20 chunks (20% bloat)
+            for i in range(20):
+                del manager.metadata_db[f'chunk_{i}']
+
+            # Save index (triggers _update_stats())
+            manager.save_index()
+
+            # Read stats.json
+            stats_path = manager.index_dir / "stats.json"
+            assert stats_path.exists(), "stats.json should exist after save"
+
+            import json
+            with open(stats_path) as f:
+                stats = json.load(f)
+
+            # Verify bloat metrics are present
+            assert 'bloat_percentage' in stats, "stats.json should include bloat_percentage"
+            assert 'stale_vectors' in stats, "stats.json should include stale_vectors"
+            assert 'total_vectors' in stats, "stats.json should include total_vectors"
+            assert 'active_chunks' in stats, "stats.json should include active_chunks"
+
+            # Verify values are correct
+            assert stats['bloat_percentage'] == 20.0, f"Expected 20% bloat, got {stats['bloat_percentage']}"
+            assert stats['stale_vectors'] == 20, f"Expected 20 stale vectors, got {stats['stale_vectors']}"
+            assert stats['total_vectors'] == 100, f"Expected 100 total vectors, got {stats['total_vectors']}"
+            assert stats['active_chunks'] == 80, f"Expected 80 active chunks, got {stats['active_chunks']}"
