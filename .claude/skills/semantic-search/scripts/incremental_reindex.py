@@ -742,8 +742,9 @@ class FixedIncrementalIndexer:
         chunks_to_delete = []
 
         # Normalize target path once (fail fast if invalid)
+        # Convert relative path to absolute by joining with project_path
         try:
-            target_path = Path(file_path).resolve()
+            target_path = (Path(self.project_path) / file_path).resolve()
         except Exception as e:
             print(f"Warning: Failed to resolve path '{file_path}': {e}", file=sys.stderr)
             return 0
@@ -844,8 +845,9 @@ class FixedIncrementalIndexer:
             for file_path in files_to_reembed:
                 print(f"Re-embedding {Path(file_path).name}...", file=sys.stderr)
 
-                # Chunk the file
-                chunks = self.chunker.chunk_file(str(file_path))
+                # Chunk the file (convert relative path to absolute)
+                full_path = Path(self.project_path) / file_path
+                chunks = self.chunker.chunk_file(str(full_path))
 
                 if chunks:
                     # Embed the chunks
