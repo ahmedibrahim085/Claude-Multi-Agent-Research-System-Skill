@@ -349,6 +349,15 @@ class FixedCodeIndexManager:
             'chunk_types': chunk_type_counts
         })
 
+        # Add bloat metrics (Feature 2: Bloat Tracking)
+        bloat = self._calculate_bloat()
+        stats.update({
+            'bloat_percentage': bloat['bloat_percentage'],
+            'stale_vectors': bloat['stale_vectors'],
+            'total_vectors': bloat['total_vectors'],
+            'active_chunks': bloat['active_chunks']
+        })
+
         # Save stats.json (COPIED from MCP lines 390-391)
         stats_path = self.index_dir / "stats.json"
         with open(stats_path, 'w') as f:
