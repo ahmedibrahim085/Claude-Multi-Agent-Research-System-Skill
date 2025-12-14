@@ -25,6 +25,7 @@ import sys
 import json
 import hashlib
 import pickle
+import math
 from pathlib import Path
 from typing import Dict, List, Optional
 import time
@@ -545,7 +546,18 @@ class FixedCodeIndexManager:
         filters: Optional[Dict] = None
     ) -> List[tuple]:
         """
-        Search for similar code chunks - SIMPLIFIED for IndexFlatIP.
+        Search for similar code chunks with bloat-aware optimization.
+
+        NEW Feature 5: Dynamic k-multiplier adapts to bloat percentage
+        - 0% bloat → k_multiplier = 1.0 (no extra search)
+        - 20% bloat → k_multiplier = 1.2 (search 20% more)
+        - 50% bloat → k_multiplier = 1.5 (search 50% more)
+        - Capped at 3.0x to prevent excessive searches
+
+        NEW Feature 5: Adaptive retry for clustered bloat
+        - If first search returns < k valid results (due to stale chunks)
+        - Retry with 2x higher k to find more valid results
+        - Prevents returning fewer results than requested
 
         Args:
             query_embedding: Query vector (768 dimensions)
@@ -563,8 +575,21 @@ class FixedCodeIndexManager:
         query_embedding = query_embedding.reshape(1, -1)
         faiss.normalize_L2(query_embedding)
 
-        # Search in FAISS index
-        search_k = min(k * 3, self.index.ntotal)
+        # Feature 5: Dynamic k-multiplier based on bloat percentage
+        bloat = self._calculate_bloat()
+        bloat_percentage = bloat['bloat_percentage']
+
+        # Calculate multiplier: 1.0 + (bloat% / 100)
+        # Examples: 0% → 1.0x, 20% → 1.2x, 50% → 1.5x, 100% → 2.0x
+        k_multiplier = 1.0 + (bloat_percentage / 100.0)
+        k_multiplier = min(k_multiplier, 3.0)  # Cap at 3x
+
+        # Use math.ceil() for proper rounding (not int())
+        # Example: k=5, bloat=1% → ceil(5*1.01)=6 (not 5)
+        search_k = math.ceil(k * k_multiplier)
+        search_k = min(search_k, self.index.ntotal)
+
+        # First search attempt
         similarities, indices = self.index.search(query_embedding, search_k)
 
         results = []
@@ -581,7 +606,7 @@ class FixedCodeIndexManager:
 
             # Get metadata
             if chunk_id not in self.metadata_db:
-                continue
+                continue  # Skip stale chunks (lazy deletion)
 
             metadata = self.metadata_db[chunk_id]['metadata']
 
@@ -589,6 +614,35 @@ class FixedCodeIndexManager:
 
             if len(results) >= k:
                 break
+
+        # Feature 5: Adaptive retry if results insufficient
+        # This handles clustered bloat where stale chunks cluster with valid ones
+        if len(results) < k and search_k < self.index.ntotal:
+            # Retry with 2x higher k
+            retry_k = min(search_k * 2, self.index.ntotal)
+
+            similarities, indices = self.index.search(query_embedding, retry_k)
+
+            results = []  # Reset results
+            for similarity, index in zip(similarities[0], indices[0]):
+                if index == -1:
+                    break
+
+                index = int(index)
+                if index >= len(self.chunk_ids):
+                    continue
+
+                chunk_id = self.chunk_ids[index]
+
+                if chunk_id not in self.metadata_db:
+                    continue
+
+                metadata = self.metadata_db[chunk_id]['metadata']
+
+                results.append((chunk_id, float(similarity), metadata))
+
+                if len(results) >= k:
+                    break
 
         return results
 
