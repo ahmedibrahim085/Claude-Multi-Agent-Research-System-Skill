@@ -199,3 +199,47 @@ class TestEmbeddingCache:
             # Load should handle missing file gracefully
             manager2 = FixedCodeIndexManager(tmpdir)
             assert manager2.embedding_cache == {}, "Cache should be empty when file deleted"
+
+
+class TestCacheIntegration:
+    """Integration tests: Cache should integrate with add_embeddings() automatically"""
+
+    def test_add_embeddings_caches_automatically(self):
+        """
+        Integration Test: add_embeddings() should automatically cache
+
+        When add_embeddings() is called, it should:
+        1. Add embeddings to FAISS index
+        2. Store embeddings in cache
+        3. Save cache to disk
+
+        Expected failure: add_embeddings() doesn't cache yet
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Create mock embedding result (simulates what embedder.embed_chunks returns)
+            from types import SimpleNamespace
+            embedding = np.random.rand(768).astype(np.float32)
+            embedding_result = SimpleNamespace(
+                chunk_id='chunk_123',
+                embedding=embedding,
+                metadata={'file_path': 'test.py', 'line_start': 1, 'line_end': 10}
+            )
+
+            # Call add_embeddings
+            manager.add_embeddings([embedding_result])
+
+            # Should be in cache
+            assert 'chunk_123' in manager.embedding_cache, \
+                "add_embeddings() should cache embedding"
+            np.testing.assert_array_equal(
+                manager.embedding_cache['chunk_123'],
+                embedding,
+                err_msg="Cached embedding should match input"
+            )
+
+            # Cache should persist (was saved)
+            manager2 = FixedCodeIndexManager(tmpdir)
+            assert 'chunk_123' in manager2.embedding_cache, \
+                "Cache should persist after add_embeddings()"
