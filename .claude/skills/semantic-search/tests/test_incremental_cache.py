@@ -74,3 +74,29 @@ class TestEmbeddingCache:
 
             assert 'chunk_123' in saved_cache, "Chunk should be in saved cache"
             np.testing.assert_array_equal(saved_cache['chunk_123'], embedding)
+
+    def test_cache_loads_after_restart(self):
+        """
+        Test 3: Cache Loads After Restart (RED phase)
+
+        Cache should persist across Python sessions (manager restarts).
+
+        Expected failure: Cache not loaded in __init__ (no _load_cache call)
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Session 1: Create cache
+            manager1 = FixedCodeIndexManager(tmpdir)
+            embedding = np.random.rand(768).astype(np.float32)
+            manager1.embedding_cache['chunk_123'] = embedding
+            manager1._save_cache()
+
+            # Session 2: Load cache (simulates restart)
+            manager2 = FixedCodeIndexManager(tmpdir)
+
+            # Cache should be loaded automatically
+            assert 'chunk_123' in manager2.embedding_cache, "Cache should load on init"
+            np.testing.assert_array_equal(
+                manager2.embedding_cache['chunk_123'],
+                embedding,
+                err_msg="Loaded embedding should match saved embedding"
+            )
