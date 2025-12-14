@@ -675,36 +675,74 @@ class FixedIncrementalIndexer:
         This is used during incremental reindex to remove old chunks
         for modified or deleted files before re-embedding.
 
+        Handles errors gracefully - continues with partial deletion if some
+        chunks fail, logs warnings for failures.
+
         Args:
             file_path: Absolute path to the file
 
         Returns:
-            Number of chunks deleted
+            Number of chunks successfully deleted
         """
         deleted_count = 0
         chunks_to_delete = []
 
-        # Find all chunks for this file
-        for chunk_id, entry in self.indexer.metadata_db.items():
-            metadata = entry['metadata']
-            chunk_file_path = metadata.get('file_path', '')
+        # Normalize target path once (fail fast if invalid)
+        try:
+            target_path = Path(file_path).resolve()
+        except Exception as e:
+            print(f"Warning: Failed to resolve path '{file_path}': {e}", file=sys.stderr)
+            return 0
 
-            # Normalize paths for comparison (resolve to absolute)
-            if Path(chunk_file_path).resolve() == Path(file_path).resolve():
-                chunks_to_delete.append(chunk_id)
+        try:
+            # Find all chunks for this file
+            # Use list() to avoid "dictionary changed size during iteration" error
+            for chunk_id, entry in list(self.indexer.metadata_db.items()):
+                try:
+                    # Safely get metadata dict
+                    metadata = entry.get('metadata', {})
+                    chunk_file_path = metadata.get('file_path', '')
 
-        # Delete chunks from metadata and cache
-        for chunk_id in chunks_to_delete:
-            # Delete from metadata
-            if chunk_id in self.indexer.metadata_db:
-                del self.indexer.metadata_db[chunk_id]
-                deleted_count += 1
+                    if not chunk_file_path:
+                        continue  # Skip chunks with no file path
 
-            # Delete from cache
-            if chunk_id in self.indexer.embedding_cache:
-                del self.indexer.embedding_cache[chunk_id]
+                    # Normalize chunk path for comparison
+                    try:
+                        chunk_path = Path(chunk_file_path).resolve()
+                        if chunk_path == target_path:
+                            chunks_to_delete.append(chunk_id)
+                    except Exception:
+                        # Skip chunks with invalid paths (symlink loops, permissions, etc.)
+                        continue
 
-        return deleted_count
+                except Exception as e:
+                    # Log but continue with other chunks
+                    print(f"Warning: Failed to process chunk {chunk_id}: {e}", file=sys.stderr)
+                    continue
+
+            # Delete chunks from metadata and cache
+            for chunk_id in chunks_to_delete:
+                try:
+                    # Delete from metadata
+                    if chunk_id in self.indexer.metadata_db:
+                        del self.indexer.metadata_db[chunk_id]
+                        deleted_count += 1
+
+                    # Delete from cache (best effort, don't fail if not in cache)
+                    if chunk_id in self.indexer.embedding_cache:
+                        del self.indexer.embedding_cache[chunk_id]
+
+                except Exception as e:
+                    # Log but continue with other chunks
+                    print(f"Warning: Failed to delete chunk {chunk_id}: {e}", file=sys.stderr)
+                    continue
+
+            return deleted_count
+
+        except Exception as e:
+            # Unexpected error - log and return partial count
+            print(f"Error in _delete_chunks_for_file('{file_path}'): {e}", file=sys.stderr)
+            return deleted_count  # Return whatever we managed to delete
 
     def _incremental_index(self, changes):
         """

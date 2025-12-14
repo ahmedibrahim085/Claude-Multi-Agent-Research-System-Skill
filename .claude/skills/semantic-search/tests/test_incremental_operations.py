@@ -96,6 +96,25 @@ class TestDeleteChunksForFile:
 
             assert deleted_count == 0, "Should return 0 when no chunks found"
 
+    def test_delete_chunks_for_invalid_path(self):
+        """Test error handling for invalid file paths"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_project = Path(tmpdir) / "test_project"
+            test_project.mkdir()
+
+            # Create and index a file
+            (test_project / "file1.py").write_text("def foo(): pass")
+
+            indexer = FixedIncrementalIndexer(project_path=str(test_project))
+            indexer.auto_reindex()
+
+            # Try to delete with invalid path (should handle gracefully)
+            # Using a path that would cause Path.resolve() to fail on some systems
+            deleted_count = indexer._delete_chunks_for_file("\x00invalid")
+
+            # Should return 0 and not crash
+            assert deleted_count == 0, "Should handle invalid paths gracefully"
+
 
 class TestIncrementalIndex:
     """Test _incremental_index() core logic"""
