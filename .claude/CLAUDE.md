@@ -2,6 +2,12 @@
 
 ---
 
+## CRITICAL: Response Timestamp Requirement
+
+**For all prompts, as a first and final hook, remember to include a date/time stamp your response, as well as the execution time from start to finish.**
+
+---
+
 @import ../docs/workflows/research-workflow.md
 @import ../docs/workflows/planning-workflow.md
 @import ../docs/workflows/compound-request-handling.md

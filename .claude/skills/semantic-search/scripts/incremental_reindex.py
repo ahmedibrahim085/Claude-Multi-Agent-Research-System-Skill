@@ -814,17 +814,25 @@ class FixedIncrementalIndexer:
             timings['add_embeddings'] = time.time() - phase_start
 
             # Step 4: Rebuild index from ALL cached embeddings (fast!)
-            phase_start = time.time()
-            print("Rebuilding index from cache...", file=sys.stderr)
-            self.indexer.rebuild_from_cache()
-            timings['rebuild'] = time.time() - phase_start
-
-            # Step 5: Check bloat and rebuild if needed
+            # NEW: Only rebuild if bloat exceeds threshold (auto-rebuild trigger)
             phase_start = time.time()
             bloat_stats = self.indexer._calculate_bloat()
-            if bloat_stats['bloat_percentage'] > 0:
-                print(f"Bloat: {bloat_stats['bloat_percentage']:.1f}% ({bloat_stats['stale_vectors']} stale)", file=sys.stderr)
-            timings['bloat_check'] = time.time() - phase_start
+
+            if self.indexer._needs_rebuild():
+                # Bloat threshold exceeded - trigger auto-rebuild
+                print(f"Bloat threshold exceeded: {bloat_stats['bloat_percentage']:.1f}% ({bloat_stats['stale_vectors']} stale)", file=sys.stderr)
+                print("Auto-rebuilding index from cache to clear bloat...", file=sys.stderr)
+                self.indexer.rebuild_from_cache()
+                timings['auto_rebuild'] = time.time() - phase_start
+
+                # Verify bloat cleared
+                bloat_after = self.indexer._calculate_bloat()
+                print(f"Bloat after rebuild: {bloat_after['bloat_percentage']:.1f}%", file=sys.stderr)
+            else:
+                # Bloat below threshold - skip rebuild
+                if bloat_stats['bloat_percentage'] > 0:
+                    print(f"Bloat: {bloat_stats['bloat_percentage']:.1f}% ({bloat_stats['stale_vectors']} stale) - below rebuild threshold", file=sys.stderr)
+                timings['bloat_check'] = time.time() - phase_start
 
             # Step 6: Save snapshot
             phase_start = time.time()
