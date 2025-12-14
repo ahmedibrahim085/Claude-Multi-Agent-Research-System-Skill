@@ -268,3 +268,42 @@ class TestBloatTracking:
             assert bloat['active_chunks'] == 0, "Empty index should have 0 active chunks"
             assert bloat['stale_vectors'] == 0, "Empty index should have 0 stale vectors"
             assert bloat['bloat_percentage'] == 0.0, "Empty index should have 0% bloat"
+
+    def test_bloat_increases_after_lazy_delete(self):
+        """
+        Test 2: Bloat Increases After Delete (RED phase)
+
+        Lazy delete (removing from metadata_db but not from FAISS) should increase bloat.
+
+        Expected: This should pass immediately - bloat calculation already handles this
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Add 100 chunks
+            from types import SimpleNamespace
+            for i in range(100):
+                embedding = np.random.rand(768).astype(np.float32)
+                result = SimpleNamespace(
+                    chunk_id=f'chunk_{i}',
+                    embedding=embedding,
+                    metadata={'file_path': f'file_{i}.py', 'line_start': 1, 'line_end': 10}
+                )
+                manager.add_embeddings([result])
+
+            # Verify no bloat initially
+            bloat_before = manager._calculate_bloat()
+            assert bloat_before['bloat_percentage'] == 0.0, "No bloat before deletion"
+
+            # Lazy delete 20 chunks (remove from metadata, leave in FAISS)
+            for i in range(20):
+                del manager.metadata_db[f'chunk_{i}']
+
+            # Calculate bloat after deletion
+            bloat_after = manager._calculate_bloat()
+
+            # Verify bloat metrics
+            assert bloat_after['total_vectors'] == 100, "FAISS still has all 100 vectors"
+            assert bloat_after['active_chunks'] == 80, "Metadata has 80 chunks (deleted 20)"
+            assert bloat_after['stale_vectors'] == 20, "20 stale vectors from deletion"
+            assert bloat_after['bloat_percentage'] == 20.0, "Bloat should be 20%"
