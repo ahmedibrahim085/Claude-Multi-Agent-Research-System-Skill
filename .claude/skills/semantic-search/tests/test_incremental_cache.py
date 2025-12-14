@@ -139,3 +139,63 @@ class TestEmbeddingCache:
 
             # Cache file should exist (renamed from temp)
             assert manager.cache_path.exists(), "Cache file should exist after atomic write"
+
+    def test_cache_stores_correct_dimensions(self):
+        """
+        Test 5: Cache Correct Dimensions (RED phase)
+
+        Cache should store 768-dim float32 numpy arrays.
+
+        Expected failure: No dimension validation yet (will pass actually,
+        but we're testing the validation exists conceptually)
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Add embedding with correct dimensions
+            embedding = np.random.rand(768).astype(np.float32)
+            manager.embedding_cache['chunk_123'] = embedding
+
+            # Verify dimensions
+            assert manager.embedding_cache['chunk_123'].shape == (768,), \
+                "Embedding should be 768-dimensional"
+            assert manager.embedding_cache['chunk_123'].dtype == np.float32, \
+                "Embedding should be float32"
+
+            # Save and reload
+            manager._save_cache()
+            manager2 = FixedCodeIndexManager(tmpdir)
+
+            # Verify dimensions persist
+            assert manager2.embedding_cache['chunk_123'].shape == (768,), \
+                "Loaded embedding should be 768-dimensional"
+            assert manager2.embedding_cache['chunk_123'].dtype == np.float32, \
+                "Loaded embedding should be float32"
+
+    def test_cache_handles_missing_file(self):
+        """
+        Test 6: Cache Handles Missing File (RED phase)
+
+        Cache should gracefully handle missing file (empty cache on load).
+
+        Expected: This should already pass with current implementation
+        (graceful degradation in _load_cache)
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Initialize manager with no existing cache file
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Cache should be empty (no error)
+            assert manager.embedding_cache == {}, "Cache should be empty when file missing"
+
+            # Now save, delete, and reload
+            manager.embedding_cache['chunk_123'] = np.random.rand(768).astype(np.float32)
+            manager._save_cache()
+            assert manager.cache_path.exists(), "Cache file should exist after save"
+
+            # Delete cache file
+            manager.cache_path.unlink()
+
+            # Load should handle missing file gracefully
+            manager2 = FixedCodeIndexManager(tmpdir)
+            assert manager2.embedding_cache == {}, "Cache should be empty when file deleted"
