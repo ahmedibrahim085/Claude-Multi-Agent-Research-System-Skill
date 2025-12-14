@@ -415,3 +415,43 @@ class TestBloatTracking:
             # Verify it's ~29% (floating point tolerance)
             assert 28.9 <= bloat['bloat_percentage'] < 29.5, f"Should be ~29% bloat, got {bloat['bloat_percentage']}"
             assert not manager2._needs_rebuild(), "29% bloat → NO rebuild (below threshold)"
+
+    def test_rebuild_resets_bloat(self):
+        """
+        Test 5: Rebuild Resets Bloat (RED phase)
+
+        After rebuild, bloat should be 0% because only active chunks are in the index.
+
+        Expected failure: rebuild_from_cache() doesn't exist yet
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = FixedCodeIndexManager(tmpdir)
+
+            # Add 100 chunks
+            from types import SimpleNamespace
+            for i in range(100):
+                result = SimpleNamespace(
+                    chunk_id=f'chunk_{i}',
+                    embedding=np.random.rand(768).astype(np.float32),
+                    metadata={'file_path': f'file_{i}.py', 'line_start': i*10, 'line_end': i*10+10}
+                )
+                manager.add_embeddings([result])
+
+            # Delete 20 chunks (20% bloat)
+            for i in range(20):
+                del manager.metadata_db[f'chunk_{i}']
+
+            bloat_before = manager._calculate_bloat()
+            assert bloat_before['bloat_percentage'] == 20.0, "Should have 20% bloat before rebuild"
+            assert bloat_before['total_vectors'] == 100, "FAISS should have 100 vectors"
+            assert bloat_before['active_chunks'] == 80, "Metadata should have 80 chunks"
+
+            # Rebuild from cache (this should remove stale vectors)
+            manager.rebuild_from_cache()
+
+            # After rebuild, bloat should be 0
+            bloat_after = manager._calculate_bloat()
+            assert bloat_after['bloat_percentage'] == 0.0, "Bloat should be 0% after rebuild"
+            assert bloat_after['total_vectors'] == 80, "FAISS should only have 80 vectors (active chunks)"
+            assert bloat_after['active_chunks'] == 80, "Metadata should still have 80 chunks"
+            assert bloat_after['stale_vectors'] == 0, "No stale vectors after rebuild"
