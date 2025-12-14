@@ -91,8 +91,9 @@ class FixedCodeIndexManager:
         self.dimension = 768  # embeddinggemma-300m dimension
         self.index = faiss.IndexFlatIP(self.dimension)
 
-        # Load existing index if available
+        # Load existing index and cache if available
         self._load_index()
+        self._load_cache()  # NEW: Load embedding cache from disk
 
     def _load_index(self):
         """
@@ -136,6 +137,20 @@ class FixedCodeIndexManager:
         """
         with open(self.cache_path, 'wb') as f:
             pickle.dump(self.embedding_cache, f)
+
+    def _load_cache(self):
+        """
+        Load embedding cache from disk.
+
+        If cache file doesn't exist, cache remains empty (graceful degradation).
+        """
+        if self.cache_path.exists():
+            try:
+                with open(self.cache_path, 'rb') as f:
+                    self.embedding_cache = pickle.load(f)
+            except Exception as e:
+                print(f"Warning: Failed to load embedding cache: {e}", file=sys.stderr)
+                # Keep cache empty on load failure
 
     def save_index(self):
         """
