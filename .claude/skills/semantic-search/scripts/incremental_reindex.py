@@ -83,6 +83,10 @@ class FixedCodeIndexManager:
         self.metadata_db = {}  # chunk_id -> metadata
         self.chunk_ids = []    # Ordered list: position = FAISS index, value = chunk_id
 
+        # Embedding cache - NEW: Store embeddings for rebuild without re-embedding
+        self.embedding_cache = {}  # chunk_id -> embedding vector (numpy array)
+        self.cache_path = self.index_dir / "embeddings.pkl"
+
         # FAISS index - IndexFlatIP (same as MCP, works on Apple Silicon)
         self.dimension = 768  # embeddinggemma-300m dimension
         self.index = faiss.IndexFlatIP(self.dimension)
@@ -558,21 +562,31 @@ class FixedIncrementalIndexer:
     def _full_index(self, start_time: float):
         """Perform full indexing"""
         try:
+            # === BENCHMARKING: Track timing for each phase ===
+            timings = {}
+            phase_start = time.time()
+
             # Clear existing
             print("Clearing existing index...", file=sys.stderr)
             self.indexer.clear_index()
+            timings['clear_index'] = time.time() - phase_start
 
             # Build DAG
+            phase_start = time.time()
             print("Building file DAG...", file=sys.stderr)
             dag = MerkleDAG(self.project_path)
             dag.build()
             all_files = dag.get_all_files()
+            timings['dag_build'] = time.time() - phase_start
 
             # Filter supported files
+            phase_start = time.time()
             supported_files = [f for f in all_files if self.chunker.is_supported(f)]
+            timings['file_filtering'] = time.time() - phase_start
             print(f"Found {len(supported_files)}/{len(all_files)} supported files", file=sys.stderr)
 
             # Chunk all files
+            phase_start = time.time()
             print(f"Chunking {len(supported_files)} files...", file=sys.stderr)
             all_chunks = []
             for idx, file_path in enumerate(supported_files, 1):
@@ -586,6 +600,7 @@ class FixedIncrementalIndexer:
                         print(f"  Chunked {idx}/{len(supported_files)} files ({len(all_chunks)} chunks so far)...", file=sys.stderr)
                 except Exception as e:
                     print(f"Warning: Failed to chunk {file_path}: {e}", file=sys.stderr)
+            timings['chunking'] = time.time() - phase_start
             print(f"Chunking complete: {len(all_chunks)} chunks from {len(supported_files)} files", file=sys.stderr)
 
             # Embed all chunks
@@ -595,23 +610,30 @@ class FixedIncrementalIndexer:
                     # Use larger batch size (64) for better GPU utilization
                     # MCP default is 32, but modern GPUs can handle more
                     batch_size = 64
+                    phase_start = time.time()
                     print(f"Generating embeddings for {len(all_chunks)} chunks (batch_size={batch_size})...", file=sys.stderr)
                     all_embedding_results = self.embedder.embed_chunks(all_chunks, batch_size=batch_size)
+                    timings['embedding'] = time.time() - phase_start
                     print(f"Embedding complete: {len(all_embedding_results)} embeddings generated", file=sys.stderr)
 
                     # Add metadata (project_name + content)
+                    phase_start = time.time()
                     for chunk, embedding_result in zip(all_chunks, all_embedding_results):
                         embedding_result.metadata['project_name'] = self.project_name
                         embedding_result.metadata['content'] = chunk.content
+                    timings['metadata_add'] = time.time() - phase_start
                 except Exception as e:
                     print(f"Warning: Embedding failed: {e}", file=sys.stderr)
 
             # Add to index
             if all_embedding_results:
+                phase_start = time.time()
                 print(f"Adding {len(all_embedding_results)} embeddings to FAISS index...", file=sys.stderr)
                 self.indexer.add_embeddings(all_embedding_results)
+                timings['faiss_add'] = time.time() - phase_start
 
             # Save snapshot
+            phase_start = time.time()
             print("Saving Merkle DAG snapshot...", file=sys.stderr)
             self.snapshot_manager.save_snapshot(dag, {
                 'project_name': self.project_name,
@@ -620,10 +642,13 @@ class FixedIncrementalIndexer:
                 'supported_files': len(supported_files),
                 'chunks_indexed': len(all_embedding_results)
             })
+            timings['snapshot_save'] = time.time() - phase_start
 
             # Save index
+            phase_start = time.time()
             print("Saving FAISS index to disk...", file=sys.stderr)
             self.indexer.save_index()
+            timings['index_save'] = time.time() - phase_start
 
             # Record timestamp
             self._record_index_timestamp(is_full_index=True)
@@ -631,7 +656,20 @@ class FixedIncrementalIndexer:
             # Update prerequisites state (auto-recovery after successful reindex)
             self._update_prerequisites_state_after_successful_reindex()
 
-            print(f"✓ Full reindex complete: {len(all_embedding_results)} chunks indexed", file=sys.stderr)
+            # === BENCHMARKING: Print timing breakdown ===
+            total_time = time.time() - start_time
+            print("\n" + "="*60, file=sys.stderr)
+            print("PERFORMANCE BREAKDOWN", file=sys.stderr)
+            print("="*60, file=sys.stderr)
+            print(f"{'Phase':<20} {'Time (s)':>10} {'% Total':>10}", file=sys.stderr)
+            print("-"*60, file=sys.stderr)
+            for phase_name, phase_time in sorted(timings.items(), key=lambda x: -x[1]):
+                pct = (phase_time / total_time) * 100
+                print(f"{phase_name:<20} {phase_time:>10.2f} {pct:>9.1f}%", file=sys.stderr)
+            print("-"*60, file=sys.stderr)
+            print(f"{'TOTAL':<20} {total_time:>10.2f} {'100.0%':>10}", file=sys.stderr)
+            print("="*60, file=sys.stderr)
+            print(f"\n✓ Full reindex complete: {len(all_embedding_results)} chunks indexed", file=sys.stderr)
 
             return {
                 'success': True,
@@ -639,7 +677,8 @@ class FixedIncrementalIndexer:
                 'files_indexed': len(supported_files),
                 'chunks_added': len(all_embedding_results),
                 'total_chunks': self.indexer.get_index_size(),
-                'time_taken': round(time.time() - start_time, 2)
+                'time_taken': round(time.time() - start_time, 2),
+                'timing_breakdown': timings  # Include detailed timings in result
             }
 
         except Exception as e:
