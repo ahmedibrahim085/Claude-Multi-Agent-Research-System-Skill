@@ -272,8 +272,7 @@ class FixedCodeIndexManager:
 
         RATIONALE (test-driven calibration):
         - Small projects (20% + <400 stale): No rebuild to avoid overhead
-        - Medium projects (20-30% + 400+ stale): Rebuild for efficiency
-        - Large projects (20% + 500+ stale): Rebuild for efficiency
+        - Medium/Large projects (20-30% + 400+ stale): Rebuild for efficiency
         - Critical bloat (30%+ any count): Always rebuild (quality threshold)
 
         Test scenarios validated:
@@ -745,7 +744,7 @@ class FixedIncrementalIndexer:
 
     Bloat Management:
     - Tracks stale vectors from lazy deletions
-    - Hybrid triggers: 30% threshold OR (20% AND 500 stale vectors)
+    - Hybrid triggers: 30% threshold OR (20% AND 400 stale vectors)
     - Auto-rebuild clears bloat and rebuilds from cache
     - Ensures search quality doesn't degrade over time
     """
