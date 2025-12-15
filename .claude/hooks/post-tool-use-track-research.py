@@ -245,25 +245,6 @@ is logged for analysis and process improvement.
     sys.exit(0)
 
 
-def identify_current_agent(file_path: str, state: dict) -> str:
-    """Identify which agent is performing the current operation"""
-    import os
-
-    # Priority: environment variable > heuristic detection
-    if os.environ.get('CLAUDE_AGENT_TYPE'):
-        return os.environ['CLAUDE_AGENT_TYPE']
-
-    # Heuristic detection (use configured paths)
-    research_notes_dir = config_loader.get_path('research_notes')
-    reports_dir = config_loader.get_path('reports')
-
-    if file_path.startswith(research_notes_dir + '/'):
-        return 'researcher'
-    elif file_path.startswith(reports_dir + '/'):
-        return 'report-writer'
-
-    return 'orchestrator'
-
 
 if __name__ == '__main__':
     main()
