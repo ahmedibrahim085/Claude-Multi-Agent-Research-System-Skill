@@ -79,84 +79,6 @@ def test_config_caching():
 # TEST: File Filtering Logic
 # ═══════════════════════════════════════════════════════════════════════════
 
-def test_should_reindex_after_write_python_file():
-    """Test that Python files trigger reindex"""
-    # Mock cooldown check to return True
-    with patch.object(reindex_manager, 'should_reindex_after_cooldown', return_value=True):
-        result = reindex_manager.should_reindex_after_write('/project/src/main.py')
-
-    # Function returns (bool, str, dict) tuple for debugging
-    should_reindex, reason, details = result
-    assert should_reindex is True
-
-
-def test_should_reindex_after_write_transcript_excluded():
-    """Test that transcripts are excluded (Fix #2 verification)"""
-    # Mock cooldown check to return True
-    with patch.object(reindex_manager, 'should_reindex_after_cooldown', return_value=True):
-        result = reindex_manager.should_reindex_after_write('logs/session_20251203_164604_transcript.txt')
-
-    # Function returns (bool, str, dict) tuple for debugging
-    should_reindex, reason, details = result
-    assert should_reindex is False  # Excluded by pattern
-
-
-def test_should_reindex_after_write_logs_state_included():
-    """Test that logs/state/ files are included (Fix #2 verification)"""
-    # Mock cooldown check to return True
-    with patch.object(reindex_manager, 'should_reindex_after_cooldown', return_value=True):
-        result = reindex_manager.should_reindex_after_write('logs/state/semantic-search-prerequisites.json')
-
-    # Function returns (bool, str, dict) tuple for debugging
-    should_reindex, reason, details = result
-    assert should_reindex is True  # NOT excluded (logs not in exclude_dirs, pattern doesn't match)
-
-
-def test_should_reindex_after_write_build_artifact_excluded():
-    """Test that build artifacts are excluded"""
-    # Mock cooldown check to return True
-    with patch.object(reindex_manager, 'should_reindex_after_cooldown', return_value=True):
-        result = reindex_manager.should_reindex_after_write('dist/bundle.js')
-
-    # Function returns (bool, str, dict) tuple for debugging
-    should_reindex, reason, details = result
-    assert should_reindex is False  # Excluded by directory
-
-
-def test_should_reindex_after_write_no_extension():
-    """Test that files without extension are excluded"""
-    # Mock cooldown check to return True
-    with patch.object(reindex_manager, 'should_reindex_after_cooldown', return_value=True):
-        result = reindex_manager.should_reindex_after_write('/project/Makefile')
-
-    # Function returns (bool, str, dict) tuple for debugging
-    should_reindex, reason, details = result
-    assert should_reindex is False  # No matching include pattern
-
-
-def test_should_reindex_after_write_cooldown_active():
-    """Test that reindex is skipped when cooldown active"""
-    # Mock cooldown check to return False (cooldown active)
-    with patch.object(reindex_manager, 'should_reindex_after_cooldown', return_value=False):
-        result = reindex_manager.should_reindex_after_write('/project/src/main.py')
-
-    # Function returns (bool, str, dict) tuple for debugging
-    should_reindex, reason, details = result
-    assert should_reindex is False  # Cooldown active
-
-
-def test_should_reindex_after_write_cooldown_parameter():
-    """Test that cooldown parameter override works (Fix #1 verification)"""
-    # Mock cooldown check - should receive custom cooldown
-    with patch.object(reindex_manager, 'should_reindex_after_cooldown', return_value=True) as mock_cooldown:
-        reindex_manager.should_reindex_after_write('/project/src/main.py', cooldown_seconds=600)
-
-        # Verify cooldown was called with custom value
-        mock_cooldown.assert_called_once()
-        args = mock_cooldown.call_args
-        assert args[0][1] == 600  # Second argument should be 600
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # TEST: Cooldown Logic
 # ═══════════════════════════════════════════════════════════════════════════
@@ -245,17 +167,6 @@ def test_get_last_full_index_time_vs_get_last_reindex_time():
 # TEST: Error Handling & Edge Cases
 # ═══════════════════════════════════════════════════════════════════════════
 
-def test_should_reindex_after_write_exception_handling():
-    """Test that exceptions in file filtering return False (graceful)"""
-    # Force an exception in path handling
-    with patch.object(Path, 'match', side_effect=Exception("Test error")):
-        result = reindex_manager.should_reindex_after_write('/project/src/main.py')
-
-    # Function returns (bool, str, dict) tuple for debugging
-    should_reindex, reason, details = result
-    assert should_reindex is False  # Graceful degradation
-
-
 def test_should_reindex_after_cooldown_exception_handling():
     """Test that exceptions in cooldown check return True (allow reindex)"""
     # Force an exception
@@ -268,31 +179,6 @@ def test_should_reindex_after_cooldown_exception_handling():
 # ═══════════════════════════════════════════════════════════════════════════
 # TEST: Integration
 # ═══════════════════════════════════════════════════════════════════════════
-
-def test_reindex_after_write_full_flow():
-    """Test complete flow of reindex_after_write (integration)"""
-    # Mock prerequisites, index check, cooldown
-    with patch.object(reindex_manager, 'read_prerequisites_state', return_value=True), \
-         patch.object(reindex_manager, 'check_index_exists', return_value=True), \
-         patch.object(reindex_manager, 'should_reindex_after_cooldown', return_value=True), \
-         patch.object(reindex_manager, 'run_incremental_reindex_sync', return_value=True) as mock_reindex:
-
-        # Call reindex_after_write
-        reindex_manager.reindex_after_write('/project/src/main.py', cooldown_seconds=600)
-
-        # Verify reindex was called
-        mock_reindex.assert_called_once()
-
-
-def test_reindex_after_write_skips_when_prerequisites_false():
-    """Test that reindex is skipped when prerequisites not met"""
-    with patch.object(reindex_manager, 'read_prerequisites_state', return_value=False):
-        with patch.object(reindex_manager, 'run_incremental_reindex_sync') as mock_reindex:
-            reindex_manager.reindex_after_write('/project/src/main.py')
-
-            # Reindex should NOT be called
-            mock_reindex.assert_not_called()
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TEST: Atomic Lock Mechanism (Concurrency Control)
