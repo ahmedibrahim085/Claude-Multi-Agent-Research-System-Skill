@@ -122,11 +122,12 @@ class TestFileCountHeuristic:
         """File count within 5% of snapshot should return True"""
         reindexer = FixedIncrementalIndexer(project_path=Path("/fake/path"))
 
-        # Mock snapshot with 1000 files
-        mock_snapshot = {'node_count': 1000}
+        # Mock MerkleDAG with 1000 files
+        mock_dag = Mock()
+        mock_dag.get_all_files.return_value = [Mock()] * 1000
 
         with patch.object(reindexer.snapshot_manager, 'has_snapshot', return_value=True), \
-             patch.object(reindexer.snapshot_manager, 'load_snapshot', return_value=mock_snapshot), \
+             patch.object(reindexer.snapshot_manager, 'load_snapshot', return_value=mock_dag), \
              patch('pathlib.Path.glob') as mock_glob:
             # Mock current file count: 1020 files (2% increase, within 5%)
             mock_glob.return_value = [Mock()] * 1020
@@ -139,11 +140,12 @@ class TestFileCountHeuristic:
         """File count >5% different from snapshot should return False"""
         reindexer = FixedIncrementalIndexer(project_path=Path("/fake/path"))
 
-        # Mock snapshot with 1000 files
-        mock_snapshot = {'node_count': 1000}
+        # Mock MerkleDAG with 1000 files
+        mock_dag = Mock()
+        mock_dag.get_all_files.return_value = [Mock()] * 1000
 
         with patch.object(reindexer.snapshot_manager, 'has_snapshot', return_value=True), \
-             patch.object(reindexer.snapshot_manager, 'load_snapshot', return_value=mock_snapshot), \
+             patch.object(reindexer.snapshot_manager, 'load_snapshot', return_value=mock_dag), \
              patch('pathlib.Path.glob') as mock_glob:
             # Mock current file count: 1100 files (10% increase, exceeds 5%)
             mock_glob.return_value = [Mock()] * 1100
