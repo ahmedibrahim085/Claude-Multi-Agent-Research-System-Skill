@@ -1205,9 +1205,9 @@ class FixedIncrementalIndexer:
             if not self.snapshot_manager.has_snapshot(self.project_path):
                 return False
 
-            # Load previous snapshot to get file count
-            prev_snapshot = self.snapshot_manager.load_snapshot(self.project_path)
-            prev_count = prev_snapshot.get('node_count', 0)
+            # Load previous snapshot (returns MerkleDAG object)
+            prev_dag = self.snapshot_manager.load_snapshot(self.project_path)
+            prev_count = len(prev_dag.get_all_files())
 
             if prev_count == 0:
                 return False
