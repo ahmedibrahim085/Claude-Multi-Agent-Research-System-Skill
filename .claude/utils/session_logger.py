@@ -301,11 +301,14 @@ def log_auto_reindex_decision(session_id: str, decision_data: Dict[str, Any]) ->
 
     Args:
         session_id: Session identifier
-        decision_data: Decision data from reindex_manager.reindex_after_write()
+        decision_data: Decision data from auto-reindex operations (PostToolUse hook - REMOVED 2025-12-15)
             - decision: "skip" or "run"
             - reason: Reason code
             - details: Additional context
             - timestamp: ISO timestamp
+
+    NOTE: This function is currently unused (PostToolUse hook deleted 2025-12-15).
+          Preserved for potential future use if auto-reindex is re-implemented.
     """
     transcript_path = get_transcript_path(session_id)
 

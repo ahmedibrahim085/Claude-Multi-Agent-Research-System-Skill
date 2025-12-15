@@ -396,7 +396,7 @@ def _kill_existing_reindex_process(project_path: Path) -> bool:
     Architectural Role:
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     This is a PARENT-ONLY function for implementing kill-if-held behavior.
-    - Used by run_incremental_reindex_sync when kill_if_held=True
+    - Previously used by run_incremental_reindex_sync() (DELETED 2025-12-15)
     - Kills existing process but does NOT acquire lock
     - Subprocess will acquire lock after parent spawns it
 
