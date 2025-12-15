@@ -1180,9 +1180,8 @@ class FixedIncrementalIndexer:
         Rationale: Recent snapshot = likely no changes since last reindex
         """
         try:
-            storage_dir = get_storage_dir()
-            project_hash = hashlib.md5(str(self.project_path).encode()).hexdigest()[:8]
-            snapshot_path = storage_dir / "projects" / f"{self.project_name}_{project_hash}" / "snapshot.json"
+            # Use SnapshotManager API to get correct path
+            snapshot_path = self.snapshot_manager.get_snapshot_path(self.project_path)
 
             if not snapshot_path.exists():
                 return False
@@ -1230,9 +1229,8 @@ class FixedIncrementalIndexer:
         Rationale: Desynced timestamps = changes happened after last reindex
         """
         try:
-            storage_dir = get_storage_dir()
-            project_hash = hashlib.md5(str(self.project_path).encode()).hexdigest()[:8]
-            snapshot_path = storage_dir / "projects" / f"{self.project_name}_{project_hash}" / "snapshot.json"
+            # Use SnapshotManager API to get correct path
+            snapshot_path = self.snapshot_manager.get_snapshot_path(self.project_path)
             cache_path = self.indexer.cache_path  # embeddings.pkl
 
             if not snapshot_path.exists() or not cache_path.exists():
