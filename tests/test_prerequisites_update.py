@@ -333,9 +333,9 @@ def test_method_called_at_correct_location():
     assert call_line is not None, \
         "Method call should be found in the script"
 
-    # Updated: Method is now at line 1325 in the _full_index method
-    # Previous location (line 598) was outdated after code refactoring
-    expected_line = 1325
+    # Updated: Method is now at line 1465 in the _full_index method
+    # Previous location (line 1325) shifted due to fast-fail heuristics addition (~142 lines)
+    expected_line = 1465
     tolerance = 50  # Allow ±50 lines for code changes
 
     assert abs(call_line - expected_line) <= tolerance, \

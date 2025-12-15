@@ -26,6 +26,7 @@ import json
 import hashlib
 import pickle
 import math
+import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional
 import time
@@ -1140,6 +1141,114 @@ class FixedIncrementalIndexer:
             # This is a convenience feature, not critical
             print(f"Warning: Failed to update prerequisites state: {e}", file=sys.stderr)
 
+    # ========================================================================
+    # FAST-FAIL HEURISTICS (Option B: Process Decides)
+    # ========================================================================
+    # Purpose: Cheap checks to skip reindex when no changes detected
+    # Performance target: <100ms for all 4 heuristics combined
+    # Accuracy target: >95% (3/4 threshold for high confidence)
+    # ========================================================================
+
+    def _git_status_clean(self) -> bool:
+        """
+        Check if git working directory is clean (no uncommitted changes).
+
+        Performance: ~80ms (git command execution)
+        Returns: True if clean, False if changes exist or on error
+        Error handling: Returns False (safe fallback to full validation)
+        """
+        try:
+            result = subprocess.run(
+                ['git', '-C', self.project_path, 'status', '--porcelain'],
+                capture_output=True,
+                text=True,
+                timeout=5  # 5s timeout to prevent hanging
+            )
+            # Empty output = clean working directory
+            return result.returncode == 0 and not result.stdout.strip()
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+            # Git not installed, not a git repo, or timeout
+            # Return False to fall back to full validation (safe)
+            return False
+
+    def _snapshot_timestamp_recent(self, max_age_minutes: int = 5) -> bool:
+        """
+        Check if snapshot file was modified recently (within max_age minutes).
+
+        Performance: ~1ms (file stat)
+        Returns: True if recent, False if stale or missing
+        Rationale: Recent snapshot = likely no changes since last reindex
+        """
+        try:
+            storage_dir = get_storage_dir()
+            project_hash = hashlib.md5(str(self.project_path).encode()).hexdigest()[:8]
+            snapshot_path = storage_dir / "projects" / f"{self.project_name}_{project_hash}" / "snapshot.json"
+
+            if not snapshot_path.exists():
+                return False
+
+            snapshot_mtime = snapshot_path.stat().st_mtime
+            age_seconds = time.time() - snapshot_mtime
+            return age_seconds < (max_age_minutes * 60)
+        except Exception:
+            return False
+
+    def _file_count_stable(self, threshold_percent: float = 5.0) -> bool:
+        """
+        Check if file count is stable (within threshold% of snapshot).
+
+        Performance: ~10ms (directory scan)
+        Returns: True if stable, False if changed significantly
+        Rationale: Large file count change = likely changes exist
+        """
+        try:
+            if not self.snapshot_manager.has_snapshot(self.project_path):
+                return False
+
+            # Load previous snapshot to get file count
+            prev_snapshot = self.snapshot_manager.load_snapshot(self.project_path)
+            prev_count = prev_snapshot.get('node_count', 0)
+
+            if prev_count == 0:
+                return False
+
+            # Count current files (same pattern as MerkleDAG)
+            current_count = len(list(Path(self.project_path).glob('**/*')))
+
+            # Calculate percentage difference
+            diff_percent = abs(current_count - prev_count) / prev_count * 100
+            return diff_percent <= threshold_percent
+        except Exception:
+            return False
+
+    def _cache_timestamp_synced(self) -> bool:
+        """
+        Check if cache file timestamp matches snapshot timestamp.
+
+        Performance: ~1ms (file stats)
+        Returns: True if synced, False if desynchronized or missing
+        Rationale: Desynced timestamps = changes happened after last reindex
+        """
+        try:
+            storage_dir = get_storage_dir()
+            project_hash = hashlib.md5(str(self.project_path).encode()).hexdigest()[:8]
+            snapshot_path = storage_dir / "projects" / f"{self.project_name}_{project_hash}" / "snapshot.json"
+            cache_path = self.indexer.cache_path  # embeddings.pkl
+
+            if not snapshot_path.exists() or not cache_path.exists():
+                return False
+
+            snapshot_mtime = snapshot_path.stat().st_mtime
+            cache_mtime = cache_path.stat().st_mtime
+
+            # Timestamps should match (both updated during same reindex)
+            # Allow 1 second tolerance for filesystem timestamp precision
+            return abs(snapshot_mtime - cache_mtime) < 1.0
+        except Exception:
+            return False
+
+    # ========================================================================
+
     def auto_reindex(self, force_full: bool = False):
         """
         Auto-reindex with INCREMENTAL support via cache + rebuild strategy.
@@ -1169,7 +1278,45 @@ class FixedIncrementalIndexer:
                 print("No snapshot found - performing full reindex...", file=sys.stderr)
                 return self._full_index(start_time)
 
-            # Step 2: Detect changes
+            # Step 1.5: FAST-FAIL OPTIMIZATION (Option B: Process Decides)
+            # Try cheap heuristics before expensive Merkle DAG build
+            if not force_full:
+                heuristics_start = time.time()
+
+                # Run all 4 heuristics (cheap checks, <100ms total)
+                heuristics = {
+                    'git_clean': self._git_status_clean(),
+                    'snapshot_recent': self._snapshot_timestamp_recent(),
+                    'file_count_stable': self._file_count_stable(),
+                    'cache_synced': self._cache_timestamp_synced()
+                }
+
+                heuristics_time = round((time.time() - heuristics_start) * 1000, 1)  # ms
+                passed_count = sum(heuristics.values())
+
+                # Log heuristic results for observability
+                heuristic_status = []
+                for name, passed in heuristics.items():
+                    status = "✓" if passed else "✗"
+                    heuristic_status.append(f"{status} {name}")
+                print(f"Fast-fail heuristics: {', '.join(heuristic_status)}", file=sys.stderr)
+
+                # 3/4 threshold: High confidence no changes (>95% accuracy target)
+                if passed_count >= 3:
+                    print(f"Fast-fail: {passed_count}/4 passed ({heuristics_time}ms) - SKIP reindex (high confidence)", file=sys.stderr)
+                    return {
+                        'success': True,
+                        'skipped': True,
+                        'fast_fail': True,
+                        'reason': f'Fast-fail heuristics ({passed_count}/4 passed)',
+                        'heuristics': heuristics,
+                        'heuristics_time_ms': heuristics_time,
+                        'time_taken': round(time.time() - start_time, 2)
+                    }
+                else:
+                    print(f"Fast-fail: {passed_count}/4 passed ({heuristics_time}ms) - PROCEED to Merkle DAG (low confidence)", file=sys.stderr)
+
+            # Step 2: Detect changes (full validation via Merkle DAG)
             print("Detecting changes...", file=sys.stderr)
             dag = MerkleDAG(self.project_path)
             dag.build()
