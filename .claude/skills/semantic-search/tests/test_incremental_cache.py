@@ -330,7 +330,7 @@ class TestBloatTracking:
         """
         Test 3: Rebuild Trigger Hybrid Logic (RED phase)
 
-        Rebuild triggers: (20% bloat AND 500 stale) OR (30% bloat)
+        Rebuild triggers: (20% bloat AND 400 stale) OR (30% bloat)
 
         This prevents rebuilding small projects with low absolute bloat count.
 
@@ -350,18 +350,18 @@ class TestBloatTracking:
                 )
                 manager.add_embeddings([result])
 
-            # Delete 100 (20% bloat, but <500 stale)
+            # Delete 100 (20% bloat, but <400 stale)
             for i in range(100):
                 del manager.metadata_db[f'chunk_{i}']
 
             assert not manager._needs_rebuild(), "20% + 100 stale → NO rebuild"
 
-            # Scenario 2: 20% bloat AND 500 stale → YES rebuild
+            # Scenario 2: 20% bloat AND 400+ stale → YES rebuild
             # Delete 400 more (total 500 deleted = 500 stale, still 20%)
             for i in range(100, 500):
                 del manager.metadata_db[f'chunk_{i}']
 
-            assert manager._needs_rebuild(), "20% + 500 stale → YES rebuild"
+            assert manager._needs_rebuild(), "20% + 400+ stale → YES rebuild"
 
             # Scenario 3: 30% bloat regardless of count → YES rebuild
             # Add 100 more, delete 30 (30% of 100)
@@ -388,8 +388,8 @@ class TestBloatTracking:
         """
         Test 4: Small Project 30% Trigger (RED phase)
 
-        Small projects (<1667 vectors) use 30% fallback trigger.
-        This prevents primary trigger (20% + 500 stale) from being too strict for small projects.
+        Small projects (<2000 vectors) use 30% fallback trigger.
+        This prevents primary trigger (20% + 400 stale) from being too strict for small projects.
 
         Expected: Should pass immediately (fallback logic already implemented)
         """
@@ -397,7 +397,7 @@ class TestBloatTracking:
             manager = FixedCodeIndexManager(tmpdir)
 
             # Small project: 1000 total, 700 active, 300 stale = 30% bloat
-            # Should trigger despite stale_count < 500
+            # Should trigger despite stale_count < 400
             from types import SimpleNamespace
             for i in range(1000):
                 result = SimpleNamespace(
@@ -407,11 +407,11 @@ class TestBloatTracking:
                 )
                 manager.add_embeddings([result])
 
-            # Delete 300 (30% bloat, but only 300 stale < 500)
+            # Delete 300 (30% bloat, but only 300 stale < 400)
             for i in range(300):
                 del manager.metadata_db[f'chunk_{i}']
 
-            # Should trigger via 30% fallback (despite stale < 500)
+            # Should trigger via 30% fallback (despite stale < 400)
             assert manager._needs_rebuild(), "30% bloat → YES rebuild (fallback trigger)"
 
             # Verify 30% is the threshold

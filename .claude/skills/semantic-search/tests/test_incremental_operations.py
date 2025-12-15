@@ -360,7 +360,7 @@ class TestAutoRebuildTrigger:
             assert result1['success']
             initial_chunks = result1['chunks_added']
 
-            # Modify many files to create bloat (>30% or >20% with 500+ stale)
+            # Modify many files to create bloat (>30% or >20% with 400+ stale)
             import time
             time.sleep(0.1)
             for i in range(20):  # Modify 40% of files
@@ -408,16 +408,23 @@ class TestAutoRebuildTrigger:
                                   for i in range(400)}
             manager.index = type('obj', (object,), {'ntotal': 500})()  # 500 total, 400 active = 20% bloat, 100 stale
 
-            assert not manager._needs_rebuild(), "Should NOT rebuild at 20% with <500 stale"
+            assert not manager._needs_rebuild(), "Should NOT rebuild at 20% with <400 stale"
 
-            # Case 3: 20% bloat AND 500+ stale - SHOULD rebuild
+            # Case 3: 20% bloat AND exactly 400 stale - SHOULD rebuild (boundary test)
+            manager.metadata_db = {f'chunk_{i}': {'metadata': {'file_path': 'test.py'}}
+                                  for i in range(1600)}
+            manager.index = type('obj', (object,), {'ntotal': 2000})()  # 2000 total, 1600 active = 20% bloat, 400 stale
+
+            assert manager._needs_rebuild(), "SHOULD rebuild at exactly 400 stale (boundary)"
+
+            # Case 4: 20% bloat AND 500 stale - SHOULD rebuild
             manager.metadata_db = {f'chunk_{i}': {'metadata': {'file_path': 'test.py'}}
                                   for i in range(2000)}
             manager.index = type('obj', (object,), {'ntotal': 2500})()  # 2500 total, 2000 active = 20% bloat, 500 stale
 
-            assert manager._needs_rebuild(), "SHOULD rebuild at 20% with 500+ stale"
+            assert manager._needs_rebuild(), "SHOULD rebuild at 20% with 500 stale"
 
-            # Case 4: 30% bloat regardless of count - SHOULD rebuild
+            # Case 5: 30% bloat regardless of count - SHOULD rebuild
             manager.metadata_db = {f'chunk_{i}': {'metadata': {'file_path': 'test.py'}}
                                   for i in range(700)}
             manager.index = type('obj', (object,), {'ntotal': 1000})()  # 1000 total, 700 active = 30% bloat
