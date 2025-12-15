@@ -1,28 +1,45 @@
 # Auto-Reindex Design: Quick Reference
 
-**Last Updated**: 2025-12-11 (First-Prompt Architecture)
-**Full ADR**: [ADR-001: Direct Script vs Agent](./ADR-001-direct-script-vs-agent-for-auto-reindex.md)
+> **⚠️ PARTIALLY SUPERSEDED**: 2025-12-15
+>
+> **What Changed**:
+> - ❌ **Post-write auto-reindex REMOVED** (PostToolUse hook deleted, `run_incremental_reindex_sync()` deleted)
+> - ✅ **First-prompt background reindex REMAINS** (still active)
+> - ✅ **Manual agent reindex REMAINS** (semantic-search-indexer)
+>
+> **Current Architecture** (as of 2025-12-15):
+> - **First-prompt**: Background reindex on first user prompt (unchanged)
+> - **Manual**: semantic-search-indexer agent for on-demand reindex (unchanged)
+> - **Post-write**: Removed (fast-fail optimization makes manual reindex fast enough)
+>
+> Sections below marked with ~~strikethrough~~ are superseded.
+
+---
+
+**Last Updated**: 2025-12-15 (Post-Write Auto-Reindex Removed)
+**Previous Update**: 2025-12-11 (First-Prompt Architecture)
+**Full ADR**: [ADR-001: Direct Script vs Agent](./ADR-001-direct-script-vs-agent-for-auto-reindex.md) (superseded)
 
 ---
 
 ## TL;DR
 
-**Automatic reindex uses background processes (first-prompt) and direct scripts (post-write)**
+**Automatic reindex uses background processes (first-prompt only)**
 **Manual reindex uses semantic-search-indexer agent (intelligent, interactive)**
 
-**NEW (2025-12-11)**: First-prompt trigger for background reindex (0.5s session start, 3-10min background completion)
+**CURRENT (2025-12-15)**: First-prompt trigger for background reindex (0.5s session start, 3-10min background completion)
+~~**REMOVED (2025-12-15)**: Post-write auto-reindex (deleted with PostToolUse hook)~~
 
 ---
 
 ## When to Use What
 
-### ✅ Use Background/Direct Scripts (Current Implementation)
+### ✅ Use Background Scripts (Current Implementation)
 
 **Automatic Operations:**
-- **First-prompt reindex** (background, detached process)
-- **Post-file-modification reindex** (synchronous, kill-and-restart)
-- **Session start** (state initialization only, no reindex)
-- Any hook-based operation
+- **First-prompt reindex** (background, detached process) ← **ACTIVE**
+- **Session start** (state initialization only, no reindex) ← **ACTIVE**
+- ~~**Post-file-modification reindex** (synchronous, kill-and-restart)~~ ← **REMOVED 2025-12-15**
 
 **Why:**
 - **Instant session start** (0.5s vs 50s timeout before)
@@ -92,10 +109,16 @@ User: "show me the login code"
 
 ---
 
-### Post-Write Synchronous Reindex ✓
+### ~~Post-Write Synchronous Reindex~~ ❌ REMOVED 2025-12-15
+
+> **Superseded**: This feature was removed on 2025-12-15 when PostToolUse hook was deleted.
+>
+> **Why Removed**: Fast-fail optimization (14.4x speedup) makes manual reindex fast enough that automatic post-write reindex is unnecessary.
+>
+> **Code Preserved Below for Historical Reference**
 
 ```python
-# .claude/utils/reindex_manager.py
+# .claude/utils/reindex_manager.py (DELETED FUNCTION)
 def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
     """Fast, direct execution for post-write operations"""
     script = project_root / '.claude' / 'skills' / 'semantic-search' / 'scripts' / 'incremental-reindex'
@@ -110,7 +133,7 @@ def run_incremental_reindex_sync(project_path: Path) -> Optional[bool]:
     return result.returncode == 0
 ```
 
-**Output:**
+**Output (Historical):**
 ```
 🔄 Updating semantic search index (file modified: main.py)...
 ✅ Semantic search index updated

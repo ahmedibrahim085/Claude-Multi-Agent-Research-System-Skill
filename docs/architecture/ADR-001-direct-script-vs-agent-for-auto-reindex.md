@@ -1,7 +1,26 @@
 # ADR-001: Direct Script vs Agent for Auto-Reindex Operations
 
-**Status**: ✅ Accepted (Updated 2025-12-11 for first-prompt architecture)
-**Date**: 2025-12-03 (Last Updated: 2025-12-11)
+> **⚠️ SUPERSEDED**: 2025-12-15
+>
+> **Status**: Superseded by fast-fail optimization (see commits 577a861, adf2c60, e0fd660)
+>
+> **What Changed**:
+> - PostToolUse hook removed (auto-reindex on Write/Edit removed)
+> - Functions deleted: `run_incremental_reindex_sync()`, `reindex_after_write()`, `should_reindex_after_write()`
+> - Hook file deleted: `.claude/hooks/post-tool-use-track-research.py`
+> - Auto-reindex feature replaced by fast-fail optimization in incremental-reindex script
+>
+> **Why Superseded**:
+> - PostToolUse auto-reindex had limited value (fast-fail makes manual reindex fast enough)
+> - Removed complexity and maintenance burden
+> - Fast-fail optimization (14.4x speedup) makes on-demand reindex acceptable
+>
+> **Historical Context**: This ADR is preserved for reference. The decision and rationale remain valid for understanding the architecture that existed from 2025-12-03 to 2025-12-15.
+
+---
+
+**Original Status**: ✅ Accepted (Updated 2025-12-11 for first-prompt architecture)
+**Original Date**: 2025-12-03 (Last Updated: 2025-12-11)
 **Decision Makers**: Architecture Review
 **Impact**: Core auto-reindex implementation (first-prompt trigger, post-modification hooks)
 
