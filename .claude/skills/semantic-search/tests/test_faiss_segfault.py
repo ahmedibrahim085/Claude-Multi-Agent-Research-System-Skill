@@ -25,39 +25,31 @@ from chunking.multi_language_chunker import MultiLanguageChunker
 def test_basic_faiss():
     """Test 1: Basic FAISS with random vectors"""
     print("\n=== Test 1: Basic FAISS with random vectors ===")
-    try:
-        idx = faiss.IndexFlatIP(768)
-        vectors = np.random.rand(100, 768).astype('float32')
-        faiss.normalize_L2(vectors)
-        idx.add(vectors)
-        print(f"✅ SUCCESS: Added {idx.ntotal} vectors")
-        return True
-    except Exception as e:
-        print(f"❌ FAILED: {e}")
-        return False
+    idx = faiss.IndexFlatIP(768)
+    vectors = np.random.rand(100, 768).astype('float32')
+    faiss.normalize_L2(vectors)
+    idx.add(vectors)
+    print(f"✅ SUCCESS: Added {idx.ntotal} vectors")
+    assert idx.ntotal == 100, f"Expected 100 vectors, got {idx.ntotal}"
 
 def test_mcp_embedder_single_chunk():
     """Test 2: Single chunk through MCP embedder"""
     print("\n=== Test 2: Single chunk through MCP embedder ===")
-    try:
-        # Create a simple test file
-        test_file = Path("/tmp/test_embed.py")
-        test_file.write_text("def hello():\n    print('world')\n")
+    # Create a simple test file
+    test_file = Path("/tmp/test_embed.py")
+    test_file.write_text("def hello():\n    print('world')\n")
 
+    try:
         # Chunk and embed
         chunker = MultiLanguageChunker(str(test_file.parent))
         chunks = chunker.chunk_file(str(test_file))
 
-        if not chunks:
-            print("❌ No chunks created")
-            return False
+        assert chunks, "No chunks created"
 
         embedder = CodeEmbedder()
         results = embedder.embed_chunks([chunks[0]], batch_size=1)
 
-        if not results:
-            print("❌ No embeddings generated")
-            return False
+        assert results, "No embeddings generated"
 
         # Try to add to FAISS
         idx = faiss.IndexFlatIP(768)
@@ -74,22 +66,17 @@ def test_mcp_embedder_single_chunk():
         idx.add(vector)
 
         print(f"✅ SUCCESS: Added {idx.ntotal} vectors")
-        test_file.unlink()
-        return True
-
-    except Exception as e:
-        import traceback
-        print(f"❌ FAILED: {e}")
-        traceback.print_exc()
-        return False
+        assert idx.ntotal == 1, f"Expected 1 vector, got {idx.ntotal}"
+    finally:
+        if test_file.exists():
+            test_file.unlink()
 
 def test_mcp_embedder_multiple_chunks():
     """Test 3: Multiple chunks through MCP embedder"""
     print("\n=== Test 3: Multiple chunks through MCP embedder ===")
-    try:
-        # Create a test file with multiple functions
-        test_file = Path("/tmp/test_embed_multi.py")
-        test_file.write_text("""
+    # Create a test file with multiple functions
+    test_file = Path("/tmp/test_embed_multi.py")
+    test_file.write_text("""
 def func1():
     print('one')
 
@@ -100,6 +87,7 @@ def func3():
     print('three')
 """)
 
+    try:
         # Chunk and embed
         chunker = MultiLanguageChunker(str(test_file.parent))
         chunks = chunker.chunk_file(str(test_file))
@@ -129,23 +117,19 @@ def func3():
         idx.add(embeddings)
 
         print(f"✅ SUCCESS: Added {idx.ntotal} vectors")
-        test_file.unlink()
-        return True
-
-    except Exception as e:
-        import traceback
-        print(f"❌ FAILED: {e}")
-        traceback.print_exc()
-        return False
+        assert idx.ntotal == len(results), f"Expected {len(results)} vectors, got {idx.ntotal}"
+    finally:
+        if test_file.exists():
+            test_file.unlink()
 
 def test_cpu_conversion():
     """Test 4: Explicit CPU conversion of embeddings"""
     print("\n=== Test 4: Explicit CPU conversion ===")
-    try:
-        # Create a test file
-        test_file = Path("/tmp/test_cpu.py")
-        test_file.write_text("def hello():\n    print('world')\n")
+    # Create a test file
+    test_file = Path("/tmp/test_cpu.py")
+    test_file.write_text("def hello():\n    print('world')\n")
 
+    try:
         # Chunk and embed
         chunker = MultiLanguageChunker(str(test_file.parent))
         chunks = chunker.chunk_file(str(test_file))
@@ -181,14 +165,10 @@ def test_cpu_conversion():
         idx.add(vector)
 
         print(f"✅ SUCCESS: Added {idx.ntotal} vectors")
-        test_file.unlink()
-        return True
-
-    except Exception as e:
-        import traceback
-        print(f"❌ FAILED: {e}")
-        traceback.print_exc()
-        return False
+        assert idx.ntotal == 1, f"Expected 1 vector, got {idx.ntotal}"
+    finally:
+        if test_file.exists():
+            test_file.unlink()
 
 if __name__ == "__main__":
     print("Testing FAISS segmentation fault scenarios on Apple Silicon")

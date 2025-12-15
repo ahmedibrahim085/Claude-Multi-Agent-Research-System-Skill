@@ -131,7 +131,8 @@ def test_indexidmap2_indexivf():
         print("  GitHub issue #4535 appears to be FIXED")
         print("  Incremental indexing is VIABLE with this combination")
 
-        return True
+        # Assert that the test completed successfully
+        assert index.ntotal == n_vectors - len(ids_to_remove), "Vector count mismatch after removal"
 
     except Exception as e:
         print("\n" + "="*70)
@@ -148,7 +149,8 @@ def test_indexidmap2_indexivf():
         print("  IndexIDMap2 + IndexIVFFlat does NOT work reliably")
         print("  Must use alternative approach (optimize full rebuild)")
 
-        return False
+        # Re-raise exception to fail the test
+        raise
 
 
 def test_indexidmap2_indexflat():
@@ -206,11 +208,13 @@ def test_indexidmap2_indexflat():
         print("  Can be used if IndexIVFFlat fails")
         print("  Performance: Slower search, but enables incremental updates")
 
-        return True
+        # Assert that the test completed successfully
+        assert index.ntotal == n_vectors - len(ids_to_remove), "Vector count mismatch after removal"
 
     except Exception as e:
         print(f"\n✗ Fallback test failed: {e}")
-        return False
+        # Re-raise exception to fail the test
+        raise
 
 
 if __name__ == "__main__":
