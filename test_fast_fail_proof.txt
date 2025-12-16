@@ -1,3 +1,0 @@
-This is a test file to prove fast-fail triggers in real workflow.
-Created: 2025-12-15 21:38 CET
-Purpose: Demonstrate PostToolUse hook → reindex_after_write → fast-fail execution
