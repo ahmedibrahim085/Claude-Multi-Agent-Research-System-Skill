@@ -631,6 +631,68 @@ export LOGS_DIR=/custom/path/logs
 
 Then restart Claude Code.
 
+### Semantic-Search Configuration
+
+The semantic-search skill uses an embedding model for code similarity search:
+
+**Model Details**:
+- **Model**: `google/embeddinggemma-300m` (768-dimensional embeddings)
+- **Size**: ~1.2GB
+- **Download**: Automatic on first use (10-30 minutes, depends on internet speed)
+- **Cache Location**: `~/.claude_code_search/models/models--google--embeddinggemma-300m`
+- **Reuse**: Downloaded once, shared across all projects
+
+**First-Time Usage**:
+```
+You: "search for user authentication logic"
+
+Claude: Starting semantic search...
+[Downloads model: 10-30 minutes]
+Indexing project files...
+Search complete.
+```
+
+**Subsequent Usage**:
+```
+You: "search for database queries"
+
+Claude: Starting semantic search...
+[Uses cached model: ~2 seconds]
+Search complete.
+```
+
+**Storage Requirements**:
+- Model: ~1.2GB (`~/.claude_code_search/models/`)
+- Index per project: ~5-50MB (`~/.claude_code_search/projects/{project}/`)
+- Embedding cache: ~2-20MB per project (reused across reindexes)
+
+**Manual Model Management**:
+```bash
+# Check if model is downloaded
+ls -lh ~/.claude_code_search/models/models--google--embeddinggemma-300m/
+
+# Check model size
+du -sh ~/.claude_code_search/models/
+
+# Remove model (will re-download on next use)
+rm -rf ~/.claude_code_search/models/
+
+# Remove all indexes (safe, will rebuild on demand)
+rm -rf ~/.claude_code_search/projects/
+```
+
+**Performance Notes**:
+- **Apple Silicon**: Uses MPS (Metal Performance Shaders) GPU acceleration
+  - Model loads on `mps:0` device
+  - ~2-3x faster than CPU
+- **Other platforms**: Uses CPU (faiss-cpu)
+  - Still fast, but no GPU acceleration
+
+**Troubleshooting**:
+- **Slow first-time download**: Normal, model is 1.2GB (10-30 min)
+- **Disk space error**: Ensure 1.5GB+ free space in home directory
+- **Model corruption**: Delete `~/.claude_code_search/models/` and retry
+
 ### Advanced Setup
 
 For custom configuration:
