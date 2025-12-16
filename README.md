@@ -79,9 +79,21 @@ See [Planning Workflow](#planning-workflow-new-in-v220) and [CHANGELOG.md](CHANG
 
 ### Prerequisites
 
+**Required for All Features**:
 - **Claude Code** installed ([Pro, Max, Team, or Enterprise tier](https://www.anthropic.com/news/skills))<sup>[[1]](#ref-1)</sup>
-- **Python 3.8+**
-- **Git**
+- **Python 3.8+** with `python3` command available in PATH
+  - Verify: `python3 --version` (should show 3.8 or higher)
+- **Git** installed and available in PATH
+- **Bash shell** (for hooks and scripts)
+  - macOS/Linux: built-in
+  - Windows: Use WSL2 (Windows Subsystem for Linux)
+
+**Additional for Semantic-Search Skill** (optional):
+- **~1.5GB disk space** for embedding model download
+  - Model: `google/embeddinggemma-300m` (768 dimensions)
+  - Downloads automatically on first use (10-30 minutes)
+  - Cached at: `~/.claude_code_search/models/`
+  - One-time download, reused across all projects
 
 ### Platform Support
 
