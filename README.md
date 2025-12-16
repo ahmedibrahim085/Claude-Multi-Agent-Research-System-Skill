@@ -670,15 +670,53 @@ Configured in `.claude/config.json`:
 
 ### Environment Variables
 
-Override paths without editing config:
+Override configuration without editing `config.json`:
 
+**Path Overrides**:
 ```bash
-export RESEARCH_NOTES_DIR=/custom/path/notes
-export REPORTS_DIR=/custom/path/reports
-export LOGS_DIR=/custom/path/logs
+export RESEARCH_NOTES_DIR=/custom/path/notes    # Default: files/research_notes
+export REPORTS_DIR=/custom/path/reports          # Default: files/reports
+export LOGS_DIR=/custom/path/logs                # Default: logs
+export STATE_DIR=/custom/path/state              # Default: logs/state
 ```
 
-Then restart Claude Code.
+**Research Settings**:
+```bash
+export MAX_PARALLEL_RESEARCHERS=2                # Default: 4 (range: 1-10)
+```
+
+**Logging Settings**:
+```bash
+export LOGGING_ENABLED=false                     # Default: true
+```
+
+**Priority Order** (highest to lowest):
+1. Environment variables (override everything)
+2. `.claude/config.json` values
+3. Hardcoded defaults
+
+**Usage Example**:
+```bash
+# Customize paths for this session
+export RESEARCH_NOTES_DIR=/tmp/research
+export REPORTS_DIR=/tmp/reports
+export MAX_PARALLEL_RESEARCHERS=2
+
+# Start Claude Code with custom config
+claude
+```
+
+**Verification**:
+```bash
+# Test that env vars are loaded
+python3 -c "import sys; sys.path.insert(0, '.claude/utils'); \
+from config_loader import load_config; \
+import os; os.environ['RESEARCH_NOTES_DIR'] = '/test'; \
+print(load_config()['paths']['research_notes'])"
+# Should output: /test
+```
+
+Then restart Claude Code to apply changes.
 
 ### Semantic-Search Configuration
 
