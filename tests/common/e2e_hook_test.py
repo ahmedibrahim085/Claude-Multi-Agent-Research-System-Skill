@@ -79,7 +79,7 @@ def check_triggers(result: dict, expected_skill: str = None, expected_compound: 
     return False, "Unknown expectation"
 
 
-class TestSuite:
+class E2ETestSuite:
     def __init__(self):
         self.passed = 0
         self.failed = 0
@@ -119,7 +119,7 @@ class TestSuite:
 
 
 def main():
-    suite = TestSuite()
+    suite = E2ETestSuite()
 
     print(f"\n{BOLD}{'='*60}")
     print("COMPREHENSIVE E2E TEST SUITE - user-prompt-submit.py")

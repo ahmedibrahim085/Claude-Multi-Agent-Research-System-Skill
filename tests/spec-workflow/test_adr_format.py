@@ -48,7 +48,7 @@ VALID_STATUSES = [
 ]
 
 
-class TestResults:
+class ADRTestResults:
     def __init__(self):
         self.passed = 0
         self.failed = 0
@@ -166,7 +166,7 @@ def main():
     print(f"{BLUE}============================================{RESET}")
     print()
 
-    results = TestResults()
+    results = ADRTestResults()
 
     # Get project slug from argument
     project_slug = sys.argv[1] if len(sys.argv) > 1 else None
