@@ -1,5 +1,7 @@
 # Project Instructions for anthropic_research
 
+@import ~/.claude/CLAUDE.md
+
 ---
 
 ## CRITICAL: Response Timestamp Requirement
