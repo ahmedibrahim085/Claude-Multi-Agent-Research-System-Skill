@@ -761,6 +761,294 @@ If you create or edit `.claude/settings.local.json`, **REMOVE any `hooks` sectio
 
 ---
 
+## Troubleshooting
+
+Common issues and solutions for first-time users:
+
+### Hooks Not Executing / Import Errors
+
+**Symptoms**:
+- Error message: `ImportError: No module named 'state_manager'`
+- Error message: `ImportError: No module named 'session_logger'`
+- No session logs created in `logs/` directory
+- No "Session logs initialized" message on startup
+
+**Solution**:
+```bash
+python3 setup.py --repair
+```
+
+This validates and fixes:
+- Python version compatibility (requires 3.8+)
+- Utility module availability (.claude/utils/)
+- Hook executability permissions
+- Directory structure
+
+**Manual Verification**:
+```bash
+# Check Python version
+python3 --version  # Should show 3.8+
+
+# Check utility modules exist
+ls -la .claude/utils/*.py
+
+# Check hooks are executable
+ls -la .claude/hooks/*.py  # Should show -rwxr-xr-x
+
+# Test session-start hook manually
+python3 .claude/hooks/session-start.py
+```
+
+### Claude-Context-Local Not Found
+
+**Symptom**: Error during semantic-search: "Failed to import dependencies" or "claude-context-local is not installed"
+
+**Solution**: Clone the Python library:
+```bash
+git clone https://github.com/FarhanAliRaza/claude-context-local.git \
+  ~/.local/share/claude-context-local
+
+# Verify installation
+ls -la ~/.local/share/claude-context-local/
+```
+
+**Important**: No venv, no pip install, no `uv` needed. Just clone!
+
+### Embedding Model Download Issues
+
+**Symptom 1**: Slow first semantic-search (10-30 minutes)
+
+**Solution**: This is NORMAL - the 1.2GB embedding model downloads automatically on first use. Subsequent searches are instant (~2 seconds).
+
+**Symptom 2**: Download fails or hangs
+
+**Solutions**:
+```bash
+# Check disk space (needs 1.5GB+)
+df -h ~
+
+# Check internet connection
+curl -I https://huggingface.co
+
+# Remove corrupted download and retry
+rm -rf ~/.claude_code_search/models/
+# Then retry semantic-search
+```
+
+### Hooks Not Running / No Session Logs
+
+**Symptoms**:
+- No files in `logs/` directory
+- No "Session logs initialized" message when starting Claude Code
+- Research skill doesn't enforce delegation
+
+**Solutions**:
+
+1. **Check settings.json exists**:
+   ```bash
+   cat .claude/settings.json | head -20
+   # Should show hooks configuration
+   ```
+
+2. **Check hooks are executable**:
+   ```bash
+   ls -la .claude/hooks/*.py
+   # Should show -rwxr-xr-x (executable)
+   ```
+
+3. **Manually test hooks**:
+   ```bash
+   python3 .claude/hooks/session-start.py
+   # Should create directories and show status
+   ```
+
+4. **Check for Python errors**:
+   ```bash
+   python3 -c "import sys; sys.path.insert(0, '.claude/utils'); import state_manager"
+   # Should return no errors
+   ```
+
+### Research Produces No Results
+
+**Symptoms**:
+- Research completes but no files in `files/reports/`
+- Empty or incomplete results
+- Agents spawn but produce nothing
+
+**Possible Causes & Solutions**:
+
+1. **API quota exceeded**:
+   ```bash
+   # Check API key is set
+   echo $ANTHROPIC_API_KEY  # Should not be empty
+   ```
+
+2. **Web search disabled**:
+   ```bash
+   # Check permissions in settings.json
+   grep -A5 '"permissions"' .claude/settings.json
+   # Should show WebSearch allowed
+   ```
+
+3. **Write permissions**:
+   ```bash
+   # Check directories are writable
+   ls -ld files/research_notes/ files/reports/
+   # Should show drwxr-xr-x (writable)
+   ```
+
+4. **Review session logs**:
+   ```bash
+   # Check latest session for errors
+   cat logs/session_*_transcript.txt | tail -50
+   # Look for "Error" or "⚠️" messages
+   ```
+
+### Performance Issues / Slow Research
+
+**Symptom**: Research takes longer than expected (>10 minutes)
+
+**Possible Causes**:
+- Slow internet connection (affects web searches)
+- Rate limited by search APIs
+- Large topic requiring extensive research
+- Multiple parallel agents competing for resources
+
+**Not a Problem**: Research quality > speed. You can interrupt with `Ctrl+C` and use partial results from `files/research_notes/`.
+
+**Optimization Tips**:
+```bash
+# Reduce parallel researchers in config.json
+# Change from 4 to 2 for slower connections
+"max_parallel_researchers": 2
+```
+
+### Session State Corruption
+
+**Symptoms**:
+- Weird behavior with workflow state
+- "Skip research" when you didn't ask to
+- Duplicate research sessions logged
+- State conflicts between skills
+
+**Solution - Clear state** (safe to delete):
+```bash
+# Remove all state files
+rm -f logs/state/*.json logs/session_*
+
+# Restart Claude Code - fresh state will be created
+claude
+```
+
+**What gets reset**:
+- Workflow state (current skill pointer)
+- Session history
+- Research session tracking
+
+**What's preserved**:
+- Configuration (config.json)
+- Research outputs (files/research_notes/, files/reports/)
+- Semantic search indexes
+
+### Paths Resolved to Wrong Location
+
+**Symptoms**:
+- Files created in unexpected directories
+- config.json paths not being respected
+- "File not found" errors for existing files
+
+**Solution - Start Claude Code from project root**:
+```bash
+# WRONG - Don't start from parent or subdirectory
+cd ~/projects/
+claude  # ❌ Wrong working directory
+
+# RIGHT - Start from project root
+cd ~/projects/Claude-Multi-Agent-Research-System-Skill/
+claude  # ✅ Correct
+```
+
+**Why**: All paths in config.json are relative to project root. Hooks use `Path(__file__).parent.parent.parent` to find project root.
+
+### Semantic-Search Not Working
+
+**Symptom**: Semantic-search commands fail or produce no results
+
+**Diagnostic Checklist**:
+
+```bash
+# 1. Check claude-context-local is installed
+ls -la ~/.local/share/claude-context-local/
+# Should show directories: merkle/, chunking/, embeddings/
+
+# 2. Check embedding model is downloaded
+ls -la ~/.claude_code_search/models/models--google--embeddinggemma-300m/
+# Should show model files (1.2GB total)
+
+# 3. Check project is indexed
+ls -la ~/.claude_code_search/projects/*/
+# Should show index files for your project
+
+# 4. Test indexing manually
+python3 .claude/skills/semantic-search/scripts/incremental-reindex $(pwd)
+# Should show indexing progress
+
+# 5. Test search manually
+python3 .claude/skills/semantic-search/scripts/search $(pwd) "test query"
+# Should return results
+```
+
+### Git Command Not Found (Semantic-Search)
+
+**Symptom**: Semantic-search fails with git-related errors
+
+**Solution**: Install git:
+```bash
+# macOS
+brew install git
+
+# Linux (Debian/Ubuntu)
+sudo apt-get install git
+
+# Linux (RHEL/CentOS)
+sudo yum install git
+
+# Verify
+git --version
+```
+
+**Why needed**: Semantic-search uses `git rev-parse` to find project root.
+
+### Still Having Issues?
+
+1. **Enable detailed logging**:
+   ```bash
+   # Check config.json has logging enabled
+   grep -A3 '"logging"' .claude/config.json
+   ```
+
+2. **Review session logs**:
+   ```bash
+   ls -lt logs/session_* | head -3
+   # Check most recent session logs
+   ```
+
+3. **Run full diagnostic**:
+   ```bash
+   python3 setup.py --verify
+   # Shows detailed system status
+   ```
+
+4. **Check prerequisites**:
+   ```bash
+   python3 --version  # 3.8+
+   git --version      # Any version
+   which bash         # /bin/bash or similar
+   df -h ~            # >1.5GB free
+   ```
+
+---
+
 ## Architecture Deep Dive
 
 ### Architecture Decision Records (ADRs)
