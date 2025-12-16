@@ -114,31 +114,23 @@ git clone https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-
 cd Claude-Multi-Agent-Research-System-Skill
 ```
 
-**Step 2: Install Python library dependency (for semantic-search skill)**
+**Step 2: (Optional) Enable semantic-search skill**
 
-> **Important:** This is NOT an MCP server - it's a Python library dependency. No server process runs.
+> **Note:** The multi-agent-researcher skill works immediately without this step. Only install if you want semantic code search.
 
-The semantic-search skill requires claude-context-local Python library for code indexing:
-
-```bash
-# Clone Python library to standard location (5 minutes)
-git clone https://github.com/FarhanAliRaza/claude-context-local.git ~/.local/share/claude-context-local
-
-# Set up Python virtual environment and install dependencies
-cd ~/.local/share/claude-context-local
-python3 -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e .
-
-# Return to project directory
-cd -
-```
-
-**What this installs:**
+The semantic-search skill imports Python modules from claude-context-local for:
 - Merkle tree change detection (smart reindexing)
 - Multi-language code chunking (15+ languages)
-- Embedding generation (sentence-transformers wrapper)
-- Dependencies: faiss-cpu, sentence-transformers, tree-sitter
+- Embedding generation (sentence-transformers, FAISS)
+
+```bash
+# Clone Python library to standard location (30 seconds)
+git clone https://github.com/FarhanAliRaza/claude-context-local.git ~/.local/share/claude-context-local
+```
+
+**That's it!** No virtual environment, no pip install, no `uv` needed. The skill imports modules directly via `sys.path.insert()`.
+
+**First-time usage**: The embedding model (~1.2GB) downloads automatically on first semantic-search (10-30 minutes). Subsequent uses are instant.
 
 **License note:** claude-context-local is GPL-3.0. Our project imports it via PYTHONPATH (dynamic linking), which preserves our Apache 2.0 license. See `docs/architecture/MCP-DEPENDENCY-STRATEGY.md` for details.
 
