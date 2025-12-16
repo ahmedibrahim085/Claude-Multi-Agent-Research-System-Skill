@@ -1171,7 +1171,7 @@ class FixedIncrementalIndexer:
             # Return False to fall back to full validation (safe)
             return False
 
-    def _snapshot_timestamp_recent(self, max_age_minutes: int = 5) -> bool:
+    def _snapshot_timestamp_recent(self, max_age_minutes: int = 10) -> bool:
         """
         Check if snapshot file was modified recently (within max_age minutes).
 
