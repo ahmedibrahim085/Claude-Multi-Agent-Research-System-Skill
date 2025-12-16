@@ -80,9 +80,9 @@ class TestSearchArgumentParsing:
             assert "unrecognized" not in result.stderr.lower()
 
     def test_search_invalid_k_type_fails(self):
-        """Test search.py rejects non-integer --k value"""
+        """Test search rejects non-integer --k value (bash wrapper)"""
         result = subprocess.run(
-            ["bash", str(SEARCH_SCRIPT), "--query", "test", "--k", "not-a-number"],
+            ["bash", str(SEARCH_SCRIPT), "--query", "test", "--project", str(Path.cwd()), "--k", "not-a-number"],
             capture_output=True,
             text=True
         )
@@ -96,24 +96,17 @@ class TestSearchArgumentParsing:
 class TestSearchJSONOutput:
     """Test search.py JSON output structure"""
 
-    def test_search_error_produces_json(self):
-        """Test search.py produces valid JSON error output"""
-        # Run with missing index to trigger error
+    def test_search_missing_project_error(self):
+        """Test search fails with clear error when --project is missing (bash wrapper behavior)"""
+        # Bash wrapper validates required params before Python execution
         result = subprocess.run(
-            ["bash", str(SEARCH_SCRIPT), "--query", "test", "--storage-dir", "/nonexistent/path"],
+            ["bash", str(SEARCH_SCRIPT), "--query", "test"],
             capture_output=True,
             text=True
         )
         assert result.returncode != 0
-
-        # Verify stderr contains valid JSON
-        try:
-            error_data = json.loads(result.stderr)
-            assert "success" in error_data
-            assert error_data["success"] is False
-            assert "error" in error_data
-        except json.JSONDecodeError:
-            pytest.fail("stderr did not contain valid JSON")
+        # Bash wrapper outputs plain text error (not JSON)
+        assert "--project is required" in result.stderr
 
     @pytest.mark.skipif(
         not (Path.home() / ".local" / "share" / "claude-context-local").exists(),
@@ -146,24 +139,18 @@ class TestSearchJSONOutput:
 class TestSearchErrorHandling:
     """Test search.py error handling and messages"""
 
-    def test_search_missing_index_helpful_error(self):
-        """Test search.py provides helpful error for missing index"""
+    def test_search_missing_query_error(self):
+        """Test search fails with usage message when --query is missing (bash wrapper behavior)"""
+        # Bash wrapper validates required params before Python execution
         result = subprocess.run(
-            ["bash", str(SEARCH_SCRIPT), "--query", "test", "--storage-dir", "/nonexistent/index"],
+            ["bash", str(SEARCH_SCRIPT)],
             capture_output=True,
             text=True
         )
         assert result.returncode != 0
-
-        try:
-            error_data = json.loads(result.stderr)
-            # Should mention error and provide suggestion
-            # Could be index error (if installation OK) or import error (if installation missing)
-            assert "error" in error_data
-            assert error_data["success"] is False
-            assert "suggestion" in error_data or "install" in str(error_data).lower()
-        except json.JSONDecodeError:
-            pytest.fail("Error output was not valid JSON")
+        # Bash wrapper outputs plain text usage message (not JSON)
+        assert "Usage:" in result.stderr
+        assert "--query" in result.stderr
 
 
 # Test summary

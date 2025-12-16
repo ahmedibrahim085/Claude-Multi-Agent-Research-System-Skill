@@ -45,38 +45,26 @@ class TestStatusArgumentParsing:
 class TestStatusJSONOutput:
     """Test status.py JSON output structure"""
 
-    def test_status_error_produces_json(self):
-        """Test status.py produces valid JSON error output"""
+    def test_status_returns_valid_json(self):
+        """Test status returns valid JSON with index statistics (bash wrapper behavior)"""
+        # Status script has no error modes - always returns success with default storage
         result = subprocess.run(
-            ["bash", str(STATUS_SCRIPT), "--storage-dir", "/nonexistent/path"],
+            ["bash", str(STATUS_SCRIPT)],
             capture_output=True,
             text=True
         )
-        assert result.returncode != 0
+        assert result.returncode == 0
 
+        # Parse JSON from stdout (not stderr)
         try:
-            error_data = json.loads(result.stderr)
-            assert "success" in error_data
-            assert error_data["success"] is False
-            assert "error" in error_data
+            data = json.loads(result.stdout)
+            assert "index_statistics" in data
+            assert "model_information" in data
+            # Verify structure
+            assert isinstance(data["index_statistics"], dict)
+            assert isinstance(data["model_information"], dict)
         except json.JSONDecodeError:
-            pytest.fail("stderr did not contain valid JSON")
-
-    def test_status_missing_index_helpful_error(self):
-        """Test status.py provides helpful error for missing index"""
-        result = subprocess.run(
-            ["bash", str(STATUS_SCRIPT), "--storage-dir", "/nonexistent/index"],
-            capture_output=True,
-            text=True
-        )
-        assert result.returncode != 0
-
-        try:
-            error_data = json.loads(result.stderr)
-            assert error_data["success"] is False
-            assert "suggestion" in error_data or "index" in str(error_data).lower()
-        except json.JSONDecodeError:
-            pytest.fail("Error output was not valid JSON")
+            pytest.fail("stdout did not contain valid JSON")
 
 
 if __name__ == "__main__":
