@@ -1520,10 +1520,20 @@ def main():
     project_path = Path(args.project_path).resolve()
 
     # Track operation for logging
-    operation_id = None
     start_time = datetime.now(timezone.utc).isoformat()
     result = None
     exit_code = 0
+    end_logged = False  # FIX: Track if END event already logged (prevents duplicate END events)
+
+    # Log operation start BEFORE lock acquisition (FIX: Ensures END event always logged)
+    # This creates script-direct START event (parent may have logged separate START with different trigger)
+    operation_id = reindex_manager.log_reindex_start(
+        trigger='script-direct',
+        mode='background',
+        pid=os.getpid(),
+        kill_if_held=False,
+        skipped=False
+    )
 
     # CRITICAL: Acquire lock to prevent concurrent reindex
     # If lock held by another process, exit immediately with "skipped" status
@@ -1531,7 +1541,8 @@ def main():
     lock_acquired = reindex_manager._acquire_reindex_lock(project_path, kill_if_held=False)
 
     if not lock_acquired:
-        # Another reindex is running, skip silently (no logging needed - parent already logged skip)
+        # Another reindex is running, log END event and exit
+        # FIX: Was missing END event, causing orphaned START events in logs
         result = {
             'success': True,
             'skipped': True,
@@ -1539,17 +1550,20 @@ def main():
             'time_taken': 0
         }
         print(json.dumps(result, indent=2))
-        sys.exit(0)
 
-    # Lock acquired - log operation start (for background processes, parent already logged)
-    # But log here too for manual invocations or if parent logging failed
-    operation_id = reindex_manager.log_reindex_start(
-        trigger='script-direct',  # Will be overridden by parent's log if spawned
-        mode='background',
-        pid=os.getpid(),
-        kill_if_held=False,
-        skipped=False
-    )
+        # Log END event with skipped status
+        reindex_manager.log_reindex_end(
+            operation_id=operation_id,
+            start_timestamp=start_time,
+            status='skipped',
+            exit_code=0,
+            index_updated=False,
+            files_changed=0,
+            error_message='Lock held by another process'
+        )
+        end_logged = True  # Mark END as logged
+
+        sys.exit(0)
 
     # Lock acquired - proceed with reindex
     try:
@@ -1585,8 +1599,8 @@ def main():
         exit_code = 1
 
     finally:
-        # Log operation end (NEW: Forensic diagnostics)
-        if operation_id and start_time:
+        # Log operation end (FIX: Only if not already logged in early exit path)
+        if operation_id and start_time and not end_logged:
             status = 'completed' if exit_code == 0 else 'failed'
             index_updated = result and result.get('success', False) and not result.get('skipped', False)
             files_changed = result.get('files_changed') if result else None
