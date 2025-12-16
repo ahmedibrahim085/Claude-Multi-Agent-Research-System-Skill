@@ -17,6 +17,13 @@ import re
 import sys
 from pathlib import Path
 
+# Optional dependency for session tracking and reindex status
+try:
+    import reindex_manager
+    REINDEX_MANAGER_AVAILABLE = True
+except ImportError:
+    REINDEX_MANAGER_AVAILABLE = False
+
 # =============================================================================
 # DEBUG MODE (set COMPOUND_DETECTION_DEBUG=true to enable verbose logging)
 # =============================================================================
@@ -180,10 +187,10 @@ def check_semantic_search_prerequisites() -> bool:
         True if prerequisites are ready (enable semantic-search enforcement)
         False if prerequisites not ready (fallback to Grep/Glob/Read)
 
-    Default behavior (backward compatible):
-        - If state file doesn't exist: return True (lazy initialization)
-        - If state file read fails: return True (graceful degradation)
-        - If value is explicitly false: return False (prerequisites not met)
+    Graceful degradation strategy:
+        - File doesn't exist → True (backward compat, lazy initialization)
+        - File read errors → False (safer to skip enforcement than enforce when unreadable)
+        - Corrupted state → False (can't determine readiness, skip enforcement)
     """
     try:
         project_root = get_project_root()
@@ -191,13 +198,15 @@ def check_semantic_search_prerequisites() -> bool:
 
         # If state file doesn't exist, assume prerequisites ready (backward compat)
         if not state_file.exists():
+            if DEBUG:
+                print("DEBUG: Semantic-search state file not found, assuming ready (backward compat)", file=sys.stderr)
             return True
 
-        # Read state file
+        # Read and parse state file
         with open(state_file, 'r') as f:
             state = json.load(f)
 
-        # Get SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY value
+        # Get ready status (default True if key missing for backward compat)
         ready = state.get('SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY', True)
 
         if DEBUG:
@@ -205,11 +214,36 @@ def check_semantic_search_prerequisites() -> bool:
 
         return ready
 
-    except Exception as e:
-        # On any error, default to True (graceful degradation)
+    except FileNotFoundError:
+        # Race condition: file disappeared between exists() and open()
+        # Treat as backward compat case (file doesn't exist)
         if DEBUG:
-            print(f"DEBUG: Failed to check prerequisites, defaulting to True: {e}", file=sys.stderr)
+            print("DEBUG: State file disappeared (race condition), assuming ready", file=sys.stderr)
         return True
+
+    except json.JSONDecodeError as e:
+        # Corrupted state file - can't determine readiness
+        # SAFER: Don't enforce (let Claude use Grep/Glob as fallback)
+        print(f"WARNING: Corrupted semantic-search state file: {e}", file=sys.stderr)
+        print("WARNING: Skipping semantic-search enforcement (state unreadable)", file=sys.stderr)
+        return False
+
+    except PermissionError as e:
+        # Can't read state file - can't determine readiness
+        # SAFER: Don't enforce
+        print(f"WARNING: Cannot read semantic-search state file: {e}", file=sys.stderr)
+        print("WARNING: Skipping semantic-search enforcement (permission denied)", file=sys.stderr)
+        return False
+
+    except Exception as e:
+        # Unexpected error - unknown failure mode
+        # SAFER: Don't enforce (graceful degradation)
+        print(f"ERROR: Unexpected error checking semantic-search prerequisites: {e}", file=sys.stderr)
+        if DEBUG:
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+        print("WARNING: Skipping semantic-search enforcement (unexpected error)", file=sys.stderr)
+        return False
 
 
 # =============================================================================
@@ -877,8 +911,9 @@ def build_semantic_search_enforcement_message(triggers: dict) -> str:
 
     # Phase 3: Prepend first-prompt status if needed
     try:
-        # Import reindex_manager for session tracking
-        import reindex_manager
+        # Check if reindex_manager is available (optional dependency)
+        if not REINDEX_MANAGER_AVAILABLE:
+            return base_message
 
         if reindex_manager.should_show_first_prompt_status():
             # Check if there's status info from previous session to display

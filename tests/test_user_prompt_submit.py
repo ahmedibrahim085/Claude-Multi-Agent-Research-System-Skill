@@ -263,6 +263,57 @@ class TestSignalStrengthCombinations(unittest.TestCase):
 
 
 # =============================================================================
+# PRIORITY 5: EXCEPTION HANDLING (Improvement #5)
+# =============================================================================
+
+class TestExceptionHandling(unittest.TestCase):
+    """Test specific exception handling in check_semantic_search_prerequisites()"""
+
+    def test_corrupted_json_file(self):
+        """Corrupted JSON file should return False (skip enforcement)"""
+        from unittest.mock import patch, mock_open
+
+        # Mock file exists
+        with patch('user_prompt_submit.Path.exists', return_value=True):
+            # Mock corrupted JSON file
+            with patch('builtins.open', mock_open(read_data='{invalid json')):
+                result = hook.check_semantic_search_prerequisites()
+
+                # Should return False (safer to skip enforcement)
+                self.assertFalse(result, "Corrupted JSON should return False")
+
+    def test_permission_denied(self):
+        """Permission error should return False (skip enforcement)"""
+        from unittest.mock import patch, MagicMock
+
+        # Mock file exists
+        with patch('user_prompt_submit.Path.exists', return_value=True):
+            # Mock permission error on open()
+            mock_file = MagicMock()
+            mock_file.side_effect = PermissionError("Permission denied")
+            with patch('builtins.open', mock_file):
+                result = hook.check_semantic_search_prerequisites()
+
+                # Should return False (safer to skip enforcement)
+                self.assertFalse(result, "Permission error should return False")
+
+    def test_file_race_condition(self):
+        """File disappearing between exists() and open() should return True (backward compat)"""
+        from unittest.mock import patch, MagicMock
+
+        # Mock file exists check returns True
+        with patch('user_prompt_submit.Path.exists', return_value=True):
+            # Mock FileNotFoundError on open() (race condition)
+            mock_file = MagicMock()
+            mock_file.side_effect = FileNotFoundError("File not found")
+            with patch('builtins.open', mock_file):
+                result = hook.check_semantic_search_prerequisites()
+
+                # Should return True (treat as backward compat case)
+                self.assertTrue(result, "Race condition should return True (backward compat)")
+
+
+# =============================================================================
 # RUN TESTS
 # =============================================================================
 
