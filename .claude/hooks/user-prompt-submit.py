@@ -892,108 +892,126 @@ def build_semantic_search_enforcement_message(triggers: dict) -> str:
 
 
 def main():
-    # Read hook input from stdin
+    """Main hook entry point with comprehensive error handling.
+
+    CRITICAL SAFETY: This hook intercepts EVERY user prompt. Any unhandled exception
+    would block the user permanently. Therefore, we catch ALL exceptions and allow
+    the prompt to pass through - enforcement is a nice-to-have, not a blocker.
+    """
     try:
-        input_data = json.load(sys.stdin)
-    except json.JSONDecodeError:
-        sys.exit(0)
+        # Read hook input from stdin
+        try:
+            input_data = json.load(sys.stdin)
+        except json.JSONDecodeError:
+            # Invalid JSON - let prompt through
+            sys.exit(0)
 
-    user_prompt = input_data.get('user_prompt', '')
+        user_prompt = input_data.get('user_prompt', '')
 
-    if not user_prompt or len(user_prompt.strip()) < 5:
-        sys.exit(0)
+        if not user_prompt or len(user_prompt.strip()) < 5:
+            sys.exit(0)
 
-    # Load skill rules
-    skill_rules = load_skill_rules()
-    if not skill_rules:
-        sys.exit(0)
+        # Load skill rules
+        skill_rules = load_skill_rules()
+        if not skill_rules:
+            sys.exit(0)
 
-    # Check semantic-search prerequisites BEFORE processing triggers
-    # If prerequisites not ready, skip semantic-search enforcement (fallback to Grep/Glob)
-    semantic_prerequisites_ready = check_semantic_search_prerequisites()
+        # Check semantic-search prerequisites BEFORE processing triggers
+        # If prerequisites not ready, skip semantic-search enforcement (fallback to Grep/Glob)
+        semantic_prerequisites_ready = check_semantic_search_prerequisites()
 
-    if DEBUG:
-        print(f"DEBUG: Semantic-search prerequisites ready: {semantic_prerequisites_ready}", file=sys.stderr)
-
-    # NEW: Use analyze_request for smart compound detection
-    analysis = analyze_request(user_prompt, skill_rules)
-
-    if DEBUG:
-        print(f"DEBUG: Analysis result: {analysis}", file=sys.stderr)
-
-    # Handle based on action
-    action = analysis['action']
-
-    # Check semantic-search independently (orthogonal to research/planning)
-    # Must check BEFORE early exit to allow semantic-only prompts
-    # CONDITIONAL: Only check if prerequisites are ready, otherwise skip enforcement
-    if semantic_prerequisites_ready:
-        semantic_signal = get_signal_strength(
-            user_prompt,
-            skill_rules['skills'].get('semantic-search', {}),
-            skill_type=None
-        )
-    else:
-        # Prerequisites not ready - skip enforcement, allow Claude to use Grep/Glob/Read
-        # Set to "none" strength so all enforcement messages are skipped
-        semantic_signal = {
-            'strength': 'none',
-            'keywords': [],
-            'patterns': [],
-            'is_action': False,
-            'negated': False
-        }
         if DEBUG:
-            print("DEBUG: Skipping semantic-search enforcement (prerequisites not ready)", file=sys.stderr)
+            print(f"DEBUG: Semantic-search prerequisites ready: {semantic_prerequisites_ready}", file=sys.stderr)
 
-    # EARLY EXIT PROTECTION: If no skills matched, exit immediately (performance)
-    if action == 'none' and semantic_signal['strength'] == 'none':
-        # No skill triggers detected at all - don't waste CPU
+        # NEW: Use analyze_request for smart compound detection
+        analysis = analyze_request(user_prompt, skill_rules)
+
+        if DEBUG:
+            print(f"DEBUG: Analysis result: {analysis}", file=sys.stderr)
+
+        # Handle based on action
+        action = analysis['action']
+
+        # Check semantic-search independently (orthogonal to research/planning)
+        # Must check BEFORE early exit to allow semantic-only prompts
+        # CONDITIONAL: Only check if prerequisites are ready, otherwise skip enforcement
+        if semantic_prerequisites_ready:
+            semantic_signal = get_signal_strength(
+                user_prompt,
+                skill_rules['skills'].get('semantic-search', {}),
+                skill_type=None
+            )
+        else:
+            # Prerequisites not ready - skip enforcement, allow Claude to use Grep/Glob/Read
+            # Set to "none" strength so all enforcement messages are skipped
+            semantic_signal = {
+                'strength': 'none',
+                'keywords': [],
+                'patterns': [],
+                'is_action': False,
+                'negated': False
+            }
+            if DEBUG:
+                print("DEBUG: Skipping semantic-search enforcement (prerequisites not ready)", file=sys.stderr)
+
+        # EARLY EXIT PROTECTION: If no skills matched, exit immediately (performance)
+        if action == 'none' and semantic_signal['strength'] == 'none':
+            # No skill triggers detected at all - don't waste CPU
+            sys.exit(0)
+
+        if action == 'ask_user':
+            # Compound request - need user clarification
+            message = build_compound_clarification_message(analysis)
+            # Append semantic-search if it also matched (already computed above)
+            if semantic_signal['strength'] != 'none':
+                semantic_message = build_semantic_search_enforcement_message(semantic_signal)
+                message = message + '\n\n' + semantic_message
+            output = {'systemMessage': message}
+            print(json.dumps(output))
+            sys.exit(0)
+
+        # Single skill action
+        if action == 'research_only':
+            message = build_research_enforcement_message(analysis['research_signal'])
+            # Append semantic-search if it also matched (already computed above)
+            if semantic_signal['strength'] != 'none':
+                semantic_message = build_semantic_search_enforcement_message(semantic_signal)
+                message = message + '\n\n' + semantic_message
+            output = {'systemMessage': message}
+            print(json.dumps(output))
+            sys.exit(0)
+
+        if action == 'planning_only':
+            message = build_planning_enforcement_message(analysis['planning_signal'])
+            # Append semantic-search if it also matched (already computed above)
+            if semantic_signal['strength'] != 'none':
+                semantic_message = build_semantic_search_enforcement_message(semantic_signal)
+                message = message + '\n\n' + semantic_message
+            output = {'systemMessage': message}
+            print(json.dumps(output))
+            sys.exit(0)
+
+        # If action is 'none' but semantic_signal matched, show semantic-search only
+        # (This case is possible because semantic is orthogonal to research/planning)
+        if action == 'none' and semantic_signal['strength'] != 'none':
+            message = build_semantic_search_enforcement_message(semantic_signal)
+            output = {'systemMessage': message}
+            print(json.dumps(output))
+            sys.exit(0)
+
+        # Should never reach here due to early exit protection above
+        # But include failsafe
         sys.exit(0)
 
-    if action == 'ask_user':
-        # Compound request - need user clarification
-        message = build_compound_clarification_message(analysis)
-        # Append semantic-search if it also matched (already computed above)
-        if semantic_signal['strength'] != 'none':
-            semantic_message = build_semantic_search_enforcement_message(semantic_signal)
-            message = message + '\n\n' + semantic_message
-        output = {'systemMessage': message}
-        print(json.dumps(output))
+    except Exception as e:
+        # CRITICAL SAFETY: Don't block user on ANY error
+        # Hook enforcement is nice-to-have, not required
+        print(f"Hook error (non-blocking): {e}", file=sys.stderr)
+        if DEBUG:
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+        # Exit cleanly - let prompt pass through to Claude
         sys.exit(0)
-
-    # Single skill action
-    if action == 'research_only':
-        message = build_research_enforcement_message(analysis['research_signal'])
-        # Append semantic-search if it also matched (already computed above)
-        if semantic_signal['strength'] != 'none':
-            semantic_message = build_semantic_search_enforcement_message(semantic_signal)
-            message = message + '\n\n' + semantic_message
-        output = {'systemMessage': message}
-        print(json.dumps(output))
-        sys.exit(0)
-
-    if action == 'planning_only':
-        message = build_planning_enforcement_message(analysis['planning_signal'])
-        # Append semantic-search if it also matched (already computed above)
-        if semantic_signal['strength'] != 'none':
-            semantic_message = build_semantic_search_enforcement_message(semantic_signal)
-            message = message + '\n\n' + semantic_message
-        output = {'systemMessage': message}
-        print(json.dumps(output))
-        sys.exit(0)
-
-    # If action is 'none' but semantic_signal matched, show semantic-search only
-    # (This case is possible because semantic is orthogonal to research/planning)
-    if action == 'none' and semantic_signal['strength'] != 'none':
-        message = build_semantic_search_enforcement_message(semantic_signal)
-        output = {'systemMessage': message}
-        print(json.dumps(output))
-        sys.exit(0)
-
-    # Should never reach here due to early exit protection above
-    # But include failsafe
-    sys.exit(0)
 
 
 if __name__ == '__main__':
