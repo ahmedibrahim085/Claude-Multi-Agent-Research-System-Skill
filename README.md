@@ -148,6 +148,59 @@ The SessionStart hook will automatically:
 
 **Note**: Hooks are pre-configured in `.claude/settings.json` and work out-of-the-box. **Do not duplicate hooks in `settings.local.json`** to avoid duplicate hook executions.
 
+### What Makes This Different?
+
+**Quick Answer**: This project uses **orchestrated multi-agent research** instead of single-query web search.
+
+**Direct Approach** (typing "tell me about quantum computing"):
+```
+You → Claude → 1-2 WebSearch calls → Summary
+Time: 30-60 seconds
+Depth: Limited to what fits in single response
+Sources: 2-3 quick sources
+```
+
+**This Skill** (typing "research quantum computing"):
+```
+You → Orchestrator → Decomposes into 3-4 subtopics
+                  → Spawns 4 researcher agents (parallel)
+                  → Each does multi-source research
+                  → Report-writer synthesizes findings
+                  → Comprehensive cross-referenced report
+
+Time: 5-8 minutes
+Depth: Multi-source, peer-reviewed quality
+Sources: 8-15 authoritative sources per topic
+Audit Trail: Session logs + research notes + final report
+```
+
+**When to Use This Skill**:
+| Scenario | Use This Skill | Use Direct Approach |
+|----------|----------------|---------------------|
+| In-depth research (2+ sources needed) | ✅ Yes | ❌ Too shallow |
+| Comprehensive coverage important | ✅ Yes | ❌ Incomplete |
+| Need audit trail for compliance | ✅ Yes | ❌ No logs |
+| Quick factual question | ❌ Overkill | ✅ Yes |
+| Simple documentation lookup | ❌ Too slow | ✅ Yes |
+
+**Example Comparison**:
+
+```
+Direct: "What is quantum entanglement?"
+→ 45 seconds
+→ 1 paragraph summary
+→ 2 sources
+
+This Skill: "research quantum entanglement"
+→ 6 minutes
+→ 4 research notes (foundations, experiments, applications, implications)
+→ 1 synthesis report cross-referencing all findings
+→ 12 authoritative sources
+→ Complete session logs
+```
+
+**Bottom Line**: Use this when you need comprehensive, well-researched, auditable findings. Use direct questions for quick factual lookups.
+
 ### Your First Research Query
 
 Try this example:
