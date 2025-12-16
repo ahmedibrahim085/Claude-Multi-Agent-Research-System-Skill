@@ -149,6 +149,47 @@ def get_current_session(state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return next((s for s in sessions if s['id'] == state['currentResearch']), None)
 
 
+def validate_quality_gate(state: Dict[str, Any], session_id: str, gate: str) -> bool:
+    """Validate quality gate for a session"""
+    sessions = state.get('sessions', [])
+    session = next((s for s in sessions if s['id'] == session_id), None)
+
+    if not session:
+        return False
+
+    if gate == 'research':
+        quality_gate = session['qualityGates']['research']
+        outputs = session['phases']['research']['outputs']
+        expected = quality_gate['expected']
+        actual = len(outputs)
+
+        quality_gate['actual'] = actual
+        quality_gate['checkedAt'] = datetime.now().isoformat()
+
+        if actual >= expected and expected > 0:
+            quality_gate['status'] = 'passed'
+            return True
+        else:
+            quality_gate['status'] = 'failed'
+            return False
+
+    elif gate == 'synthesis':
+        quality_gate = session['qualityGates']['synthesis']
+        expected_agent = quality_gate['expectedAgent']
+        actual_agent = session['phases']['synthesis']['agent']
+
+        quality_gate['actualAgent'] = actual_agent
+        quality_gate['checkedAt'] = datetime.now().isoformat()
+
+        if actual_agent == expected_agent:
+            quality_gate['status'] = 'passed'
+            return True
+        else:
+            quality_gate['status'] = 'failed'
+            return False
+
+    return False
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SKILL TRACKING (Non-Destructive Extension)
@@ -177,6 +218,64 @@ def get_current_skill() -> Optional[Dict[str, Any]]:
     state = load_state()
     return state.get('currentSkill')
 
+
+def set_current_skill(skill_name: str, start_time: str) -> Optional[Dict[str, Any]]:
+    """
+    Start tracking a new skill invocation.
+    If same skill already active, ends it first and increments invocation number.
+
+    Args:
+        skill_name: Name of the skill (e.g., 'multi-agent-researcher')
+        start_time: ISO timestamp when skill started
+
+    Returns:
+        The ended skill (if one was active), or None.
+        Caller should write this to session state file.
+    """
+    current_state = load_current_state()
+    current = current_state.get('currentSkill')
+
+    ended_skill = None
+
+    # Calculate invocation number
+    if current and current.get('name') == skill_name:
+        # Same skill re-invoked - end previous, increment counter
+        invocation_number = current.get('invocationNumber', 1) + 1
+
+        # End previous invocation if not already ended
+        if not current.get('endTime'):
+            current['endTime'] = start_time  # End at exact moment new one starts
+            current['trigger'] = 'ReInvocation'
+            current['duration'] = calculate_duration(
+                current['startTime'],
+                current['endTime']
+            )
+            ended_skill = current
+
+    else:
+        # Different skill or first invocation
+        invocation_number = 1
+
+        # End any active skill first
+        if current and not current.get('endTime'):
+            current['endTime'] = start_time
+            current['trigger'] = 'NewSkill'
+            current['duration'] = calculate_duration(
+                current['startTime'],
+                current['endTime']
+            )
+            ended_skill = current
+
+    # Set new current skill
+    current_state['currentSkill'] = {
+        'name': skill_name,
+        'startTime': start_time,
+        'endTime': None,
+        'invocationNumber': invocation_number
+    }
+
+    save_current_state(current_state)
+    return ended_skill
 
 
 def end_current_skill(end_time: str, trigger: str) -> Optional[Dict[str, Any]]:
