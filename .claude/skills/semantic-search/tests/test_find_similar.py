@@ -8,12 +8,12 @@ from pathlib import Path
 
 TESTS_DIR = Path(__file__).parent
 SCRIPTS_DIR = TESTS_DIR.parent / "scripts"
-FIND_SIMILAR_PY = SCRIPTS_DIR / "find-similar.py"
+FIND_SIMILAR_SCRIPT = SCRIPTS_DIR / "find-similar"
 
-# Skip all tests if find-similar.py doesn't exist (unimplemented feature)
+# Skip all tests if find-similar script doesn't exist
 pytestmark = pytest.mark.skipif(
-    not FIND_SIMILAR_PY.exists(),
-    reason="find-similar.py not implemented"
+    not FIND_SIMILAR_SCRIPT.exists(),
+    reason="find-similar script not found"
 )
 
 
@@ -23,7 +23,7 @@ class TestFindSimilarArgumentParsing:
     def test_find_similar_missing_chunk_id_fails(self):
         """Test find-similar.py exits with error when --chunk-id is missing"""
         result = subprocess.run(
-            ["python", str(FIND_SIMILAR_PY)],
+            ["bash", str(FIND_SIMILAR_SCRIPT)],
             capture_output=True,
             text=True
         )
@@ -35,7 +35,7 @@ class TestFindSimilarArgumentParsing:
     def test_find_similar_accepts_valid_chunk_id(self):
         """Test find-similar.py accepts valid --chunk-id argument"""
         result = subprocess.run(
-            ["python", str(FIND_SIMILAR_PY), "--chunk-id", "test-chunk-123"],
+            ["python", str(FIND_SIMILAR_SCRIPT), "--chunk-id", "test-chunk-123"],
             capture_output=True,
             text=True
         )
@@ -45,7 +45,7 @@ class TestFindSimilarArgumentParsing:
     def test_find_similar_accepts_k_parameter(self):
         """Test find-similar.py accepts --k parameter"""
         result = subprocess.run(
-            ["python", str(FIND_SIMILAR_PY), "--chunk-id", "test", "--k", "10"],
+            ["python", str(FIND_SIMILAR_SCRIPT), "--chunk-id", "test", "--k", "10"],
             capture_output=True,
             text=True
         )
@@ -59,7 +59,7 @@ class TestFindSimilarJSONOutput:
     def test_find_similar_error_produces_json(self):
         """Test find-similar.py produces valid JSON error output"""
         result = subprocess.run(
-            ["python", str(FIND_SIMILAR_PY), "--chunk-id", "test", "--storage-dir", "/nonexistent/path"],
+            ["python", str(FIND_SIMILAR_SCRIPT), "--chunk-id", "test", "--storage-dir", "/nonexistent/path"],
             capture_output=True,
             text=True
         )

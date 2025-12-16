@@ -8,12 +8,12 @@ from pathlib import Path
 
 TESTS_DIR = Path(__file__).parent
 SCRIPTS_DIR = TESTS_DIR.parent / "scripts"
-STATUS_PY = SCRIPTS_DIR / "status.py"
+STATUS_SCRIPT = SCRIPTS_DIR / "status"
 
-# Skip all tests if status.py doesn't exist (unimplemented feature)
+# Skip all tests if status script doesn't exist
 pytestmark = pytest.mark.skipif(
-    not STATUS_PY.exists(),
-    reason="status.py not implemented"
+    not STATUS_SCRIPT.exists(),
+    reason="status script not found"
 )
 
 
@@ -23,7 +23,7 @@ class TestStatusArgumentParsing:
     def test_status_accepts_no_args(self):
         """Test status.py runs with default arguments"""
         result = subprocess.run(
-            ["python", str(STATUS_PY)],
+            ["bash", str(STATUS_SCRIPT)],
             capture_output=True,
             text=True
         )
@@ -34,7 +34,7 @@ class TestStatusArgumentParsing:
     def test_status_accepts_custom_storage_dir(self):
         """Test status.py accepts --storage-dir parameter"""
         result = subprocess.run(
-            ["python", str(STATUS_PY), "--storage-dir", "/tmp/test-index"],
+            ["python", str(STATUS_SCRIPT), "--storage-dir", "/tmp/test-index"],
             capture_output=True,
             text=True
         )
@@ -48,7 +48,7 @@ class TestStatusJSONOutput:
     def test_status_error_produces_json(self):
         """Test status.py produces valid JSON error output"""
         result = subprocess.run(
-            ["python", str(STATUS_PY), "--storage-dir", "/nonexistent/path"],
+            ["python", str(STATUS_SCRIPT), "--storage-dir", "/nonexistent/path"],
             capture_output=True,
             text=True
         )
@@ -65,7 +65,7 @@ class TestStatusJSONOutput:
     def test_status_missing_index_helpful_error(self):
         """Test status.py provides helpful error for missing index"""
         result = subprocess.run(
-            ["python", str(STATUS_PY), "--storage-dir", "/nonexistent/index"],
+            ["python", str(STATUS_SCRIPT), "--storage-dir", "/nonexistent/index"],
             capture_output=True,
             text=True
         )
