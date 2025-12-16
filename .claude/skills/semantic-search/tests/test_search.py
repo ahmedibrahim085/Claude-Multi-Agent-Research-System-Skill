@@ -48,7 +48,7 @@ class TestSearchArgumentParsing:
         # This test verifies argument parsing, not actual search
         # (actual search requires global installation which may not exist in test env)
         result = subprocess.run(
-            ["python", str(SEARCH_SCRIPT), "--query", "test search"],
+            ["bash", str(SEARCH_SCRIPT), "--query", "test search"],
             capture_output=True,
             text=True
         )
@@ -60,7 +60,7 @@ class TestSearchArgumentParsing:
     def test_search_accepts_k_parameter(self):
         """Test search.py accepts --k parameter"""
         result = subprocess.run(
-            ["python", str(SEARCH_SCRIPT), "--query", "test", "--k", "10"],
+            ["bash", str(SEARCH_SCRIPT), "--query", "test", "--k", "10"],
             capture_output=True,
             text=True
         )
@@ -71,7 +71,7 @@ class TestSearchArgumentParsing:
     def test_search_accepts_storage_dir(self):
         """Test search.py accepts --storage-dir parameter"""
         result = subprocess.run(
-            ["python", str(SEARCH_SCRIPT), "--query", "test", "--storage-dir", "/tmp/test-index"],
+            ["bash", str(SEARCH_SCRIPT), "--query", "test", "--storage-dir", "/tmp/test-index"],
             capture_output=True,
             text=True
         )
@@ -82,7 +82,7 @@ class TestSearchArgumentParsing:
     def test_search_invalid_k_type_fails(self):
         """Test search.py rejects non-integer --k value"""
         result = subprocess.run(
-            ["python", str(SEARCH_SCRIPT), "--query", "test", "--k", "not-a-number"],
+            ["bash", str(SEARCH_SCRIPT), "--query", "test", "--k", "not-a-number"],
             capture_output=True,
             text=True
         )
@@ -100,7 +100,7 @@ class TestSearchJSONOutput:
         """Test search.py produces valid JSON error output"""
         # Run with missing index to trigger error
         result = subprocess.run(
-            ["python", str(SEARCH_SCRIPT), "--query", "test", "--storage-dir", "/nonexistent/path"],
+            ["bash", str(SEARCH_SCRIPT), "--query", "test", "--storage-dir", "/nonexistent/path"],
             capture_output=True,
             text=True
         )
@@ -125,7 +125,7 @@ class TestSearchJSONOutput:
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             result = subprocess.run(
-                ["python", str(SEARCH_SCRIPT), "--query", "test function", "--k", "3", "--storage-dir", tmpdir],
+                ["bash", str(SEARCH_SCRIPT), "--query", "test function", "--k", "3", "--storage-dir", tmpdir],
                 capture_output=True,
                 text=True
             )
@@ -149,7 +149,7 @@ class TestSearchErrorHandling:
     def test_search_missing_index_helpful_error(self):
         """Test search.py provides helpful error for missing index"""
         result = subprocess.run(
-            ["python", str(SEARCH_SCRIPT), "--query", "test", "--storage-dir", "/nonexistent/index"],
+            ["bash", str(SEARCH_SCRIPT), "--query", "test", "--storage-dir", "/nonexistent/index"],
             capture_output=True,
             text=True
         )

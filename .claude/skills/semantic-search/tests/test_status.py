@@ -34,7 +34,7 @@ class TestStatusArgumentParsing:
     def test_status_accepts_custom_storage_dir(self):
         """Test status.py accepts --storage-dir parameter"""
         result = subprocess.run(
-            ["python", str(STATUS_SCRIPT), "--storage-dir", "/tmp/test-index"],
+            ["bash", str(STATUS_SCRIPT), "--storage-dir", "/tmp/test-index"],
             capture_output=True,
             text=True
         )
@@ -48,7 +48,7 @@ class TestStatusJSONOutput:
     def test_status_error_produces_json(self):
         """Test status.py produces valid JSON error output"""
         result = subprocess.run(
-            ["python", str(STATUS_SCRIPT), "--storage-dir", "/nonexistent/path"],
+            ["bash", str(STATUS_SCRIPT), "--storage-dir", "/nonexistent/path"],
             capture_output=True,
             text=True
         )
@@ -65,7 +65,7 @@ class TestStatusJSONOutput:
     def test_status_missing_index_helpful_error(self):
         """Test status.py provides helpful error for missing index"""
         result = subprocess.run(
-            ["python", str(STATUS_SCRIPT), "--storage-dir", "/nonexistent/index"],
+            ["bash", str(STATUS_SCRIPT), "--storage-dir", "/nonexistent/index"],
             capture_output=True,
             text=True
         )
