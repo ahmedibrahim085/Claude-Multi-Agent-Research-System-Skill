@@ -76,7 +76,7 @@ class TestResults:
 
 def find_project_dir(project_slug: Optional[str] = None) -> Optional[Path]:
     """Find the project directory to validate."""
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).parent.parent.parent
 
     if project_slug:
         # Check docs/projects first, then fixtures
