@@ -709,7 +709,55 @@ The setup script allows you to:
 - Verify Python version and hooks
 - Check for missing files or directories
 
-**⚠️ Important**: If you create `settings.local.json`, **remove the `hooks` section** from it. Hooks are already configured in `settings.json` and duplicating them will cause duplicate hook executions.
+#### Settings Files Overview
+
+Three settings files work together - understanding their roles prevents configuration errors:
+
+| File | Purpose | Location | User Action | Committed to Git |
+|------|---------|----------|-------------|------------------|
+| `.claude/settings.json` | **Golden configuration** (hooks, permissions, tools) | Project root | **❌ DO NOT EDIT** | ✅ Yes |
+| `.claude/settings.template.json` | **Template for first-time setup** | Project root | **❌ DO NOT EDIT** | ✅ Yes |
+| `.claude/settings.local.json` | **User-specific overrides** (gitignored) | Project root | ✅ Safe to customize | ❌ No (gitignored) |
+
+**How They Work Together**:
+
+1. **On first `claude` run**: `session-start.py` hook copies `settings.template.json` → `settings.local.json`
+2. **Claude Code loads**: Reads `settings.json` (hooks) + `settings.local.json` (overrides)
+3. **Hooks execute**: Configured in `settings.json`, NOT `settings.local.json`
+
+**⚠️ CRITICAL: Do NOT Duplicate Hooks**
+
+If you create or edit `.claude/settings.local.json`, **REMOVE any `hooks` section**:
+
+```json
+{
+  "// WRONG - This will break things": "",
+  "hooks": {
+    "UserPromptSubmit": ".../.claude/hooks/user-prompt-submit.py"
+  }
+}
+```
+
+**Why?** Hooks are already in `settings.json`. Duplicating them causes:
+- ❌ Hooks run twice per event
+- ❌ Duplicate session logs
+- ❌ Race conditions in state management
+- ❌ Confusing "which hooks are active" debugging
+
+**Safe `settings.local.json` Example**:
+
+```json
+{
+  "permissions": {
+    "allowedDomains": ["example.com", "mycompany.com"]
+  }
+}
+```
+
+**When to Edit Each File**:
+- **`settings.json`**: Never (managed by project maintainers)
+- **`settings.template.json`**: Never (template only)
+- **`settings.local.json`**: Customize paths/permissions (no hooks!)
 
 ---
 
