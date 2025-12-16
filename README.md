@@ -155,7 +155,34 @@ Try this example:
 research quantum computing fundamentals
 ```
 
-**Expected output**:
+**What Happens**:
+1. **UserPromptSubmit hook** detects "research" keyword → activates multi-agent-researcher skill
+2. **Orchestrator** decomposes topic into 3-4 focused subtopics
+3. **Four researcher agents** spawn in parallel (each conducts web searches)
+4. **Each researcher** writes findings to `files/research_notes/`
+5. **Report-writer agent** synthesizes all findings into comprehensive report
+6. **Orchestrator** delivers final summary to you
+
+**Expected Timing**:
+
+| Stage | First Run | Subsequent Runs |
+|-------|-----------|-----------------|
+| **Setup** (directory creation, session init) | ~2-3 seconds | ~1 second |
+| **Research** (4 agents in parallel) | 3-5 minutes | 3-5 minutes |
+| **Synthesis** (report-writer) | 1-2 minutes | 1-2 minutes |
+| **Total** | **5-8 minutes** | **4-6 minutes** |
+
+**First-Time Setup Messages**:
+
+On your very first run, you'll see:
+```
+🔧 First-time setup detected
+✅ Created settings.local.json from template
+✅ Created directories: files/research_notes/, files/reports/, logs/
+📝 Session logs initialized: logs/session_20251216_150000_*
+```
+
+**Expected Output**:
 ```
 📝 Session logs initialized: logs/session_YYYYMMDD_HHMMSS_{transcript.txt,tool_calls.jsonl,state.json}
 
@@ -176,6 +203,28 @@ Comprehensive research completed with 3 specialized researchers.
 
 **Final Report**: `files/reports/quantum-computing-fundamentals_YYYYMMDD-HHMMSS.md`
 ```
+
+**Where to Find Results**:
+- **Individual research notes**: `files/research_notes/{subtopic}_YYYYMMDD-HHMMSS.md`
+- **Final synthesis**: `files/reports/{topic}_YYYYMMDD-HHMMSS.md`
+- **Session logs**: `logs/session_YYYYMMDD_HHMMSS_{transcript.txt,tool_calls.jsonl,state.json}`
+
+**What If Something Fails?**:
+
+1. **Import errors on startup**:
+   ```bash
+   python3 setup.py --repair
+   ```
+
+2. **Research produces no results**:
+   - Check API key: `echo $ANTHROPIC_API_KEY`
+   - Review logs: `cat logs/session_*_transcript.txt | tail -50`
+   - See [Troubleshooting](#troubleshooting) section
+
+3. **Takes longer than expected**:
+   - Normal: Research quality > speed
+   - Can interrupt with `Ctrl+C` and use partial results
+   - Check `files/research_notes/` for individual findings
 
 ---
 
