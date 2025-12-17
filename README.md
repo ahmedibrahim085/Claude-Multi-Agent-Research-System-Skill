@@ -611,23 +611,283 @@ Semantic RAG:     "auth logic"     → 15 semantically relevant code chunks, 0 f
 
 ### Trigger Keywords
 
-[Content to be added in next commit]
+Semantic-search is automatically activated when your prompt contains these patterns (37+ keywords):
+
+**Search Operations** (18 keywords):
+```
+"search for", "find", "locate", "show me", "where is"
+"look for", "get me", "retrieve", "fetch", "discover"
+"search code", "code search", "find code"
+"show implementation", "find implementation"
+"what code", "which files"
+```
+
+**Code Discovery** (10 keywords):
+```
+"how does", "what does", "explain"
+"similar to", "like this code", "resembles"
+"examples of", "patterns for"
+"find similar", "similar files"
+```
+
+**Index Operations** (9 keywords):
+```
+"reindex", "index", "rebuild index"
+"update index", "incremental reindex"
+"index status", "check index"
+"what's indexed", "indexed projects"
+```
+
+**Examples**:
+```bash
+✅ "search for authentication logic"        → semantic-search-reader
+✅ "find database query patterns"           → semantic-search-reader
+✅ "reindex the project"                    → semantic-search-indexer
+✅ "show me error handling code"            → semantic-search-reader
+✅ "find similar implementations to auth.py" → semantic-search-reader
+✅ "what's the index status?"               → semantic-search-indexer
+✅ "how does the login system work"         → semantic-search-reader
+```
+
+**Note**: Full trigger list in `.claude/hooks/user-prompt-submit.py` (lines 200-237)
 
 ### Agent Roles
 
-[Content to be added in next commit]
+The semantic-search skill uses two specialized agents with distinct responsibilities:
+
+| Agent | Operations | Triggers | Prerequisites | Output |
+|-------|-----------|----------|---------------|--------|
+| **semantic-search-indexer** | Build/update vector database | `index`, `reindex`, `status`, `incremental-reindex` | None (creates index if missing) | FAISS index, cache files, state tracking |
+| **semantic-search-reader** | Search and retrieve code | `search`, `find-similar`, `list-projects` | Project must be indexed (auto-triggers indexer if needed) | Ranked code chunks with relevance scores |
+
+**Indexer Operations**:
+- **Full reindex**: Complete rebuild of vector database from scratch
+- **Incremental reindex**: Smart updates using Merkle tree change detection (only re-embeds changed files)
+- **Status**: Report index state, bloat percentage, last update timestamp
+
+**Reader Operations**:
+- **Search**: Natural language code search (`"find authentication logic"`)
+- **Find-similar**: Find code similar to a specific file (`"similar to auth.py"`)
+- **List-projects**: Show all indexed projects
+
+**Auto-Triggering**:
+- **Session start**: Indexer runs if changes detected since last session
+- **File Write/Edit**: Indexer triggers after 5-minute cooldown
+- **Search without index**: Reader auto-triggers indexer if project not indexed
 
 ### Workflow
 
-[Content to be added in next commit - includes Phase 1-4 subsections and ASCII diagram]
+The RAG system operates in two main modes: **Index Building** (offline, happens once or on changes) and **Search & Retrieval** (online, happens on each query).
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                    SEMANTIC-SEARCH RAG WORKFLOW                       │
+└──────────────────────────────────────────────────────────────────────┘
+
+PHASE 1: INDEX BUILDING (Offline - Once per project, updates on changes)
+┌─────────────┐      ┌──────────────┐      ┌───────────────┐
+│ Code Files  │─────▶│  Chunking    │─────▶│  Embeddings   │
+│ (.py, .js,  │      │ (functions,  │      │ (768-dim      │
+│  .ts, etc)  │      │  classes,    │      │  vectors)     │
+└─────────────┘      │  blocks)     │      └───────┬───────┘
+                     └──────────────┘              │
+                     15+ languages                 │
+                                                    ▼
+                                            ┌───────────────┐
+                                            │ FAISS Index   │
+                                            │ (IndexFlatIP) │
+                                            │ + Cache       │
+                                            └───────────────┘
+                                            Merkle tree tracks
+                                            changes for smart
+                                            incremental updates
+
+PHASE 2-4: SEARCH & RETRIEVAL (Online - Every query)
+┌─────────────────┐      ┌──────────────┐      ┌────────────┐
+│  User Query     │─────▶│ Query        │─────▶│  Vector    │
+│  "find auth     │      │ Embedding    │      │  Search    │
+│   logic"        │      │ (same model) │      │  (cosine   │
+└─────────────────┘      └──────────────┘      │  similarity│
+                                                └──────┬─────┘
+                                                       │
+                                                       ▼
+┌─────────────────┐      ┌──────────────┐      ┌────────────┐
+│  Claude +       │◀─────│  Retrieved   │◀─────│  Ranked    │
+│  Context        │      │  Chunks      │      │  Results   │
+│  (Augmented     │      │  (with file  │      │  (Top-k    │
+│   Response)     │      │   paths)     │      │   similar) │
+└─────────────────┘      └──────────────┘      └────────────┘
+```
+
+#### Phase 1: Index Building (Offline)
+
+**When it runs**: First use, file changes (5-min cooldown), session start
+
+**Process**:
+1. **Code Chunking**: Splits code files into meaningful chunks
+   - Language-aware parsing (15+ languages: Python, JavaScript, TypeScript, etc.)
+   - Chunks: Functions, classes, methods, blocks
+   - Preserves context: Includes docstrings, comments, signatures
+
+2. **Embedding Generation**: Converts chunks into 768-dimensional vectors
+   - Model: `google/embeddinggemma-300m` (1.2GB, one-time download)
+   - Each chunk → 768 numbers representing semantic meaning
+   - Similar code produces similar vectors
+
+3. **Vector Storage**: Builds FAISS index for fast similarity search
+   - IndexFlatIP: Simple, reliable, cross-platform
+   - Stores vectors + metadata (file path, line numbers)
+   - Enables sub-second search across thousands of files
+
+4. **Smart Caching**: Merkle tree tracks file changes
+   - Only re-embeds changed files (incremental reindex)
+   - Embedding cache: 3.2x speedup on subsequent reindexes
+   - State tracking: Last update timestamp, bloat percentage
+
+**Output**: `~/.claude_code_search/projects/{project}/index.faiss` + metadata
+
+#### Phase 2: Query Processing (Online)
+
+**When it runs**: Every search query
+
+**Process**:
+1. **Trigger Detection**: Hook identifies semantic-search intent
+   - User: `"find authentication logic"`
+   - Hook: Detects "find" keyword → Activates semantic-search skill
+
+2. **Agent Selection**: Routes to semantic-search-reader
+   - Checks if project is indexed
+   - If not indexed: Auto-triggers semantic-search-indexer first
+
+3. **Query Embedding**: Converts natural language query to vector
+   - Same model as index building (`embeddinggemma-300m`)
+   - Query: `"find authentication logic"` → 768-dim vector
+   - Vector represents semantic meaning of the query
+
+#### Phase 3: Retrieval
+
+**Process**:
+1. **Vector Similarity Search**: Compares query vector with all code vectors
+   - FAISS performs cosine similarity: `similarity = dot(query_vec, code_vec) / (||query_vec|| * ||code_vec||)`
+   - Finds Top-k most similar chunks (typically k=10-20)
+   - Sub-second search even for large codebases (10,000+ files)
+
+2. **Ranking**: Orders results by relevance score
+   - Higher similarity = more relevant
+   - Score range: 0.0 (unrelated) to 1.0 (identical)
+   - Filters out low-scoring results (typically < 0.5)
+
+3. **Context Extraction**: Retrieves full chunk content with metadata
+   - File path: `src/auth/login.py`
+   - Line numbers: Lines 45-67
+   - Code content: Full function/class with context
+   - Relevance score: 0.87
+
+**Output**: Ranked list of code chunks with file locations
+
+#### Phase 4: Augmentation
+
+**Process**:
+1. **Context Assembly**: Combines query + retrieved chunks
+   - Original query: `"find authentication logic"`
+   - Retrieved: 15 code chunks from auth.py, middleware.ts, tokens.py
+   - Format: File paths + code snippets + relevance scores
+
+2. **LLM Augmentation**: Claude receives query + context
+   - Claude sees: User question + Relevant code from codebase
+   - No guessing: Answers grounded in actual project code
+   - No hallucination: If code doesn't exist, Claude says so
+
+3. **Response Generation**: Claude provides accurate, project-specific answer
+   - Cites specific files and line numbers
+   - Explains how the code works
+   - Can suggest improvements or answer follow-up questions
+
+**Example Output**:
+```
+Claude: I found your authentication logic across 3 files:
+
+1. src/auth/login.py:45-67 - Main login function with JWT generation
+2. src/middleware/auth.ts:12-34 - Express middleware for token validation
+3. src/utils/tokens.py:78-95 - Token refresh and expiration handling
+
+The login flow uses JWT tokens with 24-hour expiration...
+```
 
 ### Semantic-Search Features
 
-[Content to be added in next commit]
+1. **Automatic Index Management**
+   - **Auto-reindex on file changes**: Triggers after Write/Edit operations (5-minute cooldown)
+   - **Auto-reindex on session start**: Smart change detection when Claude Code starts
+   - **Incremental updates**: Only re-embeds changed files using Merkle tree tracking
+   - **No manual intervention**: Index stays current automatically
+
+2. **Smart Caching & Performance**
+   - **Embedding cache**: Stores generated embeddings for 3.2x speedup on reindexes
+   - **Sub-second search**: FAISS enables fast similarity search even for large codebases
+   - **GPU acceleration**: Uses MPS (Metal Performance Shaders) on Apple Silicon for 2-3x faster embedding
+   - **Efficient storage**: Typical index size 5-50MB per project
+
+3. **Cross-Platform Compatibility**
+   - **IndexFlatIP**: Simple, reliable FAISS index type that works everywhere
+   - **Tested platforms**: macOS (Intel + Apple Silicon), Linux (x86_64, ARM64), Windows WSL
+   - **No special dependencies**: Works with standard Python packages
+
+4. **Multi-Language Support**
+   - **15+ programming languages**: Python, JavaScript, TypeScript, Java, C++, Go, Rust, etc.
+   - **Language-aware chunking**: Understands code structure (functions, classes, methods)
+   - **Context preservation**: Includes docstrings, comments, type hints
+
+5. **Large Codebase Support**
+   - **Scalable**: Handles projects with 10,000+ files
+   - **Memory efficient**: Doesn't load entire codebase into memory
+   - **Chunked processing**: Processes files incrementally
+
+6. **Comprehensive Decision Tracing**
+   - **Reindex decisions**: Full visibility into skip reasons, timing, errors
+   - **Status reporting**: Index state, bloat percentage, last update timestamp
+   - **Debug information**: Detailed logs for troubleshooting
 
 ### Benefits Over Traditional Search
 
-[Content to be added in next commit]
+1. **Semantic Understanding (Not Just Keywords)**
+
+   **Traditional grep**:
+   ```bash
+   $ grep -r "authentication" .
+   # Finds: 12 matches
+   # Misses: signin(), verifyUser(), auth_middleware, validateToken()
+   # False positives: Comments, documentation, variable names
+   ```
+
+   **Semantic RAG**:
+   ```bash
+   You: "find authentication logic"
+   # Finds: All auth-related code regardless of terminology
+   # Includes: login(), signin(), authenticate(), verifyUser(),
+   #          auth_middleware, validateToken(), checkSession()
+   # Zero false positives: Only actual implementation code
+   ```
+
+2. **Massive Token Savings**
+   - **Grep exploration**: 15+ attempts, 26 file reads, 5,000-10,000 tokens
+   - **Semantic search**: 1 query, 2 file reads, 500-1,000 tokens
+   - **Savings**: ~90% token reduction for code discovery tasks
+
+3. **No False Positives**
+   - Traditional search: `"error"` matches comments, strings, logs, tests
+   - RAG search: `"error handling patterns"` retrieves only actual error handling code
+   - Result: Higher signal-to-noise ratio, less time reviewing irrelevant results
+
+4. **Natural Language Queries**
+   - Don't need to know exact function/variable names
+   - Ask questions: `"how does login work"`, `"where are API calls made"`
+   - RAG understands intent and finds relevant code
+
+5. **Context-Aware Results**
+   - Results ranked by semantic relevance (not just keyword count)
+   - Includes file paths and line numbers for easy navigation
+   - Claude can explain, summarize, or suggest improvements based on retrieved code
 
 ---
 
