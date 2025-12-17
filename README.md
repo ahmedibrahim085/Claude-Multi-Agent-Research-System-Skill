@@ -16,7 +16,7 @@ A **tri-skill platform** with smart routing, auto-indexing, and compound request
 |-------|---------|--------|
 | **multi-agent-researcher** | Comprehensive topic investigation | researcher, report-writer |
 | **spec-workflow-orchestrator** | Planning from ideation to dev-ready specs | spec-analyst, spec-architect, spec-planner |
-| **semantic-search** | Natural language content search (code, docs, configs) | semantic-search-reader, semantic-search-indexer |
+| **semantic-search** | RAG-powered semantic code search (finds code by meaning, not keywords) | semantic-search-reader, semantic-search-indexer |
 
 **Key Features**:
 - **Auto-Reindex on File Changes** - Triggers on Write/Edit with 5-min cooldown (IndexFlatIP auto-fallback (full reindex only))
@@ -89,6 +89,9 @@ See [Planning Workflow](#planning-workflow-new-in-v220) and [CHANGELOG.md](CHANG
   - Windows: Use WSL2 (Windows Subsystem for Linux)
 
 **Additional for Semantic-Search Skill** (optional):
+
+The semantic-search skill implements **RAG (Retrieval-Augmented Generation)** - an AI technique that finds relevant code by understanding meaning rather than matching keywords. It converts code into vector embeddings and uses semantic similarity to retrieve contextually relevant chunks when you ask questions in natural language.
+
 - **~1.5GB disk space** for embedding model download
   - Model: `google/embeddinggemma-300m` (768 dimensions)
   - Downloads automatically on first use (10-30 minutes)
@@ -773,7 +776,7 @@ Then restart Claude Code to apply changes.
 
 ### Semantic-Search Configuration
 
-The semantic-search skill uses an embedding model for code similarity search:
+The semantic-search skill implements **RAG (Retrieval-Augmented Generation)** for intelligent code search. It converts code into vector embeddings to find semantically similar content based on meaning, not just keyword matching:
 
 **Model Details**:
 - **Model**: `google/embeddinggemma-300m` (768-dimensional embeddings)
@@ -1585,7 +1588,7 @@ This project adapts the multi-agent research pattern for Claude Code's skill sys
 ### Semantic Search Infrastructure
 
 - **[claude-context-local](https://github.com/FarhanAliRaza/claude-context-local)** by FarhanAliRaza<sup>[[12]](#ref-12)</sup>
-  - Foundation for semantic-search skill
+  - Foundation for semantic-search skill (RAG system)
   - FAISS-based vector indexing (IndexFlatIP)
   - Multi-language code chunking (15+ languages)
   - Merkle tree change detection for smart reindexing
