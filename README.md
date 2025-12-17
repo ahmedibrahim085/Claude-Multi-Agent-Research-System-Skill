@@ -57,6 +57,13 @@ See [Planning Workflow](#planning-workflow-new-in-v220) and [CHANGELOG.md](CHANG
   - [Phase 3: Synthesis](#phase-3-synthesis)
   - [Phase 4: Delivery](#phase-4-delivery)
 - [Planning Workflow (New in v2.2.0)](#planning-workflow-new-in-v220)
+- [Semantic-Search Workflow (RAG System)](#semantic-search-workflow-rag-system)
+  - [What is RAG?](#what-is-rag)
+  - [Trigger Keywords](#trigger-keywords)
+  - [Agent Roles](#agent-roles)
+  - [Workflow](#workflow)
+  - [Features](#semantic-search-features)
+  - [Benefits Over Traditional Search](#benefits-over-traditional-search)
 - [Testing](#testing)
 - [Configuration](#configuration)
   - [File Structure](#file-structure)
@@ -562,6 +569,34 @@ User: "build a task tracker app"
 ```
 
 See [PRODUCTION_READY_SUMMARY.md](PRODUCTION_READY_SUMMARY.md) for detailed implementation status.
+
+---
+
+## Semantic-Search Workflow (RAG System)
+
+### What is RAG?
+
+[Content to be added in next commit]
+
+### Trigger Keywords
+
+[Content to be added in next commit]
+
+### Agent Roles
+
+[Content to be added in next commit]
+
+### Workflow
+
+[Content to be added in next commit - includes Phase 1-4 subsections and ASCII diagram]
+
+### Semantic-Search Features
+
+[Content to be added in next commit]
+
+### Benefits Over Traditional Search
+
+[Content to be added in next commit]
 
 ---
 
