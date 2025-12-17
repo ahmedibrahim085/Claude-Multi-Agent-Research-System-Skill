@@ -1582,7 +1582,17 @@ This project adapts the multi-agent research pattern for Claude Code's skill sys
   - `skill-rules.json` configuration
   - License: MIT
 
-All projects are MIT or Apache-2.0 licensed and used in compliance with their terms.
+### Semantic Search Infrastructure
+
+- **[claude-context-local](https://github.com/FarhanAliRaza/claude-context-local)** by FarhanAliRaza<sup>[[12]](#ref-12)</sup>
+  - Foundation for semantic-search skill
+  - FAISS-based vector indexing (IndexFlatIP)
+  - Multi-language code chunking (15+ languages)
+  - Merkle tree change detection for smart reindexing
+  - Embedding generation (sentence-transformers)
+  - License: GPL-3.0 (imported via PYTHONPATH for license compatibility)
+
+All projects are MIT, Apache-2.0, or GPL-3.0 licensed and used in compliance with their terms.
 
 ---
 
@@ -1595,6 +1605,7 @@ This project was conceived, architected, and guided at every step by Ahmed Maged
 
 **Special Acknowledgments**:
 - Anthropic team for the [claude-agent-sdk-demos/research-agent](https://github.com/anthropics/claude-agent-sdk-demos/tree/main/research-agent) inspiration
+- FarhanAliRaza for [claude-context-local](https://github.com/FarhanAliRaza/claude-context-local), the foundation of our semantic-search skill
 - Authors of DevFlow, Claude-Flow, TDD-Guard, and Infrastructure Showcase for proven workflow patterns
 - Claude Code community for feature requests and feedback
 
@@ -1629,6 +1640,8 @@ This project is licensed under the **Apache License 2.0** - see the [LICENSE](LI
 <a id="ref-10"></a>**[10]** nizos. "TDD-Guard - TDD Enforcement for Claude Code." GitHub Repository. https://github.com/nizos/tdd-guard
 
 <a id="ref-11"></a>**[11]** diet103. "Claude Code Infrastructure Showcase." GitHub Repository. https://github.com/diet103/claude-code-infrastructure-showcase
+
+<a id="ref-12"></a>**[12]** FarhanAliRaza. "claude-context-local - Local Context for Claude." GitHub Repository. https://github.com/FarhanAliRaza/claude-context-local
 
 ---
 

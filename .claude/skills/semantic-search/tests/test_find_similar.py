@@ -35,7 +35,7 @@ class TestFindSimilarArgumentParsing:
     def test_find_similar_accepts_valid_chunk_id(self):
         """Test find-similar.py accepts valid --chunk-id argument"""
         result = subprocess.run(
-            ["python", str(FIND_SIMILAR_SCRIPT), "--chunk-id", "test-chunk-123"],
+            ["bash", str(FIND_SIMILAR_SCRIPT), "--chunk-id", "test-chunk-123"],
             capture_output=True,
             text=True
         )
@@ -45,7 +45,7 @@ class TestFindSimilarArgumentParsing:
     def test_find_similar_accepts_k_parameter(self):
         """Test find-similar.py accepts --k parameter"""
         result = subprocess.run(
-            ["python", str(FIND_SIMILAR_SCRIPT), "--chunk-id", "test", "--k", "10"],
+            ["bash", str(FIND_SIMILAR_SCRIPT), "--chunk-id", "test", "--k", "10"],
             capture_output=True,
             text=True
         )
@@ -56,22 +56,18 @@ class TestFindSimilarArgumentParsing:
 class TestFindSimilarJSONOutput:
     """Test find-similar.py JSON output structure"""
 
-    def test_find_similar_error_produces_json(self):
-        """Test find-similar.py produces valid JSON error output"""
+    def test_find_similar_missing_chunk_id_error(self):
+        """Test find-similar fails with usage message when --chunk-id is missing (bash wrapper behavior)"""
+        # Bash wrapper validates required params before Python execution
         result = subprocess.run(
-            ["python", str(FIND_SIMILAR_SCRIPT), "--chunk-id", "test", "--storage-dir", "/nonexistent/path"],
+            ["bash", str(FIND_SIMILAR_SCRIPT)],
             capture_output=True,
             text=True
         )
         assert result.returncode != 0
-
-        try:
-            error_data = json.loads(result.stderr)
-            assert "success" in error_data
-            assert error_data["success"] is False
-            assert "error" in error_data
-        except json.JSONDecodeError:
-            pytest.fail("stderr did not contain valid JSON")
+        # Bash wrapper outputs plain text usage message (not JSON)
+        assert "Usage:" in result.stderr
+        assert "chunk-id" in result.stderr
 
 
 if __name__ == "__main__":

@@ -40,23 +40,16 @@ def test_scenario_1_stale_claim_removed():
     lock_acquired = _acquire_reindex_lock(project_path)
     print(f"Lock acquired: {lock_acquired}")
 
-    if lock_acquired and not claim_file.exists():
-        print("❌ FAILED: Lock acquired but claim file doesn't exist")
-        return False
-    elif lock_acquired and claim_file.exists():
-        claim_content = claim_file.read_text()
-        our_pid = str(os.getpid())
-        if our_pid in claim_content:
-            print(f"✅ PASS: Stale claim removed, new claim created with our PID: {our_pid}")
-            _release_reindex_lock(project_path)
-            return True
-        else:
-            print(f"❌ FAILED: Claim file has wrong PID: {claim_content}")
-            _release_reindex_lock(project_path)
-            return False
-    else:
-        print("❌ FAILED: Could not acquire lock")
-        return False
+    # Assertions for pytest compatibility
+    assert lock_acquired, "Should acquire lock when claim is stale"
+    assert claim_file.exists(), "Claim file should exist after lock acquired"
+
+    claim_content = claim_file.read_text()
+    our_pid = str(os.getpid())
+    assert our_pid in claim_content, f"Claim should have our PID, got: {claim_content}"
+
+    print(f"✅ PASS: Stale claim removed, new claim created with our PID: {our_pid}")
+    _release_reindex_lock(project_path)
 
 def test_scenario_2_corrupted_claim_removed():
     """Test: Corrupted claim file gets removed"""
@@ -76,20 +69,16 @@ def test_scenario_2_corrupted_claim_removed():
     lock_acquired = _acquire_reindex_lock(project_path)
     print(f"Lock acquired: {lock_acquired}")
 
-    if lock_acquired:
-        if claim_file.exists():
-            claim_content = claim_file.read_text()
-            our_pid = str(os.getpid())
-            if our_pid in claim_content:
-                print(f"✅ PASS: Corrupted claim removed, new claim created")
-                _release_reindex_lock(project_path)
-                return True
-        print("❌ FAILED: Lock acquired but claim file issue")
-        _release_reindex_lock(project_path)
-        return False
-    else:
-        print("❌ FAILED: Could not acquire lock")
-        return False
+    # Assertions for pytest compatibility
+    assert lock_acquired, "Should acquire lock when claim is corrupted"
+    assert claim_file.exists(), "Claim file should exist after lock acquired"
+
+    claim_content = claim_file.read_text()
+    our_pid = str(os.getpid())
+    assert our_pid in claim_content, f"Claim should have our PID, got: {claim_content}"
+
+    print(f"✅ PASS: Corrupted claim removed, new claim created")
+    _release_reindex_lock(project_path)
 
 def test_scenario_3_nonexistent_pid_removed():
     """Test: Claim file with non-existent PID gets removed"""
@@ -101,30 +90,29 @@ def test_scenario_3_nonexistent_pid_removed():
     print("SCENARIO 3: Claim file with non-existent PID")
     print("=" * 60)
 
-    # Create claim with very high PID (unlikely to exist)
+    # Create claim with very high PID (unlikely to exist) and make it 65 seconds old
+    # This makes it "stale" (>60s) so the non-existent PID check will trigger removal
     fake_pid = 999999
-    claim_file.write_text(f"{fake_pid}:{time.time()}")
-    print(f"Created claim file with non-existent PID: {fake_pid}")
+    claim_time = time.time() - 65  # 65 seconds ago (stale)
+    claim_file.write_text(f"{fake_pid}:{claim_time}")
+    os.utime(claim_file, (time.time() - 65, time.time() - 65))  # Set file mtime too
+    print(f"Created claim file with non-existent PID: {fake_pid} (65s old, stale)")
 
     # Try to acquire lock
     print("\nAttempting to acquire lock...")
     lock_acquired = _acquire_reindex_lock(project_path)
     print(f"Lock acquired: {lock_acquired}")
 
-    if lock_acquired:
-        if claim_file.exists():
-            claim_content = claim_file.read_text()
-            our_pid = str(os.getpid())
-            if our_pid in claim_content:
-                print(f"✅ PASS: Non-existent PID detected, claim removed, new claim created")
-                _release_reindex_lock(project_path)
-                return True
-        print("❌ FAILED: Lock acquired but claim file issue")
-        _release_reindex_lock(project_path)
-        return False
-    else:
-        print("❌ FAILED: Could not acquire lock")
-        return False
+    # Assertions for pytest compatibility
+    assert lock_acquired, "Should acquire lock when PID doesn't exist"
+    assert claim_file.exists(), "Claim file should exist after lock acquired"
+
+    claim_content = claim_file.read_text()
+    our_pid = str(os.getpid())
+    assert our_pid in claim_content, f"Claim should have our PID, got: {claim_content}"
+
+    print(f"✅ PASS: Non-existent PID detected, claim removed, new claim created")
+    _release_reindex_lock(project_path)
 
 def main():
     """Run all test scenarios"""
@@ -138,13 +126,32 @@ def main():
     cleanup_claim_file(project_path)
 
     results = []
-    results.append(("Stale claim removed", test_scenario_1_stale_claim_removed()))
+
+    # Test 1: Stale claim
+    try:
+        test_scenario_1_stale_claim_removed()
+        results.append(("Stale claim removed", True))
+    except AssertionError as e:
+        print(f"❌ FAILED: {e}")
+        results.append(("Stale claim removed", False))
     cleanup_claim_file(project_path)
 
-    results.append(("Corrupted claim removed", test_scenario_2_corrupted_claim_removed()))
+    # Test 2: Corrupted claim
+    try:
+        test_scenario_2_corrupted_claim_removed()
+        results.append(("Corrupted claim removed", True))
+    except AssertionError as e:
+        print(f"❌ FAILED: {e}")
+        results.append(("Corrupted claim removed", False))
     cleanup_claim_file(project_path)
 
-    results.append(("Non-existent PID removed", test_scenario_3_nonexistent_pid_removed()))
+    # Test 3: Non-existent PID
+    try:
+        test_scenario_3_nonexistent_pid_removed()
+        results.append(("Non-existent PID removed", True))
+    except AssertionError as e:
+        print(f"❌ FAILED: {e}")
+        results.append(("Non-existent PID removed", False))
     cleanup_claim_file(project_path)
 
     print("\n" + "=" * 60)

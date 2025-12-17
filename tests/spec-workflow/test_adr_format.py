@@ -48,7 +48,7 @@ VALID_STATUSES = [
 ]
 
 
-class TestResults:
+class ADRTestResults:
     def __init__(self):
         self.passed = 0
         self.failed = 0
@@ -76,7 +76,7 @@ class TestResults:
 
 def find_project_dir(project_slug: Optional[str] = None) -> Optional[Path]:
     """Find the project directory to validate."""
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).parent.parent.parent
 
     if project_slug:
         # Check docs/projects first, then fixtures
@@ -166,7 +166,7 @@ def main():
     print(f"{BLUE}============================================{RESET}")
     print()
 
-    results = TestResults()
+    results = ADRTestResults()
 
     # Get project slug from argument
     project_slug = sys.argv[1] if len(sys.argv) > 1 else None

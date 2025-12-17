@@ -74,3 +74,14 @@ docs/testing/*
 docs/fixes/*
 !docs/fixes/.gitkeep
 .claude/skills/semantic-search/tests/logs/
+
+# Claude Code session and hook logs (runtime-generated, archived periodically)
+.claude/logs/
+.claude/hooks/logs/
+
+# Test artifacts (Docker validation scripts, test dockerfiles)
+tests/docker/
+Dockerfile.test
+
+# Archive directory (historical logs and artifacts from project cleanup)
+.archive/
