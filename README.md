@@ -61,7 +61,7 @@ See [Planning Workflow](#planning-workflow-new-in-v220) and [CHANGELOG.md](CHANG
   - [What is RAG?](#what-is-rag)
   - [Trigger Keywords](#trigger-keywords)
   - [Agent Roles](#agent-roles)
-  - [Workflow](#workflow)
+  - [RAG Workflow Details](#rag-workflow-details)
   - [Features](#semantic-search-features)
   - [Benefits Over Traditional Search](#benefits-over-traditional-search)
 - [Testing](#testing)
@@ -675,7 +675,7 @@ The semantic-search skill uses two specialized agents with distinct responsibili
 - **File Write/Edit**: Indexer triggers after 5-minute cooldown
 - **Search without index**: Reader auto-triggers indexer if project not indexed
 
-### Workflow
+### RAG Workflow Details
 
 The RAG system operates in two main modes: **Index Building** (offline, happens once or on changes) and **Search & Retrieval** (online, happens on each query).
 
