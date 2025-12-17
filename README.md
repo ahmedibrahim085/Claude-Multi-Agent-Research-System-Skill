@@ -649,7 +649,7 @@ Semantic-search is automatically activated when your prompt contains these patte
 ✅ "how does the login system work"         → semantic-search-reader
 ```
 
-**Note**: Full trigger list in `.claude/hooks/user-prompt-submit.py` (lines 200-237)
+**Note**: Full trigger list in `.claude/skills/skill-rules.json` (semantic-search section, 69 keywords + 27 patterns)
 
 ### Agent Roles
 
@@ -769,13 +769,13 @@ PHASE 2-4: SEARCH & RETRIEVAL (Online - Every query)
 **Process**:
 1. **Vector Similarity Search**: Compares query vector with all code vectors
    - FAISS performs cosine similarity: `similarity = dot(query_vec, code_vec) / (||query_vec|| * ||code_vec||)`
-   - Finds Top-k most similar chunks (typically k=10-20)
+   - Finds Top-k most similar chunks (default k=5, configurable)
    - Sub-second search even for large codebases (10,000+ files)
 
 2. **Ranking**: Orders results by relevance score
    - Higher similarity = more relevant
    - Score range: 0.0 (unrelated) to 1.0 (identical)
-   - Filters out low-scoring results (typically < 0.5)
+   - Returns top-k results ranked by score
 
 3. **Context Extraction**: Retrieves full chunk content with metadata
    - File path: `src/auth/login.py`
