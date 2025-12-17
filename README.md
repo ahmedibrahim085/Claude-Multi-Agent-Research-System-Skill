@@ -576,7 +576,38 @@ See [PRODUCTION_READY_SUMMARY.md](PRODUCTION_READY_SUMMARY.md) for detailed impl
 
 ### What is RAG?
 
-[Content to be added in next commit]
+**RAG (Retrieval-Augmented Generation)** combines two AI capabilities to provide intelligent, context-aware responses:
+
+1. **Retrieval**: Search a knowledge base for relevant information using semantic similarity
+   - Converts code into vector embeddings (numerical representations)
+   - Finds semantically similar content based on meaning, not just keywords
+   - Uses FAISS (Facebook AI Similarity Search) for efficient vector search
+
+2. **Augmentation**: Provides retrieved context to the language model for accurate responses
+   - LLM receives: Your query + Retrieved code chunks
+   - Result: Project-specific answers grounded in actual code
+   - No hallucination - answers based on real codebase content
+
+**Why RAG for Code Search?**
+
+Traditional keyword search fails when code uses different terminology:
+
+- Search `"authentication"` → Misses `signin()`, `verifyUser()`, `auth_middleware`
+- Search `"database"` → Misses `Repository`, `ORM`, `queryBuilder`, `DataSource`
+- Search `"error handling"` → Misses `try/catch`, `Result<T>`, `Exception`, `panic`
+
+**RAG understands meaning**, not just words:
+
+- Query: `"find authentication logic"`
+- Retrieves: Login functions, auth middleware, token validation, session handling
+- Even if they use different terminology like `signin`, `verify`, `authorize`
+
+**Real Example**:
+
+```
+Traditional grep: "authentication"  → 12 matches, 8 false positives (documentation, comments)
+Semantic RAG:     "auth logic"     → 15 semantically relevant code chunks, 0 false positives
+```
 
 ### Trigger Keywords
 
