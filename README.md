@@ -118,45 +118,138 @@ The semantic-search skill implements **RAG (Retrieval-Augmented Generation)** - 
 
 ### Installation
 
-**Step 1: Clone the repository**
+Choose one installation method based on your needs:
+
+**📋 Quick Decision Guide**:
+| Scenario | Installation Method |
+|----------|---------------------|
+| Add skills to **one existing project** | [Option 1: Project Skills](#option-1-project-skills-recommended) |
+| Make skills available to **all projects** | [Option 2: Personal Skills](#option-2-personal-skills) |
+| Explore this repository **standalone** | [Option 3: Standalone Usage](#option-3-standalone-usage) |
+
+---
+
+#### Option 1: Project Skills (Recommended)
+
+**Use Case**: Add multi-agent research, planning, and semantic search to an existing Claude Code project.
+
+**How It Works**: Claude Code auto-discovers skills in `.claude/skills/` directory. No manual configuration needed.
+
 ```bash
+# Navigate to your existing project
+cd ~/my-existing-project
+
+# Clone into .claude/skills/ directory
+mkdir -p .claude/skills
+cd .claude/skills
 git clone https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill.git
-cd Claude-Multi-Agent-Research-System-Skill
 ```
 
-**Step 2: (Optional) Enable semantic-search skill**
+**Optional: Enable semantic-search skill**
 
-> **Note:** The multi-agent-researcher skill works immediately without this step. Only install if you want semantic code search.
-
-The semantic-search skill imports Python modules from claude-context-local for:
-- Merkle tree change detection (smart reindexing)
-- Multi-language code chunking (15+ languages)
-- Embedding generation (sentence-transformers, FAISS)
+> **Note:** The multi-agent-researcher and spec-workflow-orchestrator skills work immediately. Only install if you want semantic code search.
 
 ```bash
-# Clone Python library to standard location (30 seconds)
+# Clone Python library to standard location (one-time, 30 seconds)
 git clone https://github.com/FarhanAliRaza/claude-context-local.git ~/.local/share/claude-context-local
 ```
 
-**That's it!** No virtual environment, no pip install, no `uv` needed. The skill imports modules directly via `sys.path.insert()`.
+**That's it!** Start Claude Code in your project:
 
-**First-time usage**: The embedding model (~1.2GB) downloads automatically on first semantic-search (10-30 minutes). Subsequent uses are instant.
-
-**License note:** claude-context-local is GPL-3.0. Our project imports it via PYTHONPATH (dynamic linking), which preserves our Apache 2.0 license. See `docs/architecture/MCP-DEPENDENCY-STRATEGY.md` for details.
-
-**Step 3: Start Claude Code**
 ```bash
+cd ~/my-existing-project
 claude
 ```
 
-The SessionStart hook will automatically:
-- **Auto-reindex semantic search** (smart change detection, 60-min cooldown)
-- Create required directories (`files/research_notes/`, `files/reports/`, `logs/`)
-- Initialize session logging
-- Check prerequisites and enable conditional enforcement
-- Display setup status
+The SessionStart hook will automatically initialize all skills.
 
-**Note**: Hooks are pre-configured in `.claude/settings.json` and work out-of-the-box. **Do not duplicate hooks in `settings.local.json`** to avoid duplicate hook executions.
+**Optional: Import Orchestration Rules**
+
+If you want to use this project's orchestration rules (auto-skill-activation hooks) in your existing project:
+
+```markdown
+# Add to your project's .claude/CLAUDE.md
+@import .claude/skills/Claude-Multi-Agent-Research-System-Skill/.claude/CLAUDE.md
+```
+
+This imports the trigger keyword system that auto-activates skills based on your requests (e.g., "research X" → multi-agent-researcher, "plan feature Y" → spec-workflow-orchestrator).
+
+---
+
+#### Option 2: Personal Skills
+
+**Use Case**: Make skills available to **all** your Claude Code projects (system-wide installation).
+
+**How It Works**: Claude Code auto-discovers skills in `~/.claude/skills/` and makes them available to every project.
+
+```bash
+# Clone into personal skills directory
+mkdir -p ~/.claude/skills
+cd ~/.claude/skills
+git clone https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill.git
+
+# Optional: Enable semantic-search
+git clone https://github.com/FarhanAliRaza/claude-context-local.git ~/.local/share/claude-context-local
+```
+
+**That's it!** Skills are now available in **every** Claude Code project:
+
+```bash
+cd ~/any-project
+claude
+# Skills automatically available
+```
+
+**Note**: Personal skills don't include project-specific hooks or CLAUDE.md rules. You'll need to manually invoke skills using the Skill tool or add @import statements to individual projects.
+
+---
+
+#### Option 3: Standalone Usage
+
+**Use Case**: Explore this repository as a dedicated research/planning workspace.
+
+```bash
+git clone https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill.git
+cd Claude-Multi-Agent-Research-System-Skill
+
+# Optional: Enable semantic-search
+git clone https://github.com/FarhanAliRaza/claude-context-local.git ~/.local/share/claude-context-local
+
+# Start Claude Code
+claude
+```
+
+**Full Experience**: This option includes:
+- All 3 skills (multi-agent-researcher, spec-workflow-orchestrator, semantic-search)
+- Auto-activation hooks (trigger keywords automatically invoke skills)
+- Pre-configured directory structure
+- Session logging and state management
+- 4 custom slash commands (`/research-topic`, `/plan-feature`, `/project-status`, `/verify-structure`)
+
+---
+
+#### Common Setup (All Options)
+
+**Automatic Initialization**: The SessionStart hook runs on every `claude` command and:
+- Auto-reindexes semantic search (smart change detection, 60-min cooldown)
+- Creates required directories (`files/research_notes/`, `files/reports/`, `logs/`)
+- Initializes session logging
+- Checks prerequisites and displays setup status
+
+**No Manual Configuration**: Hooks are pre-configured in `.claude/settings.json` and work out-of-the-box.
+
+**First-Time Semantic Search**: The embedding model (~1.2GB) downloads automatically on first use (10-30 minutes). Subsequent uses are instant. Model cached at `~/.claude_code_search/models/`.
+
+**Semantic Search Details**:
+- Imports Python modules from claude-context-local via `sys.path.insert()`
+- No virtual environment, no pip install, no `uv` needed
+- Merkle tree change detection for smart reindexing
+- Multi-language code chunking (15+ languages)
+- Embedding generation (sentence-transformers, FAISS)
+
+**License Note**: claude-context-local is GPL-3.0. Our project imports it via PYTHONPATH (dynamic linking), preserving our Apache 2.0 license. See `docs/architecture/MCP-DEPENDENCY-STRATEGY.md` for details.
+
+**Important**: Do not duplicate hooks in `settings.local.json` to avoid duplicate hook executions.
 
 ### What Makes This Different?
 
