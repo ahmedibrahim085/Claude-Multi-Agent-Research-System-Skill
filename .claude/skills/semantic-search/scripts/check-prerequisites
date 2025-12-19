@@ -225,18 +225,18 @@ print_section "4. Skill Scripts"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Check 4.1: index script
-if [[ -x "$SCRIPT_DIR/index" ]]; then
-    print_check "PASS" "index script executable" "$SCRIPT_DIR/index"
-else
-    print_check "FAIL" "index script not executable" "Run: chmod +x $SCRIPT_DIR/index"
-fi
-
-# Check 4.2: incremental-reindex script
+# Check 4.1: incremental-reindex script (MODERN - REQUIRED)
 if [[ -x "$SCRIPT_DIR/incremental-reindex" ]]; then
     print_check "PASS" "incremental-reindex script executable" "$SCRIPT_DIR/incremental-reindex"
 else
-    print_check "WARN" "incremental-reindex script not executable" "Optional: chmod +x $SCRIPT_DIR/incremental-reindex"
+    print_check "FAIL" "incremental-reindex script not executable" "Run: chmod +x $SCRIPT_DIR/incremental-reindex"
+fi
+
+# Check 4.2: index script (LEGACY - DEPRECATED)
+if [[ -x "$SCRIPT_DIR/index" ]]; then
+    print_check "PASS" "index script executable (legacy)" "$SCRIPT_DIR/index"
+else
+    print_check "WARN" "index script not found (deprecated - incremental-reindex is the modern replacement)" "Non-critical"
 fi
 
 # Check 4.3: search script
