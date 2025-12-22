@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+#
+# Semantic Search Setup Verifier
+#
+# Quick diagnostic tool for troubleshooting fresh clone issues.
+# Runs fast checks without full prerequisite validation.
+#
+# Usage: ./verify-setup
+#
+# Exit codes:
+#   0 - All checks passed (ready to use)
+#   1 - Issues found (needs setup)
+
+set -euo pipefail
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Status tracking
+ALL_GOOD=true
+
+print_header() {
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Semantic Search Setup Verification${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+}
+
+check_item() {
+    local status="$1"
+    local message="$2"
+    local details="${3:-}"
+
+    if [[ "$status" == "pass" ]]; then
+        echo -e "${GREEN}✓${NC} $message"
+        [[ -n "$details" ]] && echo "  $details"
+    elif [[ "$status" == "fail" ]]; then
+        echo -e "${RED}✗${NC} $message"
+        [[ -n "$details" ]] && echo "  $details"
+        ALL_GOOD=false
+    elif [[ "$status" == "warn" ]]; then
+        echo -e "${YELLOW}⚠${NC} $message"
+        [[ -n "$details" ]] && echo "  $details"
+    fi
+}
+
+print_header
+
+# Check 1: Python Library
+echo -e "${BLUE}[1/5] Checking Python Library...${NC}"
+LIB_DIR="$HOME/.local/share/claude-context-local"
+if [[ -d "$LIB_DIR" ]] && [[ -d "$LIB_DIR/.venv" ]]; then
+    check_item "pass" "Python library installed" "Location: $LIB_DIR"
+else
+    check_item "fail" "Python library not found" "Expected: $LIB_DIR"
+    echo "  Install: git clone https://github.com/FarhanAliRaza/claude-context-local.git ~/.local/share/claude-context-local"
+    echo "           cd ~/.local/share/claude-context-local && python3 -m venv .venv && source .venv/bin/activate && pip install -e ."
+fi
+echo ""
+
+# Check 2: Embedding Model
+echo -e "${BLUE}[2/5] Checking Embedding Model...${NC}"
+MODEL_DIR="$HOME/.claude_code_search/models/models--google--embeddinggemma-300m"
+if [[ -d "$MODEL_DIR" ]]; then
+    MODEL_SIZE=$(du -sh "$MODEL_DIR" 2>/dev/null | awk '{print $1}')
+    check_item "pass" "Embedding model downloaded" "Size: $MODEL_SIZE at $MODEL_DIR"
+else
+    check_item "warn" "Embedding model not downloaded" "Will download automatically on first use (~1.2GB, 10-30 min)"
+fi
+echo ""
+
+# Check 3: Prerequisites State
+echo -e "${BLUE}[3/5] Checking Prerequisites State...${NC}"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+STATE_FILE="$PROJECT_ROOT/logs/state/semantic-search-prerequisites.json"
+if [[ -f "$STATE_FILE" ]]; then
+    READY=$(python3 -c "import json; data=json.load(open('$STATE_FILE')); print(str(data.get('SEMANTIC_SEARCH_SKILL_PREREQUISITES_READY', False)).lower())" 2>/dev/null || echo "false")
+    if [[ "$READY" == "true" ]]; then
+        check_item "pass" "Prerequisites state: READY" "State file: $STATE_FILE"
+    else
+        check_item "warn" "Prerequisites state: NOT READY" "State file exists but marked as false"
+        echo "  Fix: Run .claude/skills/semantic-search/scripts/check-prerequisites"
+    fi
+else
+    check_item "warn" "Prerequisites state file missing" "Will be created on first session start"
+fi
+echo ""
+
+# Check 4: Project Index
+echo -e "${BLUE}[4/5] Checking Project Index...${NC}"
+PROJECT_NAME=$(basename "$(pwd)")
+PROJECT_HASH=$(echo -n "$(pwd)" | md5sum 2>/dev/null | cut -c1-8 || echo -n "$(pwd)" | md5 | cut -c1-8)
+INDEX_DIR="$HOME/.claude_code_search/projects/${PROJECT_NAME}_${PROJECT_HASH}"
+if [[ -d "$INDEX_DIR" ]] && [[ -f "$INDEX_DIR/index/code.index" ]]; then
+    INDEX_SIZE=$(du -sh "$INDEX_DIR" 2>/dev/null | awk '{print $1}')
+    CHUNK_COUNT=$(grep -o '"total_chunks":[0-9]*' "$INDEX_DIR/index/stats.json" 2>/dev/null | cut -d: -f2 || echo "unknown")
+    check_item "pass" "Project indexed" "$CHUNK_COUNT chunks, $INDEX_SIZE at $INDEX_DIR"
+else
+    check_item "warn" "Project not indexed yet" "Will index automatically on first session start"
+fi
+echo ""
+
+# Check 5: Reindex Script
+echo -e "${BLUE}[5/5] Checking Reindex Script...${NC}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REINDEX_SCRIPT="$SCRIPT_DIR/incremental-reindex"
+if [[ -x "$REINDEX_SCRIPT" ]]; then
+    check_item "pass" "Reindex script executable" "Location: $REINDEX_SCRIPT"
+else
+    check_item "fail" "Reindex script not executable" "Fix: chmod +x $REINDEX_SCRIPT"
+fi
+echo ""
+
+# Summary
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}  Summary${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+if [[ "$ALL_GOOD" == "true" ]]; then
+    echo -e "${GREEN}✓ All critical checks passed!${NC}"
+    echo ""
+    echo "Semantic search is ready to use."
+    echo "On next session start, the system will:"
+    echo "  1. Auto-detect prerequisites (using global components)"
+    echo "  2. Auto-index project in background (~3-10 min)"
+    echo "  3. Enable semantic search queries"
+    echo ""
+    exit 0
+else
+    echo -e "${RED}✗ Some checks failed${NC}"
+    echo ""
+    echo "To fix setup issues:"
+    echo "  1. Install missing components (see failures above)"
+    echo "  2. Run full check: .claude/skills/semantic-search/scripts/check-prerequisites"
+    echo "  3. Run this script again to verify: ./verify-setup"
+    echo ""
+    echo "For installation guide, see:"
+    echo "  https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill#installation"
+    echo ""
+    exit 1
+fi

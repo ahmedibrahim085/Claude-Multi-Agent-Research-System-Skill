@@ -44,6 +44,7 @@ See [Planning Workflow](#planning-workflow-new-in-v220) and [CHANGELOG.md](CHANG
 - [Quick Start](#quick-start)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
+  - [Fresh Clone Quick Start](#fresh-clone-quick-start)
   - [Your First Research Query](#your-first-research-query)
 - [Why This Approach?](#why-this-approach)
   - [vs. Direct Tools (WebSearch/WebFetch)](#vs-direct-tools-websearchwebfetch)
@@ -75,6 +76,7 @@ See [Planning Workflow](#planning-workflow-new-in-v220) and [CHANGELOG.md](CHANG
   - [Enforcement Mechanisms](#enforcement-mechanisms)
   - [Hooks Architecture](#hooks-architecture)
   - [Session Logging](#session-logging)
+- [Troubleshooting](#troubleshooting)
 - [Inspiration & Credits](#inspiration--credits)
 - [Author & Acknowledgments](#author--acknowledgments)
 - [License](#license)
@@ -250,6 +252,44 @@ claude
 **License Note**: claude-context-local is GPL-3.0. Our project imports it via PYTHONPATH (dynamic linking), preserving our Apache 2.0 license. See `docs/architecture/MCP-DEPENDENCY-STRATEGY.md` for details.
 
 **Important**: Do not duplicate hooks in `settings.local.json` to avoid duplicate hook executions.
+
+### Fresh Clone Quick Start
+
+**If you already have semantic-search prerequisites from another project**:
+
+The semantic-search skill uses **global shared components** (Python library + embedding model). If you've used this skill in any project before, new projects automatically detect and reuse these components.
+
+**Expected Flow**:
+```bash
+$ git clone https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill.git
+$ cd Claude-Multi-Agent-Research-System-Skill
+$ claude
+
+# Output (automatic):
+🔍 Detecting semantic-search prerequisites...
+✓ Semantic-search prerequisites found (using global components)
+🔄 Indexing project in background...
+📝 Session logs: logs/session_...
+
+# You can start working immediately!
+# Index completes in background (~3-10 min)
+```
+
+**What Gets Auto-Detected**:
+| Component | Location | Size |
+|-----------|----------|------|
+| Python library | `~/.local/share/claude-context-local/` | ~500KB |
+| Embedding model | `~/.claude_code_search/models/` | ~1.2GB |
+| Project index | `~/.claude_code_search/projects/{project}_{hash}/` | Per-project |
+
+**If Auto-Detection Fails** (verify-setup diagnostic):
+```bash
+# Quick diagnostic (5 checks, instant)
+.claude/skills/semantic-search/scripts/verify-setup
+
+# Full prerequisite check (25 checks, ~10 sec)
+.claude/skills/semantic-search/scripts/check-prerequisites
+```
 
 ### What Makes This Different?
 
@@ -1326,6 +1366,38 @@ If you create or edit `.claude/settings.local.json`, **REMOVE any `hooks` sectio
 ## Troubleshooting
 
 Common issues and solutions for first-time users:
+
+### Fresh Clone Not Auto-Detecting Prerequisites
+
+**Symptom**: After cloning, you see `⚠️ Semantic-search prerequisites not found` even though you have prerequisites installed from another project.
+
+**Cause**: The state file may have stale data from git or the check-prerequisites script isn't finding global components.
+
+**Solution - Quick Diagnostic**:
+```bash
+# Run quick verification (5 checks)
+.claude/skills/semantic-search/scripts/verify-setup
+
+# If issues found, run full check
+.claude/skills/semantic-search/scripts/check-prerequisites
+```
+
+**Solution - Manual State Reset**:
+```bash
+# Delete stale state file (will regenerate on next session)
+rm -f logs/state/semantic-search-prerequisites.json
+
+# Restart Claude Code
+claude
+# Should now show: ✓ Semantic-search prerequisites found
+```
+
+**Expected Output After Fix**:
+```
+🔍 Detecting semantic-search prerequisites...
+✓ Semantic-search prerequisites found (using global components)
+🔄 Indexing project in background...
+```
 
 ### Hooks Not Executing / Import Errors
 
