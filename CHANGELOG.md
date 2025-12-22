@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.5.3] - 2025-12-22
+
+### 🐛 Bug Fix: Hook Output Buffering
+
+**Fixed stdout buffering issues** that prevented hook output from appearing during fresh clone setup.
+
+**Problem:**
+- Hook output wasn't appearing, making it seem like the process was hanging
+- Background process could potentially block on stdin inheritance
+
+**Solution:**
+1. Added `flush=True` to all print statements in hooks
+2. Added `sys.stdout.flush()` before exit
+3. Added `stdin=subprocess.DEVNULL` to background process spawn
+
+### ✨ New Feature: CLAUDE.md Automation
+
+**Automated skill discovery** for installations in other projects.
+
+**New Functions:**
+- `setup_claude_md()` - Creates or updates `.claude/CLAUDE.md` with skill documentation
+- `verify_claude_md()` - Checks if skill instructions are present
+
+**Usage:**
+```bash
+python3 setup.py --repair  # Creates/updates CLAUDE.md
+python3 setup.py --verify  # Checks CLAUDE.md status
+```
+
+**Files Modified:**
+- `.claude/hooks/first-prompt-reindex.py`
+- `.claude/utils/reindex_manager.py`
+- `setup.py`
+- `README.md`
+
+**Full Release Notes:** `docs/release/RELEASE_NOTES_v2.5.3.md`
+
+---
+
 ## [2.5.2] - 2025-12-22
 
 ### 🐛 Bug Fix: Fresh Clone Auto-Detection
