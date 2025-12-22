@@ -132,7 +132,9 @@ def main():
     # This IS first prompt - check prerequisites first
     try:
         project_root = Path.cwd()
-        state_file = project_root / 'logs' / 'state' / 'semantic-search-prerequisites.json'
+        state_dir = project_root / 'logs' / 'state'
+        state_dir.mkdir(parents=True, exist_ok=True)  # Ensure state dir exists
+        state_file = state_dir / 'semantic-search-prerequisites.json'
 
         # Auto-detect prerequisites on fresh clone / stale state
         prereqs_ready = False
@@ -164,12 +166,17 @@ def main():
             reindex_manager.mark_first_prompt_shown()
 
     except Exception as e:
-        # Unexpected error - still mark as shown to prevent retry loops
+        # Log error to stderr for debugging (not visible to user)
+        import traceback
+        print(f"DEBUG first-prompt-reindex: Exception occurred: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+
+        # Still mark as shown to prevent retry loops
         try:
             reindex_manager.mark_first_prompt_shown()
         except:
             pass
-        # Don't show error to user on first prompt (silent failure)
 
     # Always exit 0 (don't block user prompt on reindex issues)
     sys.stdout.flush()  # Ensure all output is sent before exit

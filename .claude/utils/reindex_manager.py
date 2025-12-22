@@ -600,6 +600,9 @@ def _acquire_reindex_lock(project_path: Path, kill_if_held: bool = True) -> bool
     print(f"DEBUG _acquire_reindex_lock: claim_file = {claim_file}", file=sys.stderr)
     print(f"DEBUG _acquire_reindex_lock: storage_dir exists = {storage_dir.exists()}", file=sys.stderr)
 
+    # Ensure storage directory exists (FIX: Fresh clone crash when directory missing)
+    storage_dir.mkdir(parents=True, exist_ok=True)
+
     # Check for existing claim (stale or active)
     if claim_file.exists():
         try:
