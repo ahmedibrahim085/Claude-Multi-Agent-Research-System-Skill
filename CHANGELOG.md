@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.5.2] - 2025-12-22
+
+### 🐛 Bug Fix: Fresh Clone Auto-Detection
+
+**Critical fix** for fresh clone experience when global prerequisites already exist.
+
+**Problem:**
+- Fresh clones failed to auto-detect global semantic-search prerequisites
+- Required 30+ minutes of manual troubleshooting
+- Incorrect diagnostics misled users
+
+**Root Cause:**
+- `check-prerequisites` script had inverted priority logic (deprecated script marked FAIL, modern script marked WARN)
+- No auto-recovery mechanism for stale/failed state files
+
+**Solution:**
+1. Fixed `check-prerequisites` priority: `incremental-reindex` (required) vs `index` (deprecated)
+2. Added auto-detection to `first-prompt-reindex.py` hook
+
+**New Features:**
+- `verify-setup` diagnostic script for quick troubleshooting (5 checks, <1 second)
+- Fresh Clone Quick Start documentation in README
+- Troubleshooting section for fresh clone issues
+
+**Files Modified:**
+- `.claude/skills/semantic-search/scripts/check-prerequisites`
+- `.claude/hooks/first-prompt-reindex.py`
+- `.claude/skills/semantic-search/scripts/verify-setup` (new)
+- `README.md`
+
+**Full Release Notes:** `docs/release/RELEASE_NOTES_v2.5.2.md`
+
+---
+
+## [2.5.1] - 2025-12-17
+
+### 🧪 Testing Infrastructure + Quality Improvements
+
+**Major leap in testing infrastructure** with 65 new skill tests and 100% pass rate.
+
+**Key Highlights:**
+- 65 new skill tests covering all 3 specialized skills
+- Zero pytest warnings - eliminated all collection and return warnings
+- 100% pass rate (154/154 tests in 3.15s)
+- Professional cleanup - archived 50 log files, updated .gitignore
+
+**Full Release Notes:** `docs/release/RELEASE_NOTES_v2.5.1.md`
+
+---
+
 ## [Unreleased] - 2025-12-09
 
 ### ⚡ Performance: Simple Reindex Optimizations

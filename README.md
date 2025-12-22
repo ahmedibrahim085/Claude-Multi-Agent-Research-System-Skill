@@ -2,13 +2,13 @@
 
 **Orchestrated multi-agent research with architectural enforcement, parallel execution, and comprehensive audit trails.**
 
-[![Version](https://img.shields.io/badge/version-2.5.1-blue.svg)](https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill/releases)
+[![Version](https://img.shields.io/badge/version-2.5.2-blue.svg)](https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 ---
 
-## 🎉 v2.5.1: Comprehensive Skill Tests + Quality Improvements
+## 🎉 v2.5.2: Fresh Clone Auto-Detection Fix
 
 A **tri-skill platform** with smart routing, auto-indexing, and compound request detection:
 
