@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.5.4] - 2025-12-22
+
+### 🐛 Bug Fix: Fresh Clone Crashes
+
+**P0 fix** for fresh clone crashes when storage directory doesn't exist.
+
+**Problem:**
+- Fresh clones crashed in `_acquire_reindex_lock()` when `~/.claude_code_search/projects/` didn't exist
+- Exception silently swallowed, no debug output
+
+**Solution:**
+1. Added `storage_dir.mkdir(parents=True, exist_ok=True)` before lock file creation
+2. Added traceback logging to stderr for debugging
+3. Added `state_dir.mkdir()` safety check in first-prompt hook
+
+### ♻️ Refactor: Semantic-Search Trigger Reduction (YAGNI)
+
+**Reduced trigger keywords** to eliminate overlap with multi-agent-researcher.
+
+| Metric | Before | After | Reduction |
+|--------|--------|-------|-----------|
+| Keywords | 70 | 49 | 30% |
+| Intent Patterns | 28 | 17 | 39% |
+
+**Removed:** Generic questions (how does, where is, what is), explanations, similarity searches
+**Kept:** Indexing operations, explicit codebase references, documentation search
+
+**Files Modified:**
+- `.claude/utils/reindex_manager.py`
+- `.claude/hooks/first-prompt-reindex.py`
+- `.claude/skills/skill-rules.json`
+
+**Full Release Notes:** `docs/release/RELEASE_NOTES_v2.5.4.md`
+
+---
+
 ## [2.5.3] - 2025-12-22
 
 ### 🐛 Bug Fix: Hook Output Buffering
