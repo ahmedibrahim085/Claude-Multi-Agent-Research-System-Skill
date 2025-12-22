@@ -137,13 +137,13 @@ def main():
         # Auto-detect prerequisites on fresh clone / stale state
         prereqs_ready = False
         if should_recheck_prerequisites(state_file):
-            print("🔍 Detecting semantic-search prerequisites...")
+            print("🔍 Detecting semantic-search prerequisites...", flush=True)
             prereqs_ready = run_check_prerequisites()
             if prereqs_ready:
-                print("✓ Semantic-search prerequisites found (using global components)")
+                print("✓ Semantic-search prerequisites found (using global components)", flush=True)
             else:
-                print("⚠️  Semantic-search prerequisites not found")
-                print("   Setup: https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill#installation")
+                print("⚠️  Semantic-search prerequisites not found", flush=True)
+                print("   Setup: https://github.com/ahmedibrahim085/Claude-Multi-Agent-Research-System-Skill#installation", flush=True)
         else:
             prereqs_ready = reindex_manager.read_prerequisites_state()
 
@@ -157,7 +157,7 @@ def main():
 
             if spawned:
                 # Success - background process running
-                print("🔄 Indexing project in background...")
+                print("🔄 Indexing project in background...", flush=True)
             # else: spawned=False means script not found, but don't show error
         else:
             # Prerequisites not ready - mark as shown to prevent retry
@@ -172,6 +172,7 @@ def main():
         # Don't show error to user on first prompt (silent failure)
 
     # Always exit 0 (don't block user prompt on reindex issues)
+    sys.stdout.flush()  # Ensure all output is sent before exit
     sys.exit(0)
 
 

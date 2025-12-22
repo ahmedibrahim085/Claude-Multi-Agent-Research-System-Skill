@@ -848,8 +848,11 @@ def spawn_background_reindex(project_path: Path, trigger: str = 'unknown') -> bo
 
         # PROVEN PATTERN: Popen + DEVNULL + start_new_session + NO communicate()
         # This is the EXACT pattern from OLD session-start.py (commit 9dcd3c2^)
+        # FIX: Added stdin=DEVNULL to prevent background process from inheriting
+        # and potentially blocking on stdin from the parent hook
         proc = subprocess.Popen(
             [str(script), str(project_path)],
+            stdin=subprocess.DEVNULL,   # FIX: Prevent stdin inheritance
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True  # Create new process group (detach from parent)
