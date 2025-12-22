@@ -431,6 +431,8 @@ EOF
     fi
     echo "State file: $STATE_FILE"
     echo ""
+    echo -e "${BLUE}Tip:${NC} For quick diagnostics, run: scripts/verify-setup"
+    echo ""
 else
     echo ""
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
