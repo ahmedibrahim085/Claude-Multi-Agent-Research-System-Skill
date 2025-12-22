@@ -44,6 +44,7 @@ See [Planning Workflow](#planning-workflow-new-in-v220) and [CHANGELOG.md](CHANG
 - [Quick Start](#quick-start)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
+  - [Post-Installation: CLAUDE.md Setup](#post-installation-claudemd-setup-options-2--3)
   - [Fresh Clone Quick Start](#fresh-clone-quick-start)
   - [Your First Research Query](#your-first-research-query)
 - [Why This Approach?](#why-this-approach)
@@ -252,6 +253,33 @@ claude
 **License Note**: claude-context-local is GPL-3.0. Our project imports it via PYTHONPATH (dynamic linking), preserving our Apache 2.0 license. See `docs/architecture/MCP-DEPENDENCY-STRATEGY.md` for details.
 
 **Important**: Do not duplicate hooks in `settings.local.json` to avoid duplicate hook executions.
+
+---
+
+#### Post-Installation: CLAUDE.md Setup (Options 2 & 3)
+
+**For Option 2 (Personal Skills)** and when integrating skills into existing projects, add the following to your project's `.claude/CLAUDE.md` to help Claude understand the available skills:
+
+```markdown
+## Multi-Agent Research System Skills
+
+This project has access to 3 specialized skills with hook-based auto-activation:
+
+| Skill | Purpose | Trigger |
+|-------|---------|---------|
+| multi-agent-researcher | Research requiring 2+ sources, synthesis | "research...", "investigate..." |
+| spec-workflow-orchestrator | Feature planning, specs, ADRs | "plan...", "design...", "spec..." |
+| semantic-search | Find code by meaning, not keywords | "find...", "where is...", "how does..." |
+
+**Usage**: Skills auto-activate via hooks when trigger keywords detected.
+Manual invocation: Use `/research-topic`, `/plan-feature`, or `/semantic-search`.
+
+**Documentation**: See skill SKILL.md files for detailed workflows.
+```
+
+**Automated Setup**: Run `python3 setup.py --repair` to automatically add skill instructions to your project's CLAUDE.md.
+
+---
 
 ### Fresh Clone Quick Start
 

@@ -128,6 +128,96 @@ def save_config(config: Dict[str, Any]) -> None:
     print_success(f"Configuration saved to {config_path}")
 
 
+# Skill instructions to add to CLAUDE.md
+# We check for TWO markers:
+# 1. Simplified version (added by this script)
+# 2. Full version (exists in this project's CLAUDE.md)
+SKILL_INSTRUCTIONS_MARKER = "## Multi-Agent Research System Skills"
+SKILL_INSTRUCTIONS_MARKER_ALT = "## CRITICAL: Universal Orchestration Rules"  # Full version
+SKILL_INSTRUCTIONS = """
+## Multi-Agent Research System Skills
+
+This project has access to 3 specialized skills with hook-based auto-activation:
+
+| Skill | Purpose | Trigger |
+|-------|---------|---------|
+| multi-agent-researcher | Research requiring 2+ sources, synthesis | "research...", "investigate..." |
+| spec-workflow-orchestrator | Feature planning, specs, ADRs | "plan...", "design...", "spec..." |
+| semantic-search | Find code by meaning, not keywords | "find...", "where is...", "how does..." |
+
+**Usage**: Skills auto-activate via hooks when trigger keywords detected.
+Manual invocation: Use `/research-topic`, `/plan-feature`, or `/semantic-search`.
+
+**Documentation**: See `.claude/skills/*/SKILL.md` for detailed workflows.
+"""
+
+
+def setup_claude_md() -> bool:
+    """Setup CLAUDE.md with skill instructions
+
+    Creates or updates .claude/CLAUDE.md to include skill documentation.
+    This helps Claude understand what skills are available and how to use them.
+
+    Returns:
+        True if file was created/updated, False if already up-to-date
+    """
+    project_root = get_project_root()
+    claude_md_path = project_root / '.claude' / 'CLAUDE.md'
+
+    # Ensure .claude directory exists
+    claude_md_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Check if file exists
+    if not claude_md_path.exists():
+        # Create new file with skill instructions
+        content = f"# Project Instructions\n{SKILL_INSTRUCTIONS}"
+        claude_md_path.write_text(content)
+        print_success("Created .claude/CLAUDE.md with skill instructions")
+        return True
+
+    # File exists - check if skill instructions already present
+    existing_content = claude_md_path.read_text()
+
+    # Check for either simplified or full version
+    has_simplified = SKILL_INSTRUCTIONS_MARKER in existing_content
+    has_full = SKILL_INSTRUCTIONS_MARKER_ALT in existing_content
+
+    if has_simplified or has_full:
+        print_info("CLAUDE.md already contains skill instructions")
+        return False
+
+    # Append skill instructions
+    updated_content = existing_content.rstrip() + "\n\n---\n" + SKILL_INSTRUCTIONS
+    claude_md_path.write_text(updated_content)
+    print_success("Added skill instructions to .claude/CLAUDE.md")
+    return True
+
+
+def verify_claude_md() -> bool:
+    """Verify CLAUDE.md has skill instructions"""
+    project_root = get_project_root()
+    claude_md_path = project_root / '.claude' / 'CLAUDE.md'
+
+    if not claude_md_path.exists():
+        print_warning("CLAUDE.md not found - run setup.py --repair to create")
+        return False
+
+    content = claude_md_path.read_text()
+    # Check for either simplified or full version of skill instructions
+    has_simplified = SKILL_INSTRUCTIONS_MARKER in content
+    has_full = SKILL_INSTRUCTIONS_MARKER_ALT in content
+
+    if not has_simplified and not has_full:
+        print_warning("CLAUDE.md missing skill instructions - run setup.py --repair to add")
+        return False
+
+    if has_full:
+        print_success("CLAUDE.md has comprehensive skill instructions (full version)")
+    else:
+        print_success("CLAUDE.md has skill instructions")
+    return True
+
+
 def verify_python_version() -> bool:
     """Verify Python version is 3.8+"""
     version = sys.version_info
@@ -365,6 +455,11 @@ def verify_only() -> bool:
     if not verify_hooks_configured():
         issues.append("Hooks not properly configured")
 
+    # Check CLAUDE.md
+    print_header("CLAUDE.md Configuration")
+    if not verify_claude_md():
+        issues.append("CLAUDE.md missing skill instructions")
+
     # Summary
     print_header("Verification Summary")
     if not issues:
@@ -402,7 +497,11 @@ def repair_setup() -> bool:
     config = load_config()
     create_directories(config)
 
-    # 4. Verify
+    # 4. Setup CLAUDE.md with skill instructions
+    print("\nSetting up CLAUDE.md...")
+    setup_claude_md()
+
+    # 5. Verify
     print_header("Verification After Repair")
     return verify_only()
 
